@@ -20,10 +20,14 @@ final class ModelLibrary {
         string: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true"
     )!
 
-    // 1.5B Q3_K_M is a compromise for older iPhones: much more model capacity than
-    // the 0.5B brain without jumping all the way to the larger 1.12 GB Q4_K_M file.
     static let smartModelURL = URL(
         string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q3_k_m.gguf?download=true"
+    )!
+
+    // Qwen3 0.6B is the new preferred phone brain: close to the 0.5B model's size,
+    // but with substantially newer instruction-following and role-play training.
+    static let qwen3ModelURL = URL(
+        string: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true"
     )!
 
     func importedModelURL(filename: String?) -> URL? {
@@ -65,6 +69,14 @@ final class ModelLibrary {
             from: Self.smartModelURL,
             filename: "qwen2.5-1.5b-instruct-q3_k_m.gguf",
             minimumBytes: 700_000_000
+        )
+    }
+
+    func downloadQwen3Model() async throws -> URL {
+        try await download(
+            from: Self.qwen3ModelURL,
+            filename: "Qwen3-0.6B-Q4_K_M.gguf",
+            minimumBytes: 350_000_000
         )
     }
 
