@@ -57,7 +57,6 @@ public actor LlamaSession {
         #if targetEnvironment(simulator)
         modelParams.n_gpu_layers = 0
         #else
-        // A small Q4 model generally benefits from full Metal offload on Apple devices.
         modelParams.n_gpu_layers = 99
         #endif
 
@@ -102,9 +101,9 @@ public actor LlamaSession {
 
     public func complete(
         prompt: String,
-        maxNewTokens: Int = 420,
-        temperature: Float = 0.88,
-        topP: Float = 0.92
+        maxNewTokens: Int = 160,
+        temperature: Float = 0.78,
+        topP: Float = 0.90
     ) throws -> String {
         llama_kv_self_clear(context)
 
@@ -117,10 +116,6 @@ public actor LlamaSession {
             throw LlamaSessionError.tokenizationFailed
         }
 
-        // IMPORTANT: n_batch is only 512. The private Vex brain can easily make the
-        // prompt larger than that, so feeding the whole prompt in one llama_decode()
-        // call can abort inside llama.cpp on-device. Evaluate the prompt in bounded
-        // chunks and request logits only for the final token of the final chunk.
         var batch = llama_batch_init(Int32(promptBatchSize), 0, 1)
         defer { llama_batch_free(batch) }
 
@@ -152,20 +147,28 @@ public actor LlamaSession {
 
         llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40))
         llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1))
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(96, 1.12, 0.08, 0.04))
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(UInt32.random(in: 1...UInt32.max - 1)))
+
+        // Seed repetition history with the tail of the prompt so the tiny model is less
+        // likely to parrot the most recent user/assistant wording back in a loop.
+        for token in tokens.suffix(96) {
+            llama_sampler_accept(sampler, token)
+        }
 
         var output = ""
         var pendingUTF8: [UInt8] = []
         var position = Int32(tokens.count)
 
         for _ in 0..<maxNewTokens {
-            // -1 means the most recent logits row from the last decode.
             let sampled = llama_sampler_sample(sampler, context, -1)
 
             if llama_vocab_is_eog(vocab, sampled) {
                 break
             }
+
+            llama_sampler_accept(sampler, sampled)
 
             let piece = tokenPiece(sampled)
             pendingUTF8.append(contentsOf: piece)
