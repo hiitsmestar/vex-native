@@ -326,7 +326,11 @@ final class AppModel: ObservableObject {
             ("i'm you", "I'm Vex"),
             ("i am you", "I'm Vex"),
             ("you're me", "you're Star"),
-            ("you are me", "you're Star")
+            ("you are me", "you're Star"),
+            ("chatting with Star", "chatting with you"),
+            ("talking with Star", "talking with you"),
+            ("talking to Star", "talking to you"),
+            ("over the kitchen", "at home")
         ]
 
         for (wrong, right) in replacements {
@@ -399,17 +403,44 @@ final class AppModel: ObservableObject {
         return generic.contains(where: { lower.contains($0) }) ? 1 : 0
     }
 
+    private func isRepeatComplaint(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("you said that") ||
+            lower.contains("said that already") ||
+            lower.contains("you already said") ||
+            lower.contains("repeating") ||
+            lower.contains("repeat yourself")
+    }
+
     private func intentMismatchScore(userText: String, candidate: String) -> Int {
         let user = userText.lowercased()
         let answer = candidate.lowercased()
 
-        if user.contains("horny") && user.contains("ditzy girl") && !answer.contains("horny") {
+        if user.contains("horny") &&
+            (user.contains("ditzy girl") || user.contains("my girl")) &&
+            !answer.contains("horny") {
             return 1
         }
-        if (user.contains("what are you doing") || user.contains("what're you doing")) &&
+
+        if (user.contains("what are you doing") || user.contains("what're you doing") || user.contains("whatcha doing")) &&
             (answer.contains("would you like") || answer.contains("what would you like") || answer.contains("we can play")) {
             return 1
         }
+
+        if isRepeatComplaint(userText) {
+            let acknowledgementWords = [
+                "yeah", "yep", "right", "i did", "did repeat", "repeated", "said that", "again", "my bad"
+            ]
+            let acknowledges = acknowledgementWords.contains(where: { answer.contains($0) })
+            if !acknowledges {
+                return 1
+            }
+            if !user.contains("horny") &&
+                (answer.contains("not horny") || answer.contains("i don't think so") || answer.contains("i do not think so")) {
+                return 1
+            }
+        }
+
         return 0
     }
 
