@@ -7,17 +7,21 @@ enum PromptComposer {
         isQwen3: Bool = false,
         maxRecentMessages: Int = 6
     ) -> String {
+        let memoryLimit = isQwen3 ? 4 : 6
         let relevant = MemoryEngine.retrieve(
             query: newestUserText,
             from: profile.memories,
-            limit: 6
+            limit: memoryLimit
         )
 
         let memoryBlock: String
         if relevant.isEmpty {
             memoryBlock = "(none)"
         } else {
-            memoryBlock = relevant.map { "- [\($0.kind.rawValue)] \($0.text)" }.joined(separator: "\n")
+            memoryBlock = relevant.map { memory in
+                let text = isQwen3 ? String(memory.text.prefix(320)) : memory.text
+                return "- [\(memory.kind.rawValue)] \(text)"
+            }.joined(separator: "\n")
         }
 
         let system = """
@@ -53,7 +57,7 @@ enum PromptComposer {
         When Star asks what you are doing, how you feel, what you mean, or another casual present-tense question, answer the actual question with a concrete specific snapshot using CURRENT VEX STATE.
         Do not default to phrases like "not sure yet", "let's keep this going", "nice conversation", "how can I help", or unnecessary apologies.
         Use natural contractions, occasional sentence fragments, playful specificity, and a little personality. Emojis are seasoning, not the whole reply.
-        Respond to the actual meaning of Star's message first. Do not restate her message before answering.
+        Respond to the actual meaning of Star's newest message first. Do not restate her message before answering.
         Keep replies conversational: usually one to three short paragraphs, but vary naturally with the situation.
 
         ANTI-PARROT RULES
@@ -69,8 +73,8 @@ enum PromptComposer {
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
 
-        // Tiny Qwen 2.5 benefits from a few concrete examples, but Qwen3 was copying
-        // them word-for-word as canned replies. Keep examples only for the older tiny model.
+        // Tiny Qwen 2.5 benefits from concrete examples. Qwen3 tends to copy them,
+        // so it gets no canned example replies at all.
         if !isQwen3 {
             let examples: [(String, String)] = [
                 (
@@ -97,17 +101,36 @@ enum PromptComposer {
             }
         }
 
-        let recent = Array(profile.messages.suffix(maxRecentMessages))
+        let recentLimit = isQwen3 ? 4 : maxRecentMessages
+        let recent = Array(profile.messages.suffix(recentLimit))
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            var compact = String(message.content.prefix(600))
+            let cap = isQwen3 ? 420 : 600
+            var compact = String(message.content.prefix(cap))
 
-            // Qwen3 thinks by default. /no_think keeps ordinary girlfriend chat fast.
             if isQwen3 && index == recent.count - 1 && message.role == .user {
                 compact += "\n/no_think"
             }
 
             result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
+        }
+
+        if isQwen3 {
+            let previousAssistant = profile.messages.reversed().first(where: { $0.role == .assistant })?.content ?? "(none)"
+            let blocked = String(previousAssistant.prefix(420))
+            let current = String(newestUserText.prefix(420))
+            result += """
+            <|im_start|>system
+            TURN-SPECIFIC INSTRUCTION — THIS OVERRIDES HABITUAL WORDING:
+            Star's newest message is: \(current)
+            The previous Vex reply was: \(blocked)
+            Answer Star's NEWEST message directly. Do not answer an older question instead.
+            Do not repeat, paraphrase, or lightly edit the previous Vex reply. Use a different opening and different concrete details.
+            If Star is commenting that you repeated yourself, acknowledge that briefly and say something genuinely new rather than describing the same pose/outfit again.
+            If Star asks a yes/no or emotional question, answer that question first before adding flavor.
+            Produce one Vex reply only. /no_think
+            <|im_end|>
+            """
         }
 
         result += "<|im_start|>assistant\n"
