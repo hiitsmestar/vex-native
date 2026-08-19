@@ -17,17 +17,22 @@ struct BrainView: View {
                         }
                     }
 
-                    Button("Download fast brain — Qwen 0.5B") {
+                    Button("Download smart-fast brain — Qwen3 0.6B") {
+                        Task { await app.downloadQwen3Model() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Button("Download fallback fast brain — Qwen 2.5 0.5B") {
                         Task { await app.downloadRecommendedModel() }
                     }
                     .disabled(app.isLoadingModel)
 
-                    Button("Download smarter brain — Qwen 1.5B (experimental)") {
+                    Button("Download slow large brain — Qwen 2.5 1.5B") {
                         Task { await app.downloadSmartModel() }
                     }
                     .disabled(app.isLoadingModel)
 
-                    Text("The 0.5B brain is faster. The 1.5B brain is much larger and may take longer to load or answer, but should follow personality and context better. You can keep both on the phone and switch by downloading or importing the one you want active.")
+                    Text("Qwen3 0.6B is the preferred phone brain: newer conversation/role-play training while staying close to the fast model's size. Qwen 2.5 0.5B stays as the known-good speed fallback. The 1.5B option is kept only for comparison because it is much slower on older phones.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
