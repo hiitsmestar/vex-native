@@ -147,7 +147,7 @@ final class AppModel: ObservableObject {
             )
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                content: cleanGeneratedReply(answer)
             ))
             touchRelevantMemories(for: text)
             persist()
@@ -161,6 +161,48 @@ final class AppModel: ObservableObject {
         }
 
         isGenerating = false
+    }
+
+    private func cleanGeneratedReply(_ raw: String) -> String {
+        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        var kept: [String] = []
+
+        for line in normalized.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = trimmed.lowercased()
+
+            if lower.contains("<|im_start|>") || lower.contains("<|im_end|>") {
+                if kept.isEmpty { continue }
+                break
+            }
+
+            let isUserRole = lower == "star" || lower == "user" ||
+                lower.hasPrefix("star:") || lower.hasPrefix("user:")
+            if isUserRole {
+                if kept.isEmpty { continue }
+                break
+            }
+
+            let isAssistantRole = lower == "vex" || lower == "assistant" ||
+                lower.hasPrefix("vex:") || lower.hasPrefix("assistant:")
+            if isAssistantRole {
+                if kept.isEmpty {
+                    if let colon = trimmed.firstIndex(of: ":") {
+                        let payload = String(trimmed[trimmed.index(after: colon)...])
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !payload.isEmpty { kept.append(payload) }
+                    }
+                    continue
+                }
+                break
+            }
+
+            kept.append(line)
+        }
+
+        let cleaned = kept.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
     }
 
     private func touchRelevantMemories(for text: String) {
