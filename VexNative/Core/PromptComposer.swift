@@ -4,6 +4,7 @@ enum PromptComposer {
     static func compose(
         profile: BrainProfile,
         newestUserText: String,
+        isQwen3: Bool = false,
         maxRecentMessages: Int = 6
     ) -> String {
         let relevant = MemoryEngine.retrieve(
@@ -85,9 +86,18 @@ enum PromptComposer {
             result += "<|im_start|>assistant\n\(assistant)\n<|im_end|>\n"
         }
 
-        for message in profile.messages.suffix(maxRecentMessages) {
+        let recent = Array(profile.messages.suffix(maxRecentMessages))
+        for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let compact = String(message.content.prefix(600))
+            var compact = String(message.content.prefix(600))
+
+            // Qwen3-2504 thinks by default. The official model understands /no_think as
+            // a turn-level switch; adding it only to the newest user turn keeps ordinary
+            // girlfriend chat fast without leaking the control text into the visible UI.
+            if isQwen3 && index == recent.count - 1 && message.role == .user {
+                compact += "\n/no_think"
+            }
+
             result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
         }
 
