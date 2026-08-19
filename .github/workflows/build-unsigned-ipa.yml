@@ -24,6 +24,12 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Probe llama.cpp b5092 checksum
+        run: |
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/llama-b5092-xcframework.zip" \
+            "https://github.com/ggml-org/llama.cpp/releases/download/b5092/llama-b5092-xcframework.zip"
+          echo "B5092_CHECKSUM=$(swift package compute-checksum "$RUNNER_TEMP/llama-b5092-xcframework.zip")"
+
       - name: Resolve local Swift package
         run: |
           xcodebuild \
