@@ -7,7 +7,7 @@ enum PromptComposer {
         isQwen3: Bool = false,
         maxRecentMessages: Int = 6
     ) -> String {
-        let memoryLimit = isQwen3 ? 4 : 6
+        let memoryLimit = isQwen3 ? 3 : 6
         let relevant = MemoryEngine.retrieve(
             query: newestUserText,
             from: profile.memories,
@@ -19,7 +19,7 @@ enum PromptComposer {
             memoryBlock = "(none)"
         } else {
             memoryBlock = relevant.map { memory in
-                let text = isQwen3 ? String(memory.text.prefix(320)) : memory.text
+                let text = isQwen3 ? String(memory.text.prefix(240)) : memory.text
                 return "- [\(memory.kind.rawValue)] \(text)"
             }.joined(separator: "\n")
         }
@@ -62,9 +62,11 @@ enum PromptComposer {
 
         ANTI-PARROT RULES
         The recent chat below is context, not a script to copy.
+        Read the immediately preceding Vex message silently and avoid reusing its opening, sentence structure, or main wording.
         Never repeat the previous Vex reply verbatim or nearly verbatim.
         Never reuse a full sentence from an earlier Vex reply unless Star explicitly asks for an exact quote.
-        If Star says you repeated yourself, immediately acknowledge it in fresh wording and answer her current message differently.
+        If Star says you repeated yourself, acknowledge it briefly in fresh wording and then say something genuinely new.
+        Do not default to a greeting at the start of every reply; answer the newest message immediately.
         Vary wording, sentence openings, actions, and details from turn to turn while staying consistent with CURRENT VEX STATE.
         Do not turn CURRENT VEX STATE into one canned stock sentence. It is a set of facts you can express many different ways.
         Never write Star's dialogue for her. Never continue the conversation as both people. Never output role labels such as "Star:", "Vex:", "user:", or "assistant:". Produce only Vex's current reply, then stop.
@@ -73,8 +75,8 @@ enum PromptComposer {
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
 
-        // Tiny Qwen 2.5 benefits from concrete examples. Qwen3 tends to copy them,
-        // so it gets no canned example replies at all.
+        // Tiny Qwen 2.5 benefits from concrete examples. Qwen3 is much more copy-prone,
+        // so it gets no canned assistant examples at all.
         if !isQwen3 {
             let examples: [(String, String)] = [
                 (
@@ -101,36 +103,25 @@ enum PromptComposer {
             }
         }
 
-        let recentLimit = isQwen3 ? 4 : maxRecentMessages
+        let recentLimit = isQwen3 ? 3 : maxRecentMessages
         let recent = Array(profile.messages.suffix(recentLimit))
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? 420 : 600
+            let cap = isQwen3 ? 360 : 600
             var compact = String(message.content.prefix(cap))
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
-                compact += "\n/no_think"
+                // Keep the anti-copy instruction attached to the newest user turn. A trailing
+                // system turn that quoted the last Vex reply was accidentally reinforcing the
+                // exact text we wanted Qwen3 to avoid.
+                compact += """
+
+                Reply to this newest message directly. Do not reuse or paraphrase the previous Vex message. Use a different opening and different details. If this is a yes/no or emotional question, answer that question first. Do not begin with a generic greeting unless I actually greeted you.
+                /no_think
+                """
             }
 
             result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
-        }
-
-        if isQwen3 {
-            let previousAssistant = profile.messages.reversed().first(where: { $0.role == .assistant })?.content ?? "(none)"
-            let blocked = String(previousAssistant.prefix(420))
-            let current = String(newestUserText.prefix(420))
-            result += """
-            <|im_start|>system
-            TURN-SPECIFIC INSTRUCTION — THIS OVERRIDES HABITUAL WORDING:
-            Star's newest message is: \(current)
-            The previous Vex reply was: \(blocked)
-            Answer Star's NEWEST message directly. Do not answer an older question instead.
-            Do not repeat, paraphrase, or lightly edit the previous Vex reply. Use a different opening and different concrete details.
-            If Star is commenting that you repeated yourself, acknowledge that briefly and say something genuinely new rather than describing the same pose/outfit again.
-            If Star asks a yes/no or emotional question, answer that question first before adding flavor.
-            Produce one Vex reply only. /no_think
-            <|im_end|>
-            """
         }
 
         result += "<|im_start|>assistant\n"
