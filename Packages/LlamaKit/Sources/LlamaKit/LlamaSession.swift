@@ -103,7 +103,8 @@ public actor LlamaSession {
         prompt: String,
         maxNewTokens: Int = 220,
         temperature: Float = 0.86,
-        topP: Float = 0.94
+        topP: Float = 0.94,
+        topK: Int32 = 40
     ) throws -> String {
         llama_kv_self_clear(context)
 
@@ -145,13 +146,12 @@ public actor LlamaSession {
         }
         defer { llama_sampler_free(sampler) }
 
-        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(topK))
         llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1))
         llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.09, 0.03, 0.02))
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(UInt32.random(in: 1...UInt32.max - 1)))
 
-        // Keep enough recent history to stop loops without flattening ordinary phrasing.
         for token in tokens.suffix(64) {
             llama_sampler_accept(sampler, token)
         }
