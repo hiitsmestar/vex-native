@@ -138,12 +138,18 @@ final class AppModel: ObservableObject {
         isGenerating = true
         let prompt = PromptComposer.compose(profile: profile, newestUserText: text)
 
+        let filename = profile.modelFilename?.lowercased() ?? ""
+        let isTinyModel = filename.contains("0.5b")
+        let maxNewTokens = isTinyModel ? 180 : 220
+        let temperature: Float = isTinyModel ? 0.80 : 0.86
+        let topP: Float = isTinyModel ? 0.92 : 0.94
+
         do {
             let answer = try await engine.complete(
                 prompt: prompt,
-                maxNewTokens: 220,
-                temperature: 0.86,
-                topP: 0.94
+                maxNewTokens: maxNewTokens,
+                temperature: temperature,
+                topP: topP
             )
             profile.messages.append(ChatMessage(
                 role: .assistant,
