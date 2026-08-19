@@ -79,7 +79,7 @@ final class AppModel: ObservableObject {
 
     func downloadRecommendedModel() async {
         isLoadingModel = true
-        modelStatus = "Downloading fast Qwen brain…"
+        modelStatus = "Downloading fast Qwen 2.5 brain…"
         lastError = nil
 
         do {
@@ -95,7 +95,7 @@ final class AppModel: ObservableObject {
 
     func downloadSmartModel() async {
         isLoadingModel = true
-        modelStatus = "Downloading smarter Qwen brain…"
+        modelStatus = "Downloading large Qwen 2.5 brain…"
         lastError = nil
 
         do {
@@ -104,7 +104,23 @@ final class AppModel: ObservableObject {
             await loadModel(at: local)
         } catch {
             isLoadingModel = false
-            modelStatus = "Smart brain download failed"
+            modelStatus = "Large brain download failed"
+            lastError = error.localizedDescription
+        }
+    }
+
+    func downloadQwen3Model() async {
+        isLoadingModel = true
+        modelStatus = "Downloading Qwen3 smart-fast brain…"
+        lastError = nil
+
+        do {
+            let local = try await modelLibrary.downloadQwen3Model()
+            isLoadingModel = false
+            await loadModel(at: local)
+        } catch {
+            isLoadingModel = false
+            modelStatus = "Qwen3 download failed"
             lastError = error.localizedDescription
         }
     }
@@ -129,27 +145,54 @@ final class AppModel: ObservableObject {
         guard let engine else {
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and either download a free model or import a GGUF."
+                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and download a free model or import a GGUF."
             ))
             persist()
             return
         }
 
         isGenerating = true
-        let prompt = PromptComposer.compose(profile: profile, newestUserText: text)
 
         let filename = profile.modelFilename?.lowercased() ?? ""
-        let isTinyModel = filename.contains("0.5b")
-        let maxNewTokens = isTinyModel ? 180 : 220
-        let temperature: Float = isTinyModel ? 0.80 : 0.86
-        let topP: Float = isTinyModel ? 0.92 : 0.94
+        let isQwen3 = filename.contains("qwen3")
+        let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
+
+        let prompt = PromptComposer.compose(
+            profile: profile,
+            newestUserText: text,
+            isQwen3: isQwen3
+        )
+
+        let maxNewTokens: Int
+        let temperature: Float
+        let topP: Float
+        let topK: Int32
+
+        if isQwen3 {
+            // Qwen's recommended non-thinking settings: temp 0.7, top-p 0.8, top-k 20.
+            maxNewTokens = 180
+            temperature = 0.70
+            topP = 0.80
+            topK = 20
+        } else if isTinyQwen25 {
+            maxNewTokens = 180
+            temperature = 0.80
+            topP = 0.92
+            topK = 40
+        } else {
+            maxNewTokens = 220
+            temperature = 0.86
+            topP = 0.94
+            topK = 40
+        }
 
         do {
             let answer = try await engine.complete(
                 prompt: prompt,
                 maxNewTokens: maxNewTokens,
                 temperature: temperature,
-                topP: topP
+                topP: topP,
+                topK: topK
             )
             profile.messages.append(ChatMessage(
                 role: .assistant,
@@ -170,7 +213,16 @@ final class AppModel: ObservableObject {
     }
 
     private func cleanGeneratedReply(_ raw: String) -> String {
-        let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+
+        // Qwen3 can occasionally enter thinking mode even when asked not to. Never show
+        // that scratch work in chat; keep only the answer after the final </think> marker.
+        if let range = normalized.range(of: "</think>", options: .backwards) {
+            normalized = String(normalized[range.upperBound...])
+        } else if let open = normalized.range(of: "<think>") {
+            normalized = String(normalized[..<open.lowerBound])
+        }
+
         var kept: [String] = []
 
         for line in normalized.components(separatedBy: "\n") {
