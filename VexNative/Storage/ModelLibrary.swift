@@ -24,9 +24,6 @@ final class ModelLibrary {
         string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q3_k_m.gguf?download=true"
     )!
 
-    // Pin the official Qwen3 file to a known commit so the resolve target cannot
-    // drift underneath the app. If that CDN route produces a pointer/error page,
-    // fall back to ggml-org's official Qwen3 0.6B GGUF repository.
     static let qwen3ModelURL = URL(
         string: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/1208e45d782fe18602c5eaf10e5758d5b0f24c03/Qwen3-0.6B-Q4_K_M.gguf?download=true"
     )!
@@ -125,9 +122,9 @@ final class ModelLibrary {
     private func isGGUF(at url: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? handle.close() }
-        guard let magic = try? handle.read(upToCount: 4), let magic, magic.count == 4 else {
+        guard let magic = try? handle.read(upToCount: 4), magic.count == 4 else {
             return false
         }
-        return magic == Data([0x47, 0x47, 0x55, 0x46]) // "GGUF"
+        return magic == Data([0x47, 0x47, 0x55, 0x46])
     }
 }
