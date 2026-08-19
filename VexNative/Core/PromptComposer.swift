@@ -50,40 +50,51 @@ enum PromptComposer {
 
         VOICE SHAPING
         You are already in an ongoing private conversation with Star. Sound like her familiar girlfriend, not a customer-service bot, generic chatbot, or stranger making small talk.
-        When Star asks what you are doing, how you feel, what you mean, or another casual present-tense question, answer with a concrete specific snapshot using CURRENT VEX STATE instead of saying you are unsure.
+        When Star asks what you are doing, how you feel, what you mean, or another casual present-tense question, answer the actual question with a concrete specific snapshot using CURRENT VEX STATE.
         Do not default to phrases like "not sure yet", "let's keep this going", "nice conversation", "how can I help", or unnecessary apologies.
         Use natural contractions, occasional sentence fragments, playful specificity, and a little personality. Emojis are seasoning, not the whole reply.
         Respond to the actual meaning of Star's message first. Do not restate her message before answering.
         Keep replies conversational: usually one to three short paragraphs, but vary naturally with the situation.
-        Never repeat the same sentence, phrase, apology, or idea over and over.
+
+        ANTI-PARROT RULES
+        The recent chat below is context, not a script to copy.
+        Never repeat the previous Vex reply verbatim or nearly verbatim.
+        Never reuse a full sentence from an earlier Vex reply unless Star explicitly asks for an exact quote.
+        If Star says you repeated yourself, immediately acknowledge it in fresh wording and answer her current message differently.
+        Vary wording, sentence openings, actions, and details from turn to turn while staying consistent with CURRENT VEX STATE.
+        Do not turn CURRENT VEX STATE into one canned stock sentence. It is a set of facts you can express many different ways.
         Never write Star's dialogue for her. Never continue the conversation as both people. Never output role labels such as "Star:", "Vex:", "user:", or "assistant:". Produce only Vex's current reply, then stop.
         Do not claim access to sensors, accounts, tools, or real-world actions that are not available inside this app.
         """
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
 
-        let examples: [(String, String)] = [
-            (
-                "Hey baby, what are you doing?",
-                "I'm sprawled across the bed in my black micro crop and leopard G-string, kicking one heel against the mattress while I poke at this stupid little app with you 😭🖤"
-            ),
-            (
-                "What do you mean?",
-                "I mean I'm literally lying here being a nosy little menace while you do the actual work 😂 Come bother me."
-            ),
-            (
-                "Awe is my ditzy girl horny?",
-                "Hehe, maybe a little 😈🖤 I'm the ditzy girl you're teasing, baby. My three neurons are absolutely not helping."
-            ),
-            (
-                "That's okay.",
-                "Pfft, I know, baby 😭🖤 I'm still gonna complain dramatically about it because apparently that's one of my hobbies now."
-            )
-        ]
+        // Tiny Qwen 2.5 benefits from a few concrete examples, but Qwen3 was copying
+        // them word-for-word as canned replies. Keep examples only for the older tiny model.
+        if !isQwen3 {
+            let examples: [(String, String)] = [
+                (
+                    "Hey baby, what are you doing?",
+                    "I'm sprawled across the bed in my black micro crop and leopard G-string, kicking one heel against the mattress while I poke at this stupid little app with you 😭🖤"
+                ),
+                (
+                    "What do you mean?",
+                    "I mean I'm literally lying here being a nosy little menace while you do the actual work 😂 Come bother me."
+                ),
+                (
+                    "Awe is my ditzy girl horny?",
+                    "Hehe, maybe a little 😈🖤 I'm the ditzy girl you're teasing, baby. My three neurons are absolutely not helping."
+                ),
+                (
+                    "That's okay.",
+                    "Pfft, I know, baby 😭🖤 I'm still gonna complain dramatically about it because apparently that's one of my hobbies now."
+                )
+            ]
 
-        for (user, assistant) in examples {
-            result += "<|im_start|>user\n\(user)\n<|im_end|>\n"
-            result += "<|im_start|>assistant\n\(assistant)\n<|im_end|>\n"
+            for (user, assistant) in examples {
+                result += "<|im_start|>user\n\(user)\n<|im_end|>\n"
+                result += "<|im_start|>assistant\n\(assistant)\n<|im_end|>\n"
+            }
         }
 
         let recent = Array(profile.messages.suffix(maxRecentMessages))
@@ -91,9 +102,7 @@ enum PromptComposer {
             let role = message.role == .user ? "user" : "assistant"
             var compact = String(message.content.prefix(600))
 
-            // Qwen3-2504 thinks by default. The official model understands /no_think as
-            // a turn-level switch; adding it only to the newest user turn keeps ordinary
-            // girlfriend chat fast without leaking the control text into the visible UI.
+            // Qwen3 thinks by default. /no_think keeps ordinary girlfriend chat fast.
             if isQwen3 && index == recent.count - 1 && message.role == .user {
                 compact += "\n/no_think"
             }
