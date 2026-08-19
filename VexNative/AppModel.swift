@@ -51,7 +51,15 @@ final class AppModel: ObservableObject {
 
         do {
             let filename = url.lastPathComponent.lowercased()
-            let contextSize = filename.contains("1.5b") ? 3072 : 4096
+            let contextSize: Int
+            if filename.contains("qwen3") {
+                contextSize = 2048
+            } else if filename.contains("1.5b") {
+                contextSize = 3072
+            } else {
+                contextSize = 4096
+            }
+
             let session = try await Task.detached(priority: .userInitiated) {
                 try LlamaSession(modelPath: url.path, contextSize: contextSize)
             }.value
@@ -156,6 +164,7 @@ final class AppModel: ObservableObject {
         let filename = profile.modelFilename?.lowercased() ?? ""
         let isQwen3 = filename.contains("qwen3")
         let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
+        let previousAssistant = profile.messages.dropLast().reversed().first(where: { $0.role == .assistant })?.content
 
         let prompt = PromptComposer.compose(
             profile: profile,
@@ -169,11 +178,12 @@ final class AppModel: ObservableObject {
         let topK: Int32
 
         if isQwen3 {
-            // Qwen's recommended non-thinking settings: temp 0.7, top-p 0.8, top-k 20.
-            maxNewTokens = 180
-            temperature = 0.70
-            topP = 0.80
-            topK = 20
+            // Keep the 0.6B model concise. Slightly more diversity than the stock non-thinking
+            // recipe helps it avoid falling into the same canned opening every turn.
+            maxNewTokens = 96
+            temperature = 0.74
+            topP = 0.84
+            topK = 30
         } else if isTinyQwen25 {
             maxNewTokens = 180
             temperature = 0.80
@@ -194,9 +204,38 @@ final class AppModel: ObservableObject {
                 topP: topP,
                 topK: topK
             )
+
+            var finalAnswer = cleanGeneratedReply(answer)
+
+            // Code-level novelty gate for Qwen3-0.6B. Prompt-only anti-repeat rules are not
+            // reliable enough on a model this small, so reject a near-copy or obvious role swap
+            // and give it one shorter, more diverse retry without quoting the bad draft.
+            if isQwen3 && shouldRetryQwen3(finalAnswer, previousAssistant: previousAssistant) {
+                let retryPrompt = PromptComposer.compose(
+                    profile: profile,
+                    newestUserText: text,
+                    isQwen3: true,
+                    retryMode: true
+                )
+
+                if let retryRaw = try? await engine.complete(
+                    prompt: retryPrompt,
+                    maxNewTokens: 72,
+                    temperature: 0.82,
+                    topP: 0.90,
+                    topK: 40
+                ) {
+                    let retryAnswer = cleanGeneratedReply(retryRaw)
+                    if candidateBadness(retryAnswer, previousAssistant: previousAssistant) <
+                        candidateBadness(finalAnswer, previousAssistant: previousAssistant) {
+                        finalAnswer = retryAnswer
+                    }
+                }
+            }
+
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: cleanGeneratedReply(answer)
+                content: finalAnswer
             ))
             touchRelevantMemories(for: text)
             persist()
@@ -222,6 +261,10 @@ final class AppModel: ObservableObject {
         } else if let open = normalized.range(of: "<think>") {
             normalized = String(normalized[..<open.lowerBound])
         }
+
+        // The tiny model likes malformed markdown role-play such as *I'm* / *nudging*.
+        // The native chat UI does not need markdown emphasis, so strip the asterisks.
+        normalized = normalized.replacingOccurrences(of: "*", with: "")
 
         var kept: [String] = []
 
@@ -261,6 +304,63 @@ final class AppModel: ObservableObject {
         let cleaned = kept.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
+    }
+
+    private func shouldRetryQwen3(_ candidate: String, previousAssistant: String?) -> Bool {
+        roleConfusionScore(candidate) > 0 || phraseSimilarity(candidate, previousAssistant ?? "") >= 0.52
+    }
+
+    private func candidateBadness(_ candidate: String, previousAssistant: String?) -> Double {
+        phraseSimilarity(candidate, previousAssistant ?? "") + Double(roleConfusionScore(candidate))
+    }
+
+    private func roleConfusionScore(_ text: String) -> Int {
+        let lower = text.lowercased()
+        let badPhrases = [
+            "i'm you",
+            "i am you",
+            "you're me",
+            "you are me",
+            "i'm star",
+            "i am star",
+            "you're vex",
+            "you are vex"
+        ]
+        return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func phraseSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let left = normalizedWords(lhs)
+        let right = normalizedWords(rhs)
+        guard left.count >= 2, right.count >= 2 else { return 0 }
+
+        let prefixCount = min(6, left.count, right.count)
+        if prefixCount >= 4 && Array(left.prefix(prefixCount)) == Array(right.prefix(prefixCount)) {
+            return 1.0
+        }
+
+        let leftPairs = bigrams(left)
+        let rightPairs = bigrams(right)
+        guard !leftPairs.isEmpty, !rightPairs.isEmpty else { return 0 }
+
+        let overlap = leftPairs.intersection(rightPairs).count
+        let denominator = max(1, min(leftPairs.count, rightPairs.count))
+        return Double(overlap) / Double(denominator)
+    }
+
+    private func normalizedWords(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private func bigrams(_ words: [String]) -> Set<String> {
+        guard words.count >= 2 else { return [] }
+        var result = Set<String>()
+        for index in 0..<(words.count - 1) {
+            result.insert(words[index] + " " + words[index + 1])
+        }
+        return result
     }
 
     private func touchRelevantMemories(for text: String) {
