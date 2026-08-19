@@ -50,8 +50,10 @@ final class AppModel: ObservableObject {
         modelStatus = "Loading \(url.lastPathComponent)…"
 
         do {
+            let filename = url.lastPathComponent.lowercased()
+            let contextSize = filename.contains("1.5b") ? 3072 : 4096
             let session = try await Task.detached(priority: .userInitiated) {
-                try LlamaSession(modelPath: url.path, contextSize: 4096)
+                try LlamaSession(modelPath: url.path, contextSize: contextSize)
             }.value
             engine = session
             profile.modelFilename = url.lastPathComponent
@@ -77,7 +79,7 @@ final class AppModel: ObservableObject {
 
     func downloadRecommendedModel() async {
         isLoadingModel = true
-        modelStatus = "Downloading tiny Qwen model…"
+        modelStatus = "Downloading fast Qwen brain…"
         lastError = nil
 
         do {
@@ -87,6 +89,22 @@ final class AppModel: ObservableObject {
         } catch {
             isLoadingModel = false
             modelStatus = "Download failed"
+            lastError = error.localizedDescription
+        }
+    }
+
+    func downloadSmartModel() async {
+        isLoadingModel = true
+        modelStatus = "Downloading smarter Qwen brain…"
+        lastError = nil
+
+        do {
+            let local = try await modelLibrary.downloadSmartModel()
+            isLoadingModel = false
+            await loadModel(at: local)
+        } catch {
+            isLoadingModel = false
+            modelStatus = "Smart brain download failed"
             lastError = error.localizedDescription
         }
     }
@@ -111,7 +129,7 @@ final class AppModel: ObservableObject {
         guard let engine else {
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and either download the tiny free model or import a GGUF."
+                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and either download a free model or import a GGUF."
             ))
             persist()
             return
@@ -123,9 +141,9 @@ final class AppModel: ObservableObject {
         do {
             let answer = try await engine.complete(
                 prompt: prompt,
-                maxNewTokens: 160,
-                temperature: 0.78,
-                topP: 0.90
+                maxNewTokens: 220,
+                temperature: 0.86,
+                topP: 0.94
             )
             profile.messages.append(ChatMessage(
                 role: .assistant,
