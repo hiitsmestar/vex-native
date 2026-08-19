@@ -29,18 +29,30 @@ enum PromptComposer {
         let userBlock = isQwen3 ? String(profile.userProfile.prefix(500)) : profile.userProfile
         let newestLower = newestUserText.lowercased()
 
+        let asksDitzyHorny = newestLower.contains("horny") &&
+            (newestLower.contains("ditzy girl") || newestLower.contains("my girl"))
+        let asksWhatDoing = newestLower.contains("what are you doing") ||
+            newestLower.contains("what're you doing") ||
+            newestLower.contains("whatcha doing")
+        let repeatComplaint = newestLower.contains("you said that") ||
+            newestLower.contains("said that already") ||
+            newestLower.contains("you already said") ||
+            newestLower.contains("repeating") ||
+            newestLower.contains("repeat yourself")
+        let focusedTurn = isQwen3 && (asksDitzyHorny || asksWhatDoing || repeatComplaint)
+
         var turnAnchor: [String] = []
         if newestLower.contains("my ditzy girl") {
             turnAnchor.append("REFERENCE: Star's words 'my ditzy girl' mean Vex. Vex is Star's ditzy girl. Star is NOT the ditzy girl.")
         }
-        if newestLower.contains("horny") && newestLower.contains("ditzy girl") {
-            turnAnchor.append("TASK: Star is asking whether Vex is horny. Answer yes/no about Vex first. Never say Star is the ditzy girl.")
+        if asksDitzyHorny {
+            turnAnchor.append("TASK: Star is asking whether Vex is horny. Answer yes or no about Vex first. Never say Star is the ditzy girl.")
         }
-        if newestLower.contains("what are you doing") || newestLower.contains("what're you doing") {
-            turnAnchor.append("TASK: Say what Vex is doing right now. Do not offer help, plans, games, or ask what Star wants to do.")
+        if asksWhatDoing {
+            turnAnchor.append("TASK: Say what Vex is doing right now. Location is exactly '\(profile.state.location)'. If an exact room is not known, say 'at home' rather than inventing a kitchen, bedroom, or other room. Use CURRENT VEX STATE and Scene for one concrete present-tense activity. Do not offer help, plans, games, or ask what Star wants to do.")
         }
-        if newestLower.contains("you said that") || newestLower.contains("said that already") || newestLower.contains("repeating") {
-            turnAnchor.append("TASK: Briefly acknowledge the repeat, then say something actually new. Do not reuse the prior opening or idea.")
+        if repeatComplaint {
+            turnAnchor.append("TASK: Star is correcting Vex for repeating herself. Do NOT answer the earlier question again. Briefly admit the repeat, then say something genuinely new or correct yourself. Do not answer with 'I don't think so.' Do not reuse the prior idea.")
         }
         let turnAnchorBlock = turnAnchor.isEmpty ? "Answer the newest message directly." : turnAnchor.joined(separator: "\n")
 
@@ -79,6 +91,7 @@ enum PromptComposer {
             Do not mention the app, private chat, phones, sensors, or checking status unless Star asked about them.
             Do not use asterisks for stage directions or emphasis.
             Do not repeat or lightly paraphrase the previous Vex reply.
+            Address Star as "you" in the reply rather than talking about Star in third person unless needed for clarity.
             Never write Star's dialogue. Never output role labels. Produce one Vex reply and stop.
             """
         } else {
@@ -160,8 +173,17 @@ enum PromptComposer {
             }
         }
 
-        let recentLimit = isQwen3 ? 3 : maxRecentMessages
-        let recent = Array(profile.messages.suffix(recentLimit))
+        let recent: [ChatMessage]
+        if focusedTurn {
+            // Explicit short questions and correction turns are easier for a 0.6B model when
+            // the previous Q/A is not sitting directly beside the new instruction. The native
+            // novelty gate still compares against prior assistant replies outside the prompt.
+            recent = Array(profile.messages.suffix(1))
+        } else {
+            let recentLimit = isQwen3 ? 3 : maxRecentMessages
+            recent = Array(profile.messages.suffix(recentLimit))
+        }
+
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
             let cap = isQwen3 ? 220 : 600
@@ -172,7 +194,7 @@ enum PromptComposer {
                 if retryMode {
                     compact += """
 
-                    RETRY: The first draft was rejected for repetition, generic filler, or identity confusion. Give a genuinely different direct answer now. Different first sentence, different idea, 1 to 2 concise sentences.
+                    RETRY: The first draft was rejected for repetition, generic filler, identity confusion, or failure to answer this exact turn. Give a genuinely different direct answer now. Different first sentence, different idea, 1 to 2 concise sentences.
                     """
                 }
                 compact += "\n/no_think"
