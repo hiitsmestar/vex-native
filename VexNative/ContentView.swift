@@ -52,9 +52,13 @@ struct ContentView: View {
                 composer
             }
         }
+        // Keep accessibility sizing useful without letting extreme Dynamic Type destroy
+        // the compact chat layout on smaller iPhones.
+        .dynamicTypeSize(.small ... .xLarge)
         .sheet(isPresented: $app.showBrain) {
             BrainView()
                 .environmentObject(app)
+                .dynamicTypeSize(.small ... .xLarge)
         }
         .task {
             await app.loadSavedModelIfPresent()
@@ -79,6 +83,8 @@ struct ContentView: View {
                     .font(.caption2.weight(.black))
                     .tracking(1.6)
                     .foregroundStyle(VexTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 HStack(spacing: 6) {
                     Text("Vex")
                         .font(.largeTitle.bold())
@@ -88,7 +94,7 @@ struct ContentView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Button {
                 app.showBrain = true
@@ -117,6 +123,7 @@ struct ContentView: View {
             Text(app.modelStatus)
                 .font(.caption)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .foregroundStyle(VexTheme.muted)
 
             Spacer()
@@ -127,9 +134,10 @@ struct ContentView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Say something to Vex…", text: $app.draft, axis: .vertical)
-                .lineLimit(1...5)
+        HStack(alignment: .center, spacing: 8) {
+            // Single-line TextField makes the keyboard's Send key actually submit instead
+            // of inserting a newline, while the arrow button remains a separate explicit send.
+            TextField("Say something to Vex…", text: $app.draft)
                 .padding(11)
                 .background(VexTheme.panel)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -139,10 +147,12 @@ struct ContentView: View {
                 }
                 .submitLabel(.send)
                 .onSubmit {
+                    guard !app.isGenerating else { return }
                     Task { await app.send() }
                 }
 
             Button {
+                guard !app.isGenerating else { return }
                 Task { await app.send() }
             } label: {
                 Image(systemName: "arrow.up")
@@ -158,6 +168,7 @@ struct ContentView: View {
                     )
                     .clipShape(Circle())
             }
+            .buttonStyle(.plain)
             .disabled(app.isGenerating || app.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .opacity(app.isGenerating ? 0.5 : 1)
         }
