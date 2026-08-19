@@ -17,10 +17,19 @@ struct BrainView: View {
                         }
                     }
 
-                    Button("Download tiny free Qwen model") {
+                    Button("Download fast brain — Qwen 0.5B") {
                         Task { await app.downloadRecommendedModel() }
                     }
                     .disabled(app.isLoadingModel)
+
+                    Button("Download smarter brain — Qwen 1.5B (experimental)") {
+                        Task { await app.downloadSmartModel() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Text("The 0.5B brain is faster. The 1.5B brain is much larger and may take longer to load or answer, but should follow personality and context better. You can keep both on the phone and switch by downloading or importing the one you want active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     Button("Import a GGUF from Files") {
                         app.showModelImporter = true
@@ -104,7 +113,7 @@ struct BrainView: View {
                         app.clearChat()
                     }
                 } footer: {
-                    Text("The app stores its brain and chat locally. No API key is used. The only network download built in is the optional free model download.")
+                    Text("The app stores its brain and chat locally. No API key is used. The only network downloads built in are the optional free model downloads.")
                 }
             }
             .navigationTitle("Vex Brain")
