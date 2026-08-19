@@ -123,9 +123,9 @@ final class AppModel: ObservableObject {
         do {
             let answer = try await engine.complete(
                 prompt: prompt,
-                maxNewTokens: 420,
-                temperature: 0.88,
-                topP: 0.92
+                maxNewTokens: 160,
+                temperature: 0.78,
+                topP: 0.90
             )
             profile.messages.append(ChatMessage(
                 role: .assistant,
