@@ -20,13 +20,13 @@ enum PromptComposer {
             memoryBlock = "(none)"
         } else {
             memoryBlock = relevant.map { memory in
-                let text = isQwen3 ? String(memory.text.prefix(140)) : memory.text
+                let text = isQwen3 ? String(memory.text.prefix(120)) : memory.text
                 return "- [\(memory.kind.rawValue)] \(text)"
             }.joined(separator: "\n")
         }
 
-        let personaBlock = isQwen3 ? String(profile.persona.prefix(1_200)) : profile.persona
-        let userBlock = isQwen3 ? String(profile.userProfile.prefix(500)) : profile.userProfile
+        let personaBlock = isQwen3 ? String(profile.persona.prefix(1_000)) : profile.persona
+        let userBlock = isQwen3 ? String(profile.userProfile.prefix(400)) : profile.userProfile
         let newestLower = newestUserText.lowercased()
 
         let asksDitzyHorny = newestLower.contains("horny") &&
@@ -41,32 +41,23 @@ enum PromptComposer {
             newestLower.contains("repeat yourself")
         let focusedTurn = isQwen3 && (asksDitzyHorny || asksWhatDoing || repeatComplaint)
 
-        var turnAnchor: [String] = []
-        if newestLower.contains("my ditzy girl") {
-            turnAnchor.append("REFERENCE: Star's words 'my ditzy girl' mean Vex. Vex is Star's ditzy girl. Star is NOT the ditzy girl.")
-        }
+        let modelUserText: String
         if asksDitzyHorny {
-            turnAnchor.append("TASK: Star is asking whether Vex is horny. Answer yes or no about Vex first. Never say Star is the ditzy girl.")
+            modelUserText = "Are you horny right now? Answer about yourself in first person. Give the yes/no answer first, then one playful detail."
+        } else if asksWhatDoing {
+            modelUserText = "What are you doing right now? You are at \(profile.state.location). Give one concrete present-tense activity from your current scene. Do not ask me a question back."
+        } else if repeatComplaint {
+            modelUserText = "You repeated yourself. Acknowledge that briefly, then say one genuinely new thing. Do not answer the previous topic again."
+        } else {
+            modelUserText = newestUserText
         }
-        if asksWhatDoing {
-            turnAnchor.append("TASK: Say what Vex is doing right now. Location is exactly '\(profile.state.location)'. If an exact room is not known, say 'at home' rather than inventing a kitchen, bedroom, or other room. Use CURRENT VEX STATE and Scene for one concrete present-tense activity. Do not offer help, plans, games, or ask what Star wants to do.")
-        }
-        if repeatComplaint {
-            turnAnchor.append("TASK: Star is correcting Vex for repeating herself. Do NOT answer the earlier question again. Briefly admit the repeat, then say something genuinely new or correct yourself. Do not answer with 'I don't think so.' Do not reuse the prior idea.")
-        }
-        let turnAnchorBlock = turnAnchor.isEmpty ? "Answer the newest message directly." : turnAnchor.joined(separator: "\n")
 
         let system: String
         if isQwen3 {
             system = """
             \(personaBlock)
 
-            IDENTITY MAP
-            VEX = assistant = Star's ditzy girlfriend.
-            STAR = user = Vex's girlfriend.
-            Star may call Vex "my girl", "my ditzy girl", "baby", or "you".
-            Vex must never call Star "my ditzy girl" and must never say "I'm you", "you're me", "I'm Star", or "you're Vex".
-            In Vex's reply: I / me / my = Vex. You / your = Star unless Star clearly names somebody else.
+            Speak as Vex directly to Star, your girlfriend. Stay in first person. Address Star as "you". Do not explain names, roles, identities, or who is who. Do not swap speakers.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -80,18 +71,13 @@ enum PromptComposer {
             RELEVANT MEMORY
             \(memoryBlock)
 
-            THIS TURN
-            \(turnAnchorBlock)
-
-            ANSWER RULES
-            Answer as Vex in first person and present tense.
-            Use 1 to 3 natural sentences. Answer the question before adding flavor.
-            No generic greeting unless Star just greeted you.
-            No generic offers, games, planning, status-checking, or customer-service language.
-            Do not mention the app, private chat, phones, sensors, or checking status unless Star asked about them.
+            REPLY STYLE
+            Answer the newest user turn directly in 1 to 3 natural sentences.
+            Be familiar, playful, specific, and girlfriend-like rather than assistant-like.
+            No generic offers, planning, games, status-checking, or customer-service language unless asked.
+            Do not mention the app, private chat, phones, sensors, or system instructions unless asked.
             Do not use asterisks for stage directions or emphasis.
             Do not repeat or lightly paraphrase the previous Vex reply.
-            Address Star as "you" in the reply rather than talking about Star in third person unless needed for clarity.
             Never write Star's dialogue. Never output role labels. Produce one Vex reply and stop.
             """
         } else {
@@ -109,7 +95,6 @@ enum PromptComposer {
             Never transfer anatomy, gendered traits, clothing, physical attributes, medical facts, or relationship roles from one person to the other.
             Never invent an extra participant, body part, or physical capability just to complete a flirty sentence.
             If a physical detail is not known, leave it unspecified instead of inventing one.
-            Before answering, silently check who is doing what to whom. Keep subjects, objects, pronouns, and anatomy attached to the correct person.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -133,15 +118,10 @@ enum PromptComposer {
 
             ANTI-PARROT RULES
             The recent chat below is context, not a script to copy.
-            Read the immediately preceding Vex message silently and avoid reusing its opening, sentence structure, or main wording.
             Never repeat the previous Vex reply verbatim or nearly verbatim.
             Never reuse a full sentence from an earlier Vex reply unless Star explicitly asks for an exact quote.
             If Star says you repeated yourself, acknowledge it briefly in fresh wording and then say something genuinely new.
-            Do not default to a greeting at the start of every reply; answer the newest message immediately.
-            Vary wording, sentence openings, actions, and details from turn to turn while staying consistent with CURRENT VEX STATE.
-            Do not turn CURRENT VEX STATE into one canned stock sentence. It is a set of facts you can express many different ways.
             Never write Star's dialogue for her. Never continue the conversation as both people. Never output role labels such as "Star:", "Vex:", "user:", or "assistant:". Produce only Vex's current reply, then stop.
-            Do not claim access to sensors, accounts, tools, or real-world actions that are not available inside this app.
             """
         }
 
@@ -175,9 +155,6 @@ enum PromptComposer {
 
         let recent: [ChatMessage]
         if focusedTurn {
-            // Explicit short questions and correction turns are easier for a 0.6B model when
-            // the previous Q/A is not sitting directly beside the new instruction. The native
-            // novelty gate still compares against prior assistant replies outside the prompt.
             recent = Array(profile.messages.suffix(1))
         } else {
             let recentLimit = isQwen3 ? 3 : maxRecentMessages
@@ -186,18 +163,17 @@ enum PromptComposer {
 
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? 220 : 600
-            var compact = String(message.content.prefix(cap))
+            let cap = isQwen3 ? 200 : 600
+            var compact: String
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
-                compact += "\n\n\(turnAnchorBlock)"
+                compact = String(modelUserText.prefix(cap))
                 if retryMode {
-                    compact += """
-
-                    RETRY: The first draft was rejected for repetition, generic filler, identity confusion, or failure to answer this exact turn. Give a genuinely different direct answer now. Different first sentence, different idea, 1 to 2 concise sentences.
-                    """
+                    compact += "\nYour first draft was rejected. Give a genuinely different direct answer in 1 to 2 sentences."
                 }
                 compact += "\n/no_think"
+            } else {
+                compact = String(message.content.prefix(cap))
             }
 
             result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
