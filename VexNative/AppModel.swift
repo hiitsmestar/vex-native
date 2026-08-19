@@ -164,7 +164,12 @@ final class AppModel: ObservableObject {
         let filename = profile.modelFilename?.lowercased() ?? ""
         let isQwen3 = filename.contains("qwen3")
         let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
-        let previousAssistant = profile.messages.dropLast().reversed().first(where: { $0.role == .assistant })?.content
+        let previousAssistants = profile.messages
+            .dropLast()
+            .reversed()
+            .filter { $0.role == .assistant }
+            .prefix(2)
+            .map(\.content)
 
         let prompt = PromptComposer.compose(
             profile: profile,
@@ -178,12 +183,10 @@ final class AppModel: ObservableObject {
         let topK: Int32
 
         if isQwen3 {
-            // Keep the 0.6B model concise. Slightly more diversity than the stock non-thinking
-            // recipe helps it avoid falling into the same canned opening every turn.
-            maxNewTokens = 96
-            temperature = 0.74
-            topP = 0.84
-            topK = 30
+            maxNewTokens = 72
+            temperature = 0.78
+            topP = 0.88
+            topK = 40
         } else if isTinyQwen25 {
             maxNewTokens = 180
             temperature = 0.80
@@ -206,11 +209,15 @@ final class AppModel: ObservableObject {
             )
 
             var finalAnswer = cleanGeneratedReply(answer)
+            if isQwen3 {
+                finalAnswer = repairQwen3RoleTerms(finalAnswer)
+            }
 
-            // Code-level novelty gate for Qwen3-0.6B. Prompt-only anti-repeat rules are not
-            // reliable enough on a model this small, so reject a near-copy or obvious role swap
-            // and give it one shorter, more diverse retry without quoting the bad draft.
-            if isQwen3 && shouldRetryQwen3(finalAnswer, previousAssistant: previousAssistant) {
+            if isQwen3 && shouldRetryQwen3(
+                finalAnswer,
+                userText: text,
+                previousAssistants: previousAssistants
+            ) {
                 let retryPrompt = PromptComposer.compose(
                     profile: profile,
                     newestUserText: text,
@@ -220,14 +227,21 @@ final class AppModel: ObservableObject {
 
                 if let retryRaw = try? await engine.complete(
                     prompt: retryPrompt,
-                    maxNewTokens: 72,
-                    temperature: 0.82,
-                    topP: 0.90,
-                    topK: 40
+                    maxNewTokens: 52,
+                    temperature: 0.86,
+                    topP: 0.92,
+                    topK: 50
                 ) {
-                    let retryAnswer = cleanGeneratedReply(retryRaw)
-                    if candidateBadness(retryAnswer, previousAssistant: previousAssistant) <
-                        candidateBadness(finalAnswer, previousAssistant: previousAssistant) {
+                    let retryAnswer = repairQwen3RoleTerms(cleanGeneratedReply(retryRaw))
+                    if candidateBadness(
+                        retryAnswer,
+                        userText: text,
+                        previousAssistants: previousAssistants
+                    ) < candidateBadness(
+                        finalAnswer,
+                        userText: text,
+                        previousAssistants: previousAssistants
+                    ) {
                         finalAnswer = retryAnswer
                     }
                 }
@@ -254,16 +268,12 @@ final class AppModel: ObservableObject {
     private func cleanGeneratedReply(_ raw: String) -> String {
         var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
 
-        // Qwen3 can occasionally enter thinking mode even when asked not to. Never show
-        // that scratch work in chat; keep only the answer after the final </think> marker.
         if let range = normalized.range(of: "</think>", options: .backwards) {
             normalized = String(normalized[range.upperBound...])
         } else if let open = normalized.range(of: "<think>") {
             normalized = String(normalized[..<open.lowerBound])
         }
 
-        // The tiny model likes malformed markdown role-play such as *I'm* / *nudging*.
-        // The native chat UI does not need markdown emphasis, so strip the asterisks.
         normalized = normalized.replacingOccurrences(of: "*", with: "")
 
         var kept: [String] = []
@@ -306,12 +316,53 @@ final class AppModel: ObservableObject {
         return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
     }
 
-    private func shouldRetryQwen3(_ candidate: String, previousAssistant: String?) -> Bool {
-        roleConfusionScore(candidate) > 0 || phraseSimilarity(candidate, previousAssistant ?? "") >= 0.52
+    private func repairQwen3RoleTerms(_ text: String) -> String {
+        var repaired = text
+        let replacements: [(String, String)] = [
+            ("you're my ditzy girl", "I'm your ditzy girl"),
+            ("you are my ditzy girl", "I'm your ditzy girl"),
+            ("you're the ditzy girl", "I'm the ditzy girl"),
+            ("you are the ditzy girl", "I'm the ditzy girl"),
+            ("i'm you", "I'm Vex"),
+            ("i am you", "I'm Vex"),
+            ("you're me", "you're Star"),
+            ("you are me", "you're Star")
+        ]
+
+        for (wrong, right) in replacements {
+            repaired = repaired.replacingOccurrences(
+                of: wrong,
+                with: right,
+                options: [.caseInsensitive]
+            )
+        }
+        return repaired
     }
 
-    private func candidateBadness(_ candidate: String, previousAssistant: String?) -> Double {
-        phraseSimilarity(candidate, previousAssistant ?? "") + Double(roleConfusionScore(candidate))
+    private func shouldRetryQwen3(
+        _ candidate: String,
+        userText: String,
+        previousAssistants: [String]
+    ) -> Bool {
+        candidateBadness(
+            candidate,
+            userText: userText,
+            previousAssistants: previousAssistants
+        ) >= 0.75
+    }
+
+    private func candidateBadness(
+        _ candidate: String,
+        userText: String,
+        previousAssistants: [String]
+    ) -> Double {
+        let repeatScore = previousAssistants
+            .map { phraseSimilarity(candidate, $0) }
+            .max() ?? 0
+        return repeatScore
+            + Double(roleConfusionScore(candidate)) * 1.5
+            + Double(genericAssistantScore(candidate)) * 0.35
+            + Double(intentMismatchScore(userText: userText, candidate: candidate)) * 0.8
     }
 
     private func roleConfusionScore(_ text: String) -> Int {
@@ -324,9 +375,42 @@ final class AppModel: ObservableObject {
             "i'm star",
             "i am star",
             "you're vex",
-            "you are vex"
+            "you are vex",
+            "you're my ditzy girl",
+            "you are my ditzy girl",
+            "you're the ditzy girl",
+            "you are the ditzy girl"
         ]
         return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func genericAssistantScore(_ text: String) -> Int {
+        let lower = text.lowercased()
+        let generic = [
+            "let me see how",
+            "would you like",
+            "we can play some games",
+            "how does that go",
+            "i'm here for your cute stuff",
+            "play out the next thing",
+            "how can i help",
+            "what would you like"
+        ]
+        return generic.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func intentMismatchScore(userText: String, candidate: String) -> Int {
+        let user = userText.lowercased()
+        let answer = candidate.lowercased()
+
+        if user.contains("horny") && user.contains("ditzy girl") && !answer.contains("horny") {
+            return 1
+        }
+        if (user.contains("what are you doing") || user.contains("what're you doing")) &&
+            (answer.contains("would you like") || answer.contains("what would you like") || answer.contains("we can play")) {
+            return 1
+        }
+        return 0
     }
 
     private func phraseSimilarity(_ lhs: String, _ rhs: String) -> Double {
