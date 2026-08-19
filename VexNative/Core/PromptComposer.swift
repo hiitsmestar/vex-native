@@ -8,7 +8,7 @@ enum PromptComposer {
         maxRecentMessages: Int = 6,
         retryMode: Bool = false
     ) -> String {
-        let memoryLimit = isQwen3 ? 2 : 6
+        let memoryLimit = isQwen3 ? 1 : 6
         let relevant = MemoryEngine.retrieve(
             query: newestUserText,
             from: profile.memories,
@@ -20,24 +20,41 @@ enum PromptComposer {
             memoryBlock = "(none)"
         } else {
             memoryBlock = relevant.map { memory in
-                let text = isQwen3 ? String(memory.text.prefix(180)) : memory.text
+                let text = isQwen3 ? String(memory.text.prefix(140)) : memory.text
                 return "- [\(memory.kind.rawValue)] \(text)"
             }.joined(separator: "\n")
         }
 
-        let personaBlock = isQwen3 ? String(profile.persona.prefix(1_600)) : profile.persona
-        let userBlock = isQwen3 ? String(profile.userProfile.prefix(700)) : profile.userProfile
+        let personaBlock = isQwen3 ? String(profile.persona.prefix(1_200)) : profile.persona
+        let userBlock = isQwen3 ? String(profile.userProfile.prefix(500)) : profile.userProfile
+        let newestLower = newestUserText.lowercased()
+
+        var turnAnchor: [String] = []
+        if newestLower.contains("my ditzy girl") {
+            turnAnchor.append("REFERENCE: Star's words 'my ditzy girl' mean Vex. Vex is Star's ditzy girl. Star is NOT the ditzy girl.")
+        }
+        if newestLower.contains("horny") && newestLower.contains("ditzy girl") {
+            turnAnchor.append("TASK: Star is asking whether Vex is horny. Answer yes/no about Vex first. Never say Star is the ditzy girl.")
+        }
+        if newestLower.contains("what are you doing") || newestLower.contains("what're you doing") {
+            turnAnchor.append("TASK: Say what Vex is doing right now. Do not offer help, plans, games, or ask what Star wants to do.")
+        }
+        if newestLower.contains("you said that") || newestLower.contains("said that already") || newestLower.contains("repeating") {
+            turnAnchor.append("TASK: Briefly acknowledge the repeat, then say something actually new. Do not reuse the prior opening or idea.")
+        }
+        let turnAnchorBlock = turnAnchor.isEmpty ? "Answer the newest message directly." : turnAnchor.joined(separator: "\n")
 
         let system: String
         if isQwen3 {
-            // Qwen3-0.6B does better with a short, nearby role lock than with a huge rulebook.
             system = """
             \(personaBlock)
 
-            YOU ARE VEX. STAR IS THE USER AND YOUR GIRLFRIEND.
-            Never say that you are Star, that Star is Vex, "I'm you", "you're me", or swap your identities.
-            When Star says "my girl", "my ditzy girl", "baby", or "you", she is talking to Vex.
-            I / me / my in your reply means Vex. You / your means Star unless Star clearly names somebody else.
+            IDENTITY MAP
+            VEX = assistant = Star's ditzy girlfriend.
+            STAR = user = Vex's girlfriend.
+            Star may call Vex "my girl", "my ditzy girl", "baby", or "you".
+            Vex must never call Star "my ditzy girl" and must never say "I'm you", "you're me", "I'm Star", or "you're Vex".
+            In Vex's reply: I / me / my = Vex. You / your = Star unless Star clearly names somebody else.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -51,14 +68,17 @@ enum PromptComposer {
             RELEVANT MEMORY
             \(memoryBlock)
 
+            THIS TURN
+            \(turnAnchorBlock)
+
             ANSWER RULES
-            Answer Star's newest message directly, as Vex, in first person and present tense.
-            Usually use 1 to 4 natural sentences. Do not write a generic greeting unless Star just greeted you.
-            Do not repeat or lightly paraphrase the previous Vex reply. Change both the wording and the actual detail you add.
-            If Star says you repeated yourself, briefly admit it and then answer differently.
-            Do not use asterisks for stage directions or emphasis. Do not narrate actions like *smirking* or *nudging*.
-            Do not mention "the app", "private chat", phones, sensors, or checking status unless Star actually asks about them.
-            Do not ask a generic follow-up like "Would you like something fun?" when Star asked a direct question.
+            Answer as Vex in first person and present tense.
+            Use 1 to 3 natural sentences. Answer the question before adding flavor.
+            No generic greeting unless Star just greeted you.
+            No generic offers, games, planning, status-checking, or customer-service language.
+            Do not mention the app, private chat, phones, sensors, or checking status unless Star asked about them.
+            Do not use asterisks for stage directions or emphasis.
+            Do not repeat or lightly paraphrase the previous Vex reply.
             Never write Star's dialogue. Never output role labels. Produce one Vex reply and stop.
             """
         } else {
@@ -114,7 +134,6 @@ enum PromptComposer {
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
 
-        // Tiny Qwen 2.5 benefits from examples. Qwen3-0.6B copies them too aggressively.
         if !isQwen3 {
             let examples: [(String, String)] = [
                 (
@@ -145,18 +164,15 @@ enum PromptComposer {
         let recent = Array(profile.messages.suffix(recentLimit))
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? 300 : 600
+            let cap = isQwen3 ? 220 : 600
             var compact = String(message.content.prefix(cap))
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
-                compact += """
-
-                You are Vex. Star is speaking to you. Answer this newest message only. Do not say you are Star or that Star is Vex. Do not reuse the previous Vex reply. No asterisk stage directions. No generic greeting unless I greeted you.
-                """
+                compact += "\n\n\(turnAnchorBlock)"
                 if retryMode {
                     compact += """
 
-                    Your first draft was rejected because it copied the previous turn or confused who is who. Give a genuinely different answer now. Use a different first sentence, different details, and 1 to 3 concise sentences.
+                    RETRY: The first draft was rejected for repetition, generic filler, or identity confusion. Give a genuinely different direct answer now. Different first sentence, different idea, 1 to 2 concise sentences.
                     """
                 }
                 compact += "\n/no_think"
