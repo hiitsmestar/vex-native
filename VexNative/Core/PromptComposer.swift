@@ -4,12 +4,12 @@ enum PromptComposer {
     static func compose(
         profile: BrainProfile,
         newestUserText: String,
-        maxRecentMessages: Int = 12
+        maxRecentMessages: Int = 8
     ) -> String {
         let relevant = MemoryEngine.retrieve(
             query: newestUserText,
             from: profile.memories,
-            limit: 10
+            limit: 6
         )
 
         let memoryBlock: String
@@ -34,7 +34,7 @@ enum PromptComposer {
         RELEVANT LONG-TERM MEMORY
         \(memoryBlock)
 
-        Keep continuity with the recent conversation. Do not claim access to sensors, accounts, tools, or real-world actions that are not available inside this app.
+        Keep continuity with the recent conversation. Keep replies concise and natural. Do not repeat the same sentence, phrase, apology, or idea over and over. When the response is complete, stop. Do not claim access to sensors, accounts, tools, or real-world actions that are not available inside this app.
         """
 
         // Qwen2.5 Instruct uses ChatML-style control tokens. LlamaKit tokenizes with parse_special=true.
@@ -42,7 +42,9 @@ enum PromptComposer {
 
         for message in profile.messages.suffix(maxRecentMessages) {
             let role = message.role == .user ? "user" : "assistant"
-            result += "<|im_start|>\(role)\n\(message.content)\n<|im_end|>\n"
+            // Keep one pathological old reply from dominating every future prompt.
+            let compact = String(message.content.prefix(700))
+            result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
         }
 
         result += "<|im_start|>assistant\n"
