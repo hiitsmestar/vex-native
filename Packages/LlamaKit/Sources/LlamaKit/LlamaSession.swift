@@ -148,11 +148,11 @@ public actor LlamaSession {
 
         llama_sampler_chain_add(sampler, llama_sampler_init_top_k(topK))
         llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1))
-        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, 1.09, 0.03, 0.02))
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(256, 1.12, 0.03, 0.02))
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(UInt32.random(in: 1...UInt32.max - 1)))
 
-        for token in tokens.suffix(64) {
+        for token in tokens.suffix(256) {
             llama_sampler_accept(sampler, token)
         }
 
