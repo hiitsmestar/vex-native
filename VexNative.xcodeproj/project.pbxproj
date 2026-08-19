@@ -1,0 +1,328 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {
+    };
+    objectVersion = 56;
+    objects = {
+
+/* Begin PBXBuildFile section */
+		A0000000000000000000040 /* VexNativeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000020 /* VexNativeApp.swift */; };
+		A0000000000000000000041 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000021 /* Theme.swift */; };
+		A0000000000000000000042 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000022 /* AppModel.swift */; };
+		A0000000000000000000043 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000023 /* ContentView.swift */; };
+		A0000000000000000000044 /* BrainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000024 /* BrainModels.swift */; };
+		A0000000000000000000045 /* MemoryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000025 /* MemoryEngine.swift */; };
+		A0000000000000000000046 /* PromptComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000026 /* PromptComposer.swift */; };
+		A0000000000000000000047 /* LocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000027 /* LocalStore.swift */; };
+		A0000000000000000000048 /* ModelLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000028 /* ModelLibrary.swift */; };
+		A0000000000000000000049 /* ChatBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000029 /* ChatBubble.swift */; };
+		A000000000000000000004A /* BrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000002A /* BrainView.swift */; };
+		A00000000000000000000011 /* LlamaKit in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000010 /* LlamaKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A0000000000000000000020 /* VexNativeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VexNativeApp.swift; sourceTree = "<group>"; };
+		A0000000000000000000021 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A0000000000000000000022 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		A0000000000000000000023 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A0000000000000000000024 /* BrainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainModels.swift; sourceTree = "<group>"; };
+		A0000000000000000000025 /* MemoryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryEngine.swift; sourceTree = "<group>"; };
+		A0000000000000000000026 /* PromptComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptComposer.swift; sourceTree = "<group>"; };
+		A0000000000000000000027 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
+		A0000000000000000000028 /* ModelLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLibrary.swift; sourceTree = "<group>"; };
+		A0000000000000000000029 /* ChatBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatBubble.swift; sourceTree = "<group>"; };
+		A000000000000000000002A /* BrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainView.swift; sourceTree = "<group>"; };
+		A00000000000000000000005 /* VexNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VexNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A00000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000011 /* LlamaKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00000000000000000000003 = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000012 /* VexNative */,
+				A00000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000005 /* VexNative.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000012 /* VexNative */ = {
+			isa = PBXGroup;
+			children = (
+				A0000000000000000000020 /* VexNativeApp.swift */,
+				A0000000000000000000021 /* Theme.swift */,
+				A0000000000000000000022 /* AppModel.swift */,
+				A0000000000000000000023 /* ContentView.swift */,
+				A00000000000000000000013 /* Core */,
+				A00000000000000000000014 /* Storage */,
+				A00000000000000000000015 /* Views */,
+			);
+			path = VexNative;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000013 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A0000000000000000000024 /* BrainModels.swift */,
+				A0000000000000000000025 /* MemoryEngine.swift */,
+				A0000000000000000000026 /* PromptComposer.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000014 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				A0000000000000000000027 /* LocalStore.swift */,
+				A0000000000000000000028 /* ModelLibrary.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000015 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A0000000000000000000029 /* ChatBubble.swift */,
+				A000000000000000000002A /* BrainView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000002 /* VexNative */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00000000000000000000009 /* Build configuration list for PBXNativeTarget "VexNative" */;
+			buildPhases = (
+				A00000000000000000000006 /* Sources */,
+				A00000000000000000000007 /* Frameworks */,
+				A00000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VexNative;
+			packageProductDependencies = (
+				A00000000000000000000010 /* LlamaKit */,
+			);
+			productName = VexNative;
+			productReference = A00000000000000000000005 /* VexNative.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A00000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A0000000000000000000000A /* Build configuration list for PBXProject "VexNative" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A00000000000000000000003;
+			packageReferences = (
+				A0000000000000000000000F /* XCLocalSwiftPackageReference "Packages/LlamaKit" */,
+			);
+			productRefGroup = A00000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A00000000000000000000002 /* VexNative */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A00000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A00000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0000000000000000000040 /* VexNativeApp.swift in Sources */,
+				A0000000000000000000041 /* Theme.swift in Sources */,
+				A0000000000000000000042 /* AppModel.swift in Sources */,
+				A0000000000000000000043 /* ContentView.swift in Sources */,
+				A0000000000000000000044 /* BrainModels.swift in Sources */,
+				A0000000000000000000045 /* MemoryEngine.swift in Sources */,
+				A0000000000000000000046 /* PromptComposer.swift in Sources */,
+				A0000000000000000000047 /* LocalStore.swift in Sources */,
+				A0000000000000000000048 /* ModelLibrary.swift in Sources */,
+				A0000000000000000000049 /* ChatBubble.swift in Sources */,
+				A000000000000000000004A /* BrainView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A0000000000000000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A0000000000000000000000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A0000000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vex;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = local.star.vexnative;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A0000000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vex;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = local.star.vexnative;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A0000000000000000000000A /* Build configuration list for PBXProject "VexNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0000000000000000000000B /* Debug */,
+				A0000000000000000000000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000009 /* Build configuration list for PBXNativeTarget "VexNative" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A0000000000000000000000D /* Debug */,
+				A0000000000000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A0000000000000000000000F /* XCLocalSwiftPackageReference "Packages/LlamaKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LlamaKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A00000000000000000000010 /* LlamaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0000000000000000000000F /* XCLocalSwiftPackageReference "Packages/LlamaKit" */;
+			productName = LlamaKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A00000000000000000000001 /* Project object */;
+}

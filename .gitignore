@@ -1,0 +1,17 @@
+# Keep personal Vex/Star brain data out of public repos
+Private/
+Keep-Private/
+*vex-private-profile*.json
+*VexNative-Backup*.json
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Model files are huge and private/local
+*.gguf
+
+# OS clutter
+.DS_Store
+Thumbs.db
