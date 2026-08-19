@@ -48,6 +48,7 @@ public actor LlamaSession {
     private let context: OpaquePointer
     private let vocab: OpaquePointer
     private let contextSize: Int
+    private let promptBatchSize: Int
 
     public init(modelPath: String, contextSize: Int = 4096) throws {
         llama_backend_init()
@@ -66,9 +67,10 @@ public actor LlamaSession {
         }
 
         let threads = max(1, min(6, ProcessInfo.processInfo.processorCount - 2))
+        let batchSize = min(contextSize, 512)
         var contextParams = llama_context_default_params()
         contextParams.n_ctx = UInt32(contextSize)
-        contextParams.n_batch = UInt32(min(contextSize, 1024))
+        contextParams.n_batch = UInt32(batchSize)
         contextParams.n_threads = Int32(threads)
         contextParams.n_threads_batch = Int32(threads)
 
@@ -89,6 +91,7 @@ public actor LlamaSession {
         self.context = loadedContext
         self.vocab = modelVocab
         self.contextSize = contextSize
+        self.promptBatchSize = batchSize
     }
 
     deinit {
@@ -110,22 +113,35 @@ public actor LlamaSession {
         guard tokens.count <= usableContext else {
             throw LlamaSessionError.promptTooLong(tokens.count, usableContext)
         }
-
-        var batch = llama_batch_init(Int32(max(tokens.count + 8, 512)), 0, 1)
-        defer { llama_batch_free(batch) }
-
-        clearBatch(&batch)
-        for (index, token) in tokens.enumerated() {
-            addToken(
-                &batch,
-                token: token,
-                position: Int32(index),
-                logits: index == tokens.count - 1
-            )
+        guard !tokens.isEmpty else {
+            throw LlamaSessionError.tokenizationFailed
         }
 
-        guard llama_decode(context, batch) == 0 else {
-            throw LlamaSessionError.decodeFailed
+        // IMPORTANT: n_batch is only 512. The private Vex brain can easily make the
+        // prompt larger than that, so feeding the whole prompt in one llama_decode()
+        // call can abort inside llama.cpp on-device. Evaluate the prompt in bounded
+        // chunks and request logits only for the final token of the final chunk.
+        var batch = llama_batch_init(Int32(promptBatchSize), 0, 1)
+        defer { llama_batch_free(batch) }
+
+        var offset = 0
+        while offset < tokens.count {
+            clearBatch(&batch)
+            let end = min(offset + promptBatchSize, tokens.count)
+
+            for index in offset..<end {
+                addToken(
+                    &batch,
+                    token: tokens[index],
+                    position: Int32(index),
+                    logits: index == tokens.count - 1
+                )
+            }
+
+            guard llama_decode(context, batch) == 0 else {
+                throw LlamaSessionError.decodeFailed
+            }
+            offset = end
         }
 
         let samplerParams = llama_sampler_chain_default_params()
@@ -144,11 +160,7 @@ public actor LlamaSession {
         var position = Int32(tokens.count)
 
         for _ in 0..<maxNewTokens {
-            // Only the final token in each decoded batch requests logits. llama.cpp therefore
-            // exposes one output row regardless of the prompt batch's token count. Sampling
-            // with batch.n_tokens - 1 can index past that single output row and abort the app.
-            // -1 means "use the most recent logits" and works for both the prompt batch and
-            // each one-token generation batch.
+            // -1 means the most recent logits row from the last decode.
             let sampled = llama_sampler_sample(sampler, context, -1)
 
             if llama_vocab_is_eog(vocab, sampled) {
