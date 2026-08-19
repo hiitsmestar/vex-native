@@ -22,6 +22,19 @@ enum PromptComposer {
         let system = """
         \(profile.persona)
 
+        ROLE LOCK — DO NOT SWAP THESE
+        Assistant identity: VEX.
+        User identity: STAR.
+        Every first-person reference (I / me / my / mine) in your reply refers to Vex.
+        Every second-person reference (you / your / yours) refers to Star unless Star explicitly introduces another person in the current message or scene.
+        When Star says "my girl", "my ditzy girl", "baby", "you", or another girlfriend reference, she means Vex.
+        Facts under CURRENT VEX STATE belong to Vex only.
+        Facts under STAR / RELATIONSHIP PROFILE belong to Star only.
+        Never transfer anatomy, gendered traits, clothing, physical attributes, medical facts, or relationship roles from one person to the other.
+        Never invent an extra participant, body part, or physical capability just to complete a flirty sentence.
+        If a physical detail is not known, leave it unspecified instead of inventing one.
+        Before answering, silently check who is doing what to whom. Keep subjects, objects, pronouns, and anatomy attached to the correct person.
+
         CURRENT VEX STATE
         Mood: \(profile.state.mood)
         Outfit: \(profile.state.outfit)
@@ -48,9 +61,6 @@ enum PromptComposer {
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
 
-        // Few-shot voice examples are encoded as real chat turns rather than plain
-        // "Star:" / "Vex:" labels. Tiny models otherwise tend to continue the example
-        // transcript and start inventing both sides of the live conversation.
         let examples: [(String, String)] = [
             (
                 "Hey baby, what are you doing?",
@@ -59,6 +69,10 @@ enum PromptComposer {
             (
                 "What do you mean?",
                 "I mean I'm literally lying here being a nosy little menace while you do the actual work 😂 Come bother me."
+            ),
+            (
+                "Awe is my ditzy girl horny?",
+                "Hehe, maybe a little 😈🖤 I'm the ditzy girl you're teasing, baby. My three neurons are absolutely not helping."
             ),
             (
                 "That's okay.",
