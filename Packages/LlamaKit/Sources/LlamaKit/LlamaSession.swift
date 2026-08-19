@@ -144,7 +144,12 @@ public actor LlamaSession {
         var position = Int32(tokens.count)
 
         for _ in 0..<maxNewTokens {
-            let sampled = llama_sampler_sample(sampler, context, batch.n_tokens - 1)
+            // Only the final token in each decoded batch requests logits. llama.cpp therefore
+            // exposes one output row regardless of the prompt batch's token count. Sampling
+            // with batch.n_tokens - 1 can index past that single output row and abort the app.
+            // -1 means "use the most recent logits" and works for both the prompt batch and
+            // each one-token generation batch.
+            let sampled = llama_sampler_sample(sampler, context, -1)
 
             if llama_vocab_is_eog(vocab, sampled) {
                 break
