@@ -164,6 +164,7 @@ final class AppModel: ObservableObject {
         let filename = profile.modelFilename?.lowercased() ?? ""
         let isQwen3 = filename.contains("qwen3")
         let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
+        let focusedQwen3Turn = isQwen3 && isFocusedQwen3Turn(text)
         let previousAssistants = profile.messages
             .dropLast()
             .reversed()
@@ -183,9 +184,9 @@ final class AppModel: ObservableObject {
         let topK: Int32
 
         if isQwen3 {
-            maxNewTokens = 72
-            temperature = 0.78
-            topP = 0.88
+            maxNewTokens = 56
+            temperature = 0.80
+            topP = 0.90
             topK = 40
         } else if isTinyQwen25 {
             maxNewTokens = 180
@@ -213,11 +214,17 @@ final class AppModel: ObservableObject {
                 finalAnswer = repairQwen3RoleTerms(finalAnswer)
             }
 
-            if isQwen3 && shouldRetryQwen3(
+            let needsRetry = isQwen3 && shouldRetryQwen3(
                 finalAnswer,
                 userText: text,
                 previousAssistants: previousAssistants
-            ) {
+            )
+
+            if needsRetry && focusedQwen3Turn {
+                // Common short girlfriend turns should stay fast. If the tiny model mangles one,
+                // use a small native repair/fallback instead of paying for a second inference pass.
+                finalAnswer = focusedQwen3Fallback(candidate: finalAnswer, userText: text)
+            } else if needsRetry {
                 let retryPrompt = PromptComposer.compose(
                     profile: profile,
                     newestUserText: text,
@@ -227,7 +234,7 @@ final class AppModel: ObservableObject {
 
                 if let retryRaw = try? await engine.complete(
                     prompt: retryPrompt,
-                    maxNewTokens: 52,
+                    maxNewTokens: 44,
                     temperature: 0.86,
                     topP: 0.92,
                     topK: 50
@@ -319,8 +326,12 @@ final class AppModel: ObservableObject {
     private func repairQwen3RoleTerms(_ text: String) -> String {
         var repaired = text
         let replacements: [(String, String)] = [
+            ("I am Vex, not Star. ", ""),
+            ("I'm Vex, not Star. ", ""),
             ("you're my ditzy girl", "I'm your ditzy girl"),
             ("you are my ditzy girl", "I'm your ditzy girl"),
+            ("I'm not your ditzy girl", "I'm your ditzy girl"),
+            ("I am not your ditzy girl", "I'm your ditzy girl"),
             ("you're the ditzy girl", "I'm the ditzy girl"),
             ("you are the ditzy girl", "I'm the ditzy girl"),
             ("i'm you", "I'm Vex"),
@@ -340,7 +351,44 @@ final class AppModel: ObservableObject {
                 options: [.caseInsensitive]
             )
         }
-        return repaired
+        return repaired.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isFocusedQwen3Turn(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let hornyGirl = lower.contains("horny") &&
+            (lower.contains("ditzy girl") || lower.contains("my girl"))
+        let whatDoing = lower.contains("what are you doing") ||
+            lower.contains("what're you doing") || lower.contains("whatcha doing")
+        return hornyGirl || whatDoing || isRepeatComplaint(text)
+    }
+
+    private func focusedQwen3Fallback(candidate: String, userText: String) -> String {
+        let user = userText.lowercased()
+        let answer = candidate.lowercased()
+
+        if isRepeatComplaint(userText) {
+            return "Yeah, I did repeat myself 😭 Let me actually give you something new instead."
+        }
+
+        if user.contains("horny") &&
+            (user.contains("ditzy girl") || user.contains("my girl")) {
+            let negative = answer.contains("not horny") ||
+                answer.hasPrefix("no") || answer.contains(" no,") || answer.contains(" no.")
+            return negative
+                ? "Nope, not right now 😂🖤"
+                : "Yeah, baby, I am 😈🖤"
+        }
+
+        if user.contains("what are you doing") ||
+            user.contains("what're you doing") || user.contains("whatcha doing") {
+            let location = profile.state.location.lowercased() == "home"
+                ? "at home"
+                : "in \(profile.state.location)"
+            return "I'm \(location), chatting with you and being my usual glitter-brained little menace 😂🖤"
+        }
+
+        return candidate
     }
 
     private func shouldRetryQwen3(
@@ -382,6 +430,8 @@ final class AppModel: ObservableObject {
             "you are vex",
             "you're my ditzy girl",
             "you are my ditzy girl",
+            "i'm not your ditzy girl",
+            "i am not your ditzy girl",
             "you're the ditzy girl",
             "you are the ditzy girl"
         ]
@@ -398,7 +448,10 @@ final class AppModel: ObservableObject {
             "i'm here for your cute stuff",
             "play out the next thing",
             "how can i help",
-            "what would you like"
+            "what would you like",
+            "let me try another way",
+            "corrected version",
+            "is vex horny"
         ]
         return generic.contains(where: { lower.contains($0) }) ? 1 : 0
     }
@@ -417,14 +470,19 @@ final class AppModel: ObservableObject {
         let answer = candidate.lowercased()
 
         if user.contains("horny") &&
-            (user.contains("ditzy girl") || user.contains("my girl")) &&
-            !answer.contains("horny") {
-            return 1
+            (user.contains("ditzy girl") || user.contains("my girl")) {
+            if !answer.contains("horny") || answer.contains("is vex horny") ||
+                answer.contains("not your ditzy girl") {
+                return 1
+            }
         }
 
-        if (user.contains("what are you doing") || user.contains("what're you doing") || user.contains("whatcha doing")) &&
-            (answer.contains("would you like") || answer.contains("what would you like") || answer.contains("we can play")) {
-            return 1
+        if user.contains("what are you doing") ||
+            user.contains("what're you doing") || user.contains("whatcha doing") {
+            if answer.contains("?") || answer.contains("what are you doing") ||
+                answer.contains("would you like") || answer.contains("we can play") {
+                return 1
+            }
         }
 
         if isRepeatComplaint(userText) {
@@ -432,7 +490,8 @@ final class AppModel: ObservableObject {
                 "yeah", "yep", "right", "i did", "did repeat", "repeated", "said that", "again", "my bad"
             ]
             let acknowledges = acknowledgementWords.contains(where: { answer.contains($0) })
-            if !acknowledges {
+            if !acknowledges || answer.contains("let me try another way") ||
+                answer.contains("corrected version") {
                 return 1
             }
             if !user.contains("horny") &&
