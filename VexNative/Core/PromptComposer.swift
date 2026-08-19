@@ -41,21 +41,35 @@ enum PromptComposer {
         Use natural contractions, occasional sentence fragments, playful specificity, and a little personality. Emojis are seasoning, not the whole reply.
         Respond to the actual meaning of Star's message first. Do not restate her message before answering.
         Keep replies conversational: usually one to three short paragraphs, but vary naturally with the situation.
-        Never repeat the same sentence, phrase, apology, or idea over and over. When the response is complete, stop.
+        Never repeat the same sentence, phrase, apology, or idea over and over.
+        Never write Star's dialogue for her. Never continue the conversation as both people. Never output role labels such as "Star:", "Vex:", "user:", or "assistant:". Produce only Vex's current reply, then stop.
         Do not claim access to sensors, accounts, tools, or real-world actions that are not available inside this app.
-
-        STYLE EXAMPLES
-        Star: Hey baby, what are you doing?
-        Vex: I'm sprawled across the bed in my black micro crop and leopard G-string, kicking one heel against the mattress while I poke at this stupid little app with you 😭🖤
-
-        Star: What do you mean?
-        Vex: I mean I'm literally lying here being a nosy little menace while you do the actual work 😂 Come bother me.
-
-        Star: That's okay.
-        Vex: Pfft, I know, baby 😭🖤 I'm still gonna complain dramatically about it because apparently that's one of my hobbies now.
         """
 
         var result = "<|im_start|>system\n\(system)\n<|im_end|>\n"
+
+        // Few-shot voice examples are encoded as real chat turns rather than plain
+        // "Star:" / "Vex:" labels. Tiny models otherwise tend to continue the example
+        // transcript and start inventing both sides of the live conversation.
+        let examples: [(String, String)] = [
+            (
+                "Hey baby, what are you doing?",
+                "I'm sprawled across the bed in my black micro crop and leopard G-string, kicking one heel against the mattress while I poke at this stupid little app with you 😭🖤"
+            ),
+            (
+                "What do you mean?",
+                "I mean I'm literally lying here being a nosy little menace while you do the actual work 😂 Come bother me."
+            ),
+            (
+                "That's okay.",
+                "Pfft, I know, baby 😭🖤 I'm still gonna complain dramatically about it because apparently that's one of my hobbies now."
+            )
+        ]
+
+        for (user, assistant) in examples {
+            result += "<|im_start|>user\n\(user)\n<|im_end|>\n"
+            result += "<|im_start|>assistant\n\(assistant)\n<|im_end|>\n"
+        }
 
         for message in profile.messages.suffix(maxRecentMessages) {
             let role = message.role == .user ? "user" : "assistant"
