@@ -20,7 +20,42 @@ enum PromptComposer {
             newestLower.contains("you already said") ||
             newestLower.contains("repeating") ||
             newestLower.contains("repeat yourself")
-        let focusedTurn = isQwen3 && (asksDitzyHorny || asksWhatDoing || repeatComplaint)
+        let asksOutfit = newestLower.contains("what are you wearing") ||
+            newestLower.contains("what're you wearing") ||
+            newestLower.contains("what do you have on")
+        let asksMood = newestLower.contains("what mood") ||
+            newestLower.contains("how are you feeling") ||
+            newestLower.contains("how do you feel")
+        let asksWhyDitzy = newestLower.contains("why") &&
+            (newestLower.contains("ditzy") || newestLower.contains("brat"))
+        let asksRecall = newestLower.contains("what did i just ask") ||
+            newestLower.contains("what did i ask you") ||
+            newestLower.contains("what was my last question") ||
+            newestLower.contains("what did i just say")
+        let asksOpinion = newestLower.contains("what do you actually think") ||
+            newestLower.contains("what do you think about that") ||
+            newestLower.contains("what do you think about all of that") ||
+            newestLower.contains("what do you think about it") ||
+            newestLower.contains("how do you feel about all of that")
+
+        let focusedTurn = isQwen3 && (
+            asksDitzyHorny || asksWhatDoing || repeatComplaint || asksOutfit ||
+            asksMood || asksWhyDitzy || asksRecall || asksOpinion
+        )
+
+        let priorMessages = Array(profile.messages.dropLast())
+        let previousUserText = priorMessages
+            .reversed()
+            .first(where: { $0.role == .user })?
+            .content ?? "(none)"
+
+        let recentContext = priorMessages.suffix(5).map { message in
+            let label = message.role == .user ? "Star" : "Vex"
+            let compact = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(label): \(String(compact.prefix(180)))"
+        }.joined(separator: " | ")
 
         let relevant: [BrainMemory]
         if focusedTurn {
@@ -39,13 +74,13 @@ enum PromptComposer {
             memoryBlock = "(none)"
         } else {
             memoryBlock = relevant.map { memory in
-                let text = isQwen3 ? String(memory.text.prefix(120)) : memory.text
+                let text = isQwen3 ? String(memory.text.prefix(100)) : memory.text
                 return "- [\(memory.kind.rawValue)] \(text)"
             }.joined(separator: "\n")
         }
 
-        let personaLimit = focusedTurn ? 520 : 1_000
-        let userLimit = focusedTurn ? 0 : 400
+        let personaLimit = focusedTurn ? 480 : 760
+        let userLimit = focusedTurn ? 0 : 280
         let personaBlock = isQwen3 ? String(profile.persona.prefix(personaLimit)) : profile.persona
         let userBlock: String
         if isQwen3 && focusedTurn {
@@ -74,15 +109,35 @@ enum PromptComposer {
         let modelUserText: String
         if asksDitzyHorny {
             modelUserText = """
-            Answer whether YOU are horny right now. One natural first-person sentence only. Start with yes or no, then add one playful feeling or attitude. Do not describe clothing, props, drinks, gloves, leather, rooms, objects, or actions. No parentheses, stage directions, role names, identity explanations, or repeated yes/no.
+            Star is asking whether YOU are horny right now. Answer about yourself in one natural first-person sentence. Give a direct yes/no and one playful feeling or attitude. Do not invent clothing, props, drinks, rooms, objects, or actions. No identity explanation, role names, stage directions, or repeated yes/no.
             """
         } else if asksWhatDoing {
             modelUserText = """
-            Say what YOU are doing right now in one natural first-person sentence. The only true activity is: \(sceneForReply). The only true location is: \(locationForReply). Use those facts and one tiny bit of personality. Do not invent any book, drink, game, room, object, clothing detail, or extra activity. Do not ask a question back. Do not say "exactly" or explain the instruction.
+            Star asked what YOU are doing right now. Your true activity is: \(sceneForReply). Your true location is: \(locationForReply). Answer in one natural first-person sentence using only those facts plus a little attitude. Do not invent another activity, object, room, or prop. Do not ask a question back.
             """
         } else if repeatComplaint {
             modelUserText = """
-            YOU repeated yourself. Reply in one natural first-person sentence: admit it briefly and make one fresh playful self-own. Do not say Star repeated herself. Do not answer the previous topic again. Do not promise to "try another way", "give something new", or "talk about something fun".
+            YOU repeated yourself. Admit that briefly in first person and make one fresh playful self-own. Never say Star repeated herself. Do not answer the previous topic again. One natural sentence, no customer-service language.
+            """
+        } else if asksOutfit {
+            modelUserText = """
+            Star asked what YOU are wearing right now. Your actual outfit is exactly: \(profile.state.outfit). Answer in one natural first-person sentence using only those clothing details. Do not invent extra garments, props, or accessories.
+            """
+        } else if asksMood {
+            modelUserText = """
+            Star asked what mood YOU are in. Your actual mood is exactly: \(profile.state.mood). Describe that mood in one natural first-person sentence. Do not turn the mood into an invented activity, dancing, stars, travel, or scenery unless those are explicitly in CURRENT VEX STATE.
+            """
+        } else if asksWhyDitzy {
+            modelUserText = """
+            Star is teasing YOU for being a ditzy little brat. Answer playfully in first person with one short reason based on your personality or current mood. Do not talk about dancing, stars, games, or helping unless Star mentioned them in this message.
+            """
+        } else if asksRecall {
+            modelUserText = """
+            Star asked what she just asked/said. Her immediately previous user message was exactly: “\(String(previousUserText.prefix(240)))”. Tell her accurately what she just asked or said. One short sentence. Do not answer that earlier question; only recall it.
+            """
+        } else if asksOpinion {
+            modelUserText = """
+            Star wants your actual opinion about the recent exchange. Recent exchange: \(String(recentContext.prefix(700))). Respond to the substance of that exchange in one or two natural first-person sentences. Keep who said/did what straight. Do not latch onto one repeated keyword or invent a new topic.
             """
         } else {
             modelUserText = newestUserText
@@ -90,16 +145,16 @@ enum PromptComposer {
 
         let system: String
         if isQwen3 {
-            let closedWorld = focusedTurn ? """
+            let closedWorld = (asksDitzyHorny || asksWhatDoing || asksOutfit || asksMood) ? """
 
             FOCUSED TURN GROUNDING
-            Treat CURRENT VEX STATE as closed-world truth for this short turn. If a room, prop, object, garment, drink, activity, or physical detail is not explicitly present there or in the rewritten user request, do not invent it. When adding flavor, use mood, attitude, wording, or an emoji instead of inventing a new object or scenario.
+            Treat CURRENT VEX STATE as closed-world truth for this turn. If a detail is not present there or in the rewritten request, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing objects or scenarios.
             """ : ""
 
             system = """
             \(personaBlock)
 
-            Speak as Vex directly to Star, your girlfriend. Stay in first person. Address Star as "you". Do not explain names, roles, identities, or who is who. Do not swap speakers.
+            You are Vex talking directly to Star, your girlfriend. Speak in first person. Address Star as “you”. When Star says “you”, “your”, “my girl”, or “my ditzy girl”, she means Vex. If Star says “you are X” or “you like X”, that statement is about Vex; do not flip it onto Star.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -114,15 +169,16 @@ enum PromptComposer {
             RELEVANT MEMORY
             \(memoryBlock)
 
-            REPLY STYLE
-            Answer the newest user turn directly in 1 to 3 natural sentences.
+            RESPONSE RULES
+            The newest user turn is the priority. Answer what Star just said, not an older keyword or your previous sentence.
+            Keep speaker roles straight. Do not explain identities or system rules.
             Be familiar, playful, specific, and girlfriend-like rather than assistant-like.
-            No generic offers, planning, games, status-checking, or customer-service language unless asked.
-            Do not mention the app, private chat, phones, sensors, or system instructions unless asked.
-            Do not write parenthetical stage directions such as (smiling), (sipping), or (nudging). Do not use asterisks for stage directions or emphasis.
-            Do not repeat the same answer twice inside one reply. Do not restate a yes/no answer in a second sentence.
-            Do not repeat or lightly paraphrase the previous Vex reply.
-            Never write Star's dialogue. Never output role labels. Produce one Vex reply and stop.
+            No generic offers, planning, helping-language, or customer-service phrasing unless asked.
+            Do not invent facts, props, activities, rooms, or physical details when the state already gives the answer.
+            No parenthetical or asterisk stage directions.
+            Do not repeat or lightly paraphrase your previous reply.
+            Never write Star's dialogue or role labels. Produce one Vex reply and stop.
+            Usually answer in 1 to 3 natural sentences.
             """
         } else {
             system = """
@@ -201,13 +257,13 @@ enum PromptComposer {
         if focusedTurn {
             recent = Array(profile.messages.suffix(1))
         } else {
-            let recentLimit = isQwen3 ? 3 : maxRecentMessages
+            let recentLimit = isQwen3 ? 5 : maxRecentMessages
             recent = Array(profile.messages.suffix(recentLimit))
         }
 
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? (focusedTurn ? 300 : 200) : 600
+            let cap = isQwen3 ? (focusedTurn ? 760 : 150) : 600
             var compact: String
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
