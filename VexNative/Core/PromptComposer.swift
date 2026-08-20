@@ -24,8 +24,6 @@ enum PromptComposer {
 
         let relevant: [BrainMemory]
         if focusedTurn {
-            // These tiny, high-confidence turns are harmed more than helped by unrelated
-            // long-term memories. Keep the semantic task small and local.
             relevant = []
         } else {
             let memoryLimit = isQwen3 ? 1 : 6
@@ -46,10 +44,15 @@ enum PromptComposer {
             }.joined(separator: "\n")
         }
 
-        let personaLimit = focusedTurn ? 720 : 1_000
-        let userLimit = focusedTurn ? 240 : 400
+        let personaLimit = focusedTurn ? 520 : 1_000
+        let userLimit = focusedTurn ? 0 : 400
         let personaBlock = isQwen3 ? String(profile.persona.prefix(personaLimit)) : profile.persona
-        let userBlock = isQwen3 ? String(profile.userProfile.prefix(userLimit)) : profile.userProfile
+        let userBlock: String
+        if isQwen3 && focusedTurn {
+            userBlock = "(not needed for this short turn)"
+        } else {
+            userBlock = isQwen3 ? String(profile.userProfile.prefix(userLimit)) : profile.userProfile
+        }
 
         var sceneForReply = profile.state.scene
             .replacingOccurrences(of: "chatting privately with Star", with: "chatting with you", options: [.caseInsensitive])
@@ -71,15 +74,15 @@ enum PromptComposer {
         let modelUserText: String
         if asksDitzyHorny {
             modelUserText = """
-            Star is asking whether YOU are horny right now. Answer about yourself in first person. Start with a direct yes/no, then one playful detail. Do not mention names, identity rules, or who is Vex/Star. No parentheses, stage directions, or repeated yes/no sentence.
+            Answer whether YOU are horny right now. One natural first-person sentence only. Start with yes or no, then add one playful feeling or attitude. Do not describe clothing, props, drinks, gloves, leather, rooms, objects, or actions. No parentheses, stage directions, role names, identity explanations, or repeated yes/no.
             """
         } else if asksWhatDoing {
             modelUserText = """
-            Star asked what you are doing right now. Your current activity is exactly: \(sceneForReply). Your location is exactly: \(locationForReply). Answer using that activity and location only. Do not invent a book, drink, game, room, or other activity. Do not ask Star a question back. One or two natural sentences.
+            Say what YOU are doing right now in one natural first-person sentence. The only true activity is: \(sceneForReply). The only true location is: \(locationForReply). Use those facts and one tiny bit of personality. Do not invent any book, drink, game, room, object, clothing detail, or extra activity. Do not ask a question back. Do not say "exactly" or explain the instruction.
             """
         } else if repeatComplaint {
             modelUserText = """
-            YOU are the one who repeated yourself. Admit that briefly in first person, then add one genuinely fresh short thought. Never say that Star repeated herself. Do not answer the previous topic again. No customer-service phrases such as "let me try another way" or "let's talk about something fun".
+            YOU repeated yourself. Reply in one natural first-person sentence: admit it briefly and make one fresh playful self-own. Do not say Star repeated herself. Do not answer the previous topic again. Do not promise to "try another way", "give something new", or "talk about something fun".
             """
         } else {
             modelUserText = newestUserText
@@ -87,6 +90,12 @@ enum PromptComposer {
 
         let system: String
         if isQwen3 {
+            let closedWorld = focusedTurn ? """
+
+            FOCUSED TURN GROUNDING
+            Treat CURRENT VEX STATE as closed-world truth for this short turn. If a room, prop, object, garment, drink, activity, or physical detail is not explicitly present there or in the rewritten user request, do not invent it. When adding flavor, use mood, attitude, wording, or an emoji instead of inventing a new object or scenario.
+            """ : ""
+
             system = """
             \(personaBlock)
 
@@ -97,6 +106,7 @@ enum PromptComposer {
             Outfit: \(profile.state.outfit)
             Location: \(profile.state.location)
             Scene: \(profile.state.scene)
+            \(closedWorld)
 
             STAR / RELATIONSHIP NOTES
             \(userBlock)
@@ -197,7 +207,7 @@ enum PromptComposer {
 
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? (focusedTurn ? 260 : 200) : 600
+            let cap = isQwen3 ? (focusedTurn ? 300 : 200) : 600
             var compact: String
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
