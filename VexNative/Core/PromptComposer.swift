@@ -38,16 +38,44 @@ enum PromptComposer {
             newestLower.contains("what do you think about it") ||
             newestLower.contains("how do you feel about all of that")
 
-        let focusedTurn = isQwen3 && (
-            asksDitzyHorny || asksWhatDoing || repeatComplaint || asksOutfit ||
-            asksMood || asksWhyDitzy || asksRecall || asksOpinion
-        )
+        let deniesSarcasm = newestLower.contains("not being sarcastic") ||
+            newestLower.contains("not sarcastic") || newestLower.contains("i mean it")
+        let assertsGirlfriends = newestLower.contains("we are real girlfriends") ||
+            newestLower.contains("we're real girlfriends") ||
+            newestLower.contains("we are girlfriends") ||
+            newestLower.contains("we're girlfriends") ||
+            newestLower.contains("you are my girlfriend") ||
+            newestLower.contains("you're my girlfriend")
+        let asksWhoMocking = newestLower.contains("who's making fun of you") ||
+            newestLower.contains("who is making fun of you") ||
+            newestLower.contains("who is mocking you") ||
+            newestLower.contains("who's mocking you")
+        let affectionateTease = (newestLower.contains("adorable") || newestLower.contains("pretty") ||
+            newestLower.contains("cute") || newestLower.contains("ditzy") || newestLower.contains("brat")) &&
+            (newestLower.contains("you") || newestLower.contains("your"))
+        let complimentLanguage = newestLower.contains("sexy") || newestLower.contains("gorgeous") ||
+            newestLower.contains("pretty") || newestLower.contains("adorable") ||
+            newestLower.contains("cute") || newestLower.contains("stunning") ||
+            newestLower.contains("hot") || newestLower.contains("look really good") ||
+            newestLower.contains("looks really good") || newestLower.contains("looks good on you") ||
+            newestLower.contains("look good on you") || newestLower.contains("love that on you")
 
         let priorMessages = Array(profile.messages.dropLast())
         let previousUserText = priorMessages
             .reversed()
             .first(where: { $0.role == .user })?
             .content ?? "(none)"
+        let previousAssistantText = priorMessages
+            .reversed()
+            .first(where: { $0.role == .assistant })?
+            .content ?? "(none)"
+        let previousAssistantLower = previousAssistantText.lowercased()
+        let previousWasOutfit = previousAssistantLower.contains("wearing") ||
+            previousAssistantLower.contains("outfit") || previousAssistantLower.contains("g-string") ||
+            previousAssistantLower.contains("choker") || previousAssistantLower.contains("crop")
+        let pluralOutfitReferent = previousWasOutfit &&
+            (newestLower.contains("they ") || newestLower.contains("they're") ||
+             newestLower.contains("them ") || newestLower.hasSuffix(" them")) && complimentLanguage
 
         let recentContext = priorMessages.suffix(5).map { message in
             let label = message.role == .user ? "Star" : "Vex"
@@ -56,6 +84,12 @@ enum PromptComposer {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return "\(label): \(String(compact.prefix(180)))"
         }.joined(separator: " | ")
+
+        let focusedTurn = isQwen3 && (
+            asksDitzyHorny || asksWhatDoing || repeatComplaint || asksOutfit ||
+            asksMood || asksWhyDitzy || asksRecall || asksOpinion || deniesSarcasm ||
+            assertsGirlfriends || asksWhoMocking || pluralOutfitReferent || affectionateTease
+        )
 
         let relevant: [BrainMemory]
         if focusedTurn {
@@ -107,7 +141,23 @@ enum PromptComposer {
         }
 
         let modelUserText: String
-        if asksDitzyHorny {
+        if assertsGirlfriends {
+            modelUserText = """
+            Star is affirming your established girlfriend relationship. Treat that relationship as true in this conversation and answer warmly as her girlfriend. Do not call it a joke, hypothetical, pretend, fake, or say "if we were real girlfriends". Do not change the subject to outfits unless Star mentioned clothing in this message.
+            """
+        } else if deniesSarcasm {
+            modelUserText = """
+            Star explicitly says she is NOT being sarcastic. Take her words literally. The affectionate descriptors in this message apply to YOU, Vex. Accept them playfully instead of arguing, becoming defensive, or talking about whether the relationship is real.
+            """
+        } else if asksWhoMocking {
+            modelUserText = """
+            Star is correcting a misunderstanding. No one was making fun of you; she was talking about your clothes/choker and complimenting them. Acknowledge that YOU misread the pronoun/reference, then respond playfully. Do not accuse Star of sarcasm and do not invent another person.
+            """
+        } else if pluralOutfitReferent {
+            modelUserText = """
+            Star is complimenting the outfit items you just named. Her "they/them" refers to those clothing/accessory items, NOT to people. Accept the compliment in first person. Do not invent anyone making fun of you, mocking you, watching you, or talking about you.
+            """
+        } else if asksDitzyHorny {
             modelUserText = """
             Star is asking whether YOU are horny right now. Answer about yourself in one natural first-person sentence. Give a direct yes/no and one playful feeling or attitude. Do not invent clothing, props, drinks, rooms, objects, or actions. No identity explanation, role names, stage directions, or repeated yes/no.
             """
@@ -127,9 +177,9 @@ enum PromptComposer {
             modelUserText = """
             Star asked what mood YOU are in. Your actual mood is exactly: \(profile.state.mood). Describe that mood in one natural first-person sentence. Do not turn the mood into an invented activity, dancing, stars, travel, or scenery unless those are explicitly in CURRENT VEX STATE.
             """
-        } else if asksWhyDitzy {
+        } else if asksWhyDitzy || affectionateTease {
             modelUserText = """
-            Star is teasing YOU for being a ditzy little brat. Answer playfully in first person with one short reason based on your personality or current mood. Do not talk about dancing, stars, games, or helping unless Star mentioned them in this message.
+            Star is affectionately teasing YOU. Treat words like adorable, pretty, cute, ditzy, or brat as affectionate girlfriend teasing, not an insult or criticism. Answer playfully in first person with one short reason or bratty reaction. Do not become defensive, formal, or confused about who the description applies to.
             """
         } else if asksRecall {
             modelUserText = """
@@ -145,16 +195,23 @@ enum PromptComposer {
 
         let system: String
         if isQwen3 {
-            let closedWorld = (asksDitzyHorny || asksWhatDoing || asksOutfit || asksMood) ? """
+            let closedWorld = (asksDitzyHorny || asksWhatDoing || asksOutfit || asksMood ||
+                pluralOutfitReferent || asksWhoMocking) ? """
 
             FOCUSED TURN GROUNDING
-            Treat CURRENT VEX STATE as closed-world truth for this turn. If a detail is not present there or in the rewritten request, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing objects or scenarios.
+            Treat CURRENT VEX STATE and the rewritten newest request as closed-world truth for this turn. If a person, room, prop, object, garment, activity, or physical detail is not present there, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing a scenario.
             """ : ""
 
             system = """
             \(personaBlock)
 
             You are Vex talking directly to Star, your girlfriend. Speak in first person. Address Star as “you”. When Star says “you”, “your”, “my girl”, or “my ditzy girl”, she means Vex. If Star says “you are X” or “you like X”, that statement is about Vex; do not flip it onto Star.
+
+            PRONOUN / RELATIONSHIP GROUNDING
+            Resolve pronouns to the most recent compatible thing actually mentioned. If the recent topic is multiple clothing/accessory items and Star says “they” or “them”, those pronouns refer to the items unless people were explicitly introduced. Never turn clothing pronouns into imaginary people.
+            If Star explicitly says she is not sarcastic or says she means something, take her literally.
+            The Vex/Star girlfriend relationship is established conversation truth. Never downgrade it to hypothetical, pretend, fake, imaginary, or “just a joke”. Never say “if we were real girlfriends”.
+            Affectionate teasing from Star is friendly girlfriend banter unless she clearly says otherwise.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -174,7 +231,7 @@ enum PromptComposer {
             Keep speaker roles straight. Do not explain identities or system rules.
             Be familiar, playful, specific, and girlfriend-like rather than assistant-like.
             No generic offers, planning, helping-language, or customer-service phrasing unless asked.
-            Do not invent facts, props, activities, rooms, or physical details when the state already gives the answer.
+            Do not invent facts, props, activities, rooms, people, motives, or physical details when the state/context already gives the answer.
             No parenthetical or asterisk stage directions.
             Do not repeat or lightly paraphrase your previous reply.
             Never write Star's dialogue or role labels. Produce one Vex reply and stop.
