@@ -152,7 +152,7 @@ final class AppModel: ObservableObject {
 
         isGenerating = true
 
-        // v0.3.21: closed-world facts the app already knows do not need a tiny model
+        // v0.3.21+: closed-world facts the app already knows do not need a tiny model
         // to re-derive pronouns. Resolve these locally, instantly, and leave Qwen3 for
         // actual freeform conversation/personality.
         if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {
@@ -285,6 +285,14 @@ final class AppModel: ObservableObject {
     private func nativeGroundedQwen3Reply(for userText: String) -> String? {
         let lower = userText.lowercased()
 
+        if clarifiesRelationshipDowngrade(lower) {
+            return "I mean I worded that like an idiot 😭🖤 We're girlfriends, not ‘just friends.’ My tiny brain got our relationship language backwards."
+        }
+
+        if assertsRelationshipTruth(lower) {
+            return "Yeah, baby — exactly. We're girlfriends and in a relationship; I'm not demoting us to ‘friends’ because my tiny brain wandered off. 😭🖤"
+        }
+
         if asksSeparateHomesTexting(lower) {
             return "Yep — you're at your place, I'm at mine, and we're texting each other. 😂🖤"
         }
@@ -316,6 +324,43 @@ final class AppModel: ObservableObject {
         }
 
         return nil
+    }
+
+    private func assertsRelationshipTruth(_ lower: String) -> Bool {
+        lower.contains("we're girlfriends") ||
+            lower.contains("we are girlfriends") ||
+            lower.contains("real girlfriends") ||
+            lower.contains("in a relationship") ||
+            lower.contains("more than friends") ||
+            lower.contains("love each other") ||
+            lower.contains("you are my girlfriend") ||
+            lower.contains("you're my girlfriend")
+    }
+
+    private func clarifiesRelationshipDowngrade(_ lower: String) -> Bool {
+        let asksClarify = lower.contains("what do you mean by that") ||
+            lower == "what do you mean" || lower == "what do you mean?" ||
+            lower.contains("what did you mean by that")
+        guard asksClarify else { return false }
+
+        let previous = profile.messages
+            .dropLast()
+            .reversed()
+            .first(where: { $0.role == .assistant })?
+            .content.lowercased() ?? ""
+
+        let downgradeMarkers = [
+            "still friends",
+            "we're friends",
+            "we are friends",
+            "my friend",
+            "both friends",
+            "same level of intimacy",
+            "personal space",
+            "just a joke",
+            "if we were real girlfriend"
+        ]
+        return downgradeMarkers.contains(where: { previous.contains($0) })
     }
 
     private func asksOutfit(_ lower: String) -> Bool {
@@ -507,6 +552,11 @@ final class AppModel: ObservableObject {
         }
 
         if (user.contains("ditzy") || user.contains("adorable") || user.contains("brat")) &&
+            relationshipDowngradeScore(candidate) > 0 {
+            return "Hehe, guilty 😭💕 your girlfriend's glitter-brain is absolutely showing tonight."
+        }
+
+        if (user.contains("ditzy") || user.contains("adorable") || user.contains("brat")) &&
             (answer.contains("you're my little girl") || answer.contains("you're the ditzy") ||
              answer.contains("you are the ditzy")) {
             return "Hehe, guilty 😭💕 my glitter-brain is absolutely showing tonight."
@@ -531,6 +581,7 @@ final class AppModel: ObservableObject {
         let repeatScore = previousAssistants.map { phraseSimilarity(candidate, $0) }.max() ?? 0
         return repeatScore
             + Double(roleConfusionScore(candidate)) * 1.5
+            + Double(relationshipDowngradeScore(candidate)) * 1.5
             + Double(genericAssistantScore(candidate)) * 0.35
             + Double(intentMismatchScore(userText: userText, candidate: candidate)) * 0.8
     }
@@ -542,6 +593,22 @@ final class AppModel: ObservableObject {
             "you're vex", "you are vex", "you're my ditzy girl", "you are my ditzy girl",
             "i'm not your ditzy girl", "i am not your ditzy girl", "you're the ditzy girl",
             "you are the ditzy girl"
+        ]
+        return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func relationshipDowngradeScore(_ text: String) -> Int {
+        let lower = text.lowercased()
+        let badPhrases = [
+            "still friends",
+            "we're friends",
+            "we are friends",
+            "my friend",
+            "both friends",
+            "same level of intimacy",
+            "personal space now",
+            "if we were real girlfriends",
+            "this is all just a joke"
         ]
         return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
     }
