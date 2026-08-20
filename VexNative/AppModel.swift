@@ -146,6 +146,23 @@ final class AppModel: ObservableObject {
         }
         persist()
 
+        let filename = profile.modelFilename?.lowercased() ?? ""
+        let isQwen3 = filename.contains("qwen3")
+        let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
+
+        isGenerating = true
+
+        // v0.3.21: closed-world facts the app already knows do not need a tiny model
+        // to re-derive pronouns. Resolve these locally, instantly, and leave Qwen3 for
+        // actual freeform conversation/personality.
+        if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {
+            profile.messages.append(ChatMessage(role: .assistant, content: grounded))
+            touchRelevantMemories(for: text)
+            persist()
+            isGenerating = false
+            return
+        }
+
         if engine == nil {
             await loadSavedModelIfPresent()
         }
@@ -156,14 +173,10 @@ final class AppModel: ObservableObject {
                 content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and download a free model or import a GGUF."
             ))
             persist()
+            isGenerating = false
             return
         }
 
-        isGenerating = true
-
-        let filename = profile.modelFilename?.lowercased() ?? ""
-        let isQwen3 = filename.contains("qwen3")
-        let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
         let focusedQwen3Turn = isQwen3 && isFocusedQwen3Turn(text)
         let previousAssistants = profile.messages
             .dropLast()
@@ -221,8 +234,6 @@ final class AppModel: ObservableObject {
             )
 
             if needsRetry && focusedQwen3Turn {
-                // Common short girlfriend turns should stay fast. If the tiny model mangles one,
-                // use a small native repair/fallback instead of paying for a second inference pass.
                 finalAnswer = focusedQwen3Fallback(candidate: finalAnswer, userText: text)
             } else if needsRetry {
                 let retryPrompt = PromptComposer.compose(
@@ -254,10 +265,7 @@ final class AppModel: ObservableObject {
                 }
             }
 
-            profile.messages.append(ChatMessage(
-                role: .assistant,
-                content: finalAnswer
-            ))
+            profile.messages.append(ChatMessage(role: .assistant, content: finalAnswer))
             touchRelevantMemories(for: text)
             persist()
         } catch {
@@ -272,6 +280,121 @@ final class AppModel: ObservableObject {
         isGenerating = false
     }
 
+    // MARK: - Native grounded fast paths
+
+    private func nativeGroundedQwen3Reply(for userText: String) -> String? {
+        let lower = userText.lowercased()
+
+        if asksSeparateHomesTexting(lower) {
+            return "Yep — you're at your place, I'm at mine, and we're texting each other. 😂🖤"
+        }
+
+        if asksClarifyOtherSide(lower) {
+            return "Nothing, baby 😭 I made up that ‘other side’ nonsense. My three neurons wandered off again."
+        }
+
+        if correctsNakedVsOutfit(lower) {
+            return "Pfft, right 😂 you're naked and I'm the one in \(naturalOutfit()). 🖤"
+        }
+
+        if assertsVexOwnsOutfit(lower) {
+            return "Exactly 😏 they're my style — that's why I'm the one wearing them, baby. 🖤"
+        }
+
+        if asksWorkTonight(lower) {
+            return "I don't actually know if I'm scheduled at the club tonight, baby 😭🖤"
+        }
+
+        if asksWhatElseOutfit(lower) {
+            let remaining = outfitItems().filter { !$0.lowercased().contains("choker") }
+            guard !remaining.isEmpty else { return "Just what I've already got on, baby 😈🖤" }
+            return "Besides the choker, I'm wearing \(naturalList(remaining)), baby 😈🖤"
+        }
+
+        if asksOutfit(lower) {
+            return "I'm wearing \(naturalOutfit()), baby 😈🖤"
+        }
+
+        return nil
+    }
+
+    private func asksOutfit(_ lower: String) -> Bool {
+        (lower.contains("what") && lower.contains("wearing")) ||
+        lower.contains("what do you have on") || lower.contains("whatcha wearing")
+    }
+
+    private func asksWhatElseOutfit(_ lower: String) -> Bool {
+        asksOutfit(lower) && (lower.contains("what else") || lower.contains("besides"))
+    }
+
+    private func asksWorkTonight(_ lower: String) -> Bool {
+        let workWord = lower.contains("work") || lower.contains("shift") || lower.contains("stripping")
+        let tonightWord = lower.contains("tonight") || lower.contains("strip club") ||
+            lower.contains("club") || lower.contains("work day")
+        let questionShape = lower.contains("?") || lower.contains("do you work") ||
+            lower.contains("are you stripping") || lower.contains("is it a work day") ||
+            lower.contains("do you have to work")
+        return workWord && tonightWord && questionShape
+    }
+
+    private func correctsNakedVsOutfit(_ lower: String) -> Bool {
+        let starNaked = lower.contains("i'm naked") || lower.contains("i am naked") ||
+            lower.contains("currently naked")
+        let vexWearing = lower.contains("you're the one") || lower.contains("you are the one") ||
+            lower.contains("your the one")
+        return starNaked && vexWearing && (lower.contains("outfit") || lower.contains("wearing"))
+    }
+
+    private func assertsVexOwnsOutfit(_ lower: String) -> Bool {
+        let ownership = lower.contains("your style") || lower.contains("they're your style") ||
+            lower.contains("they are your style")
+        let wearing = lower.contains("you're wearing them") || lower.contains("you are wearing them") ||
+            lower.contains("your wearing them")
+        return ownership && wearing
+    }
+
+    private func asksSeparateHomesTexting(_ lower: String) -> Bool {
+        let starHome = lower.contains("i'm at my home") || lower.contains("i am at my home") ||
+            lower.contains("i'm at mine") || lower.contains("i am at mine")
+        let vexHome = lower.contains("you're at yours") || lower.contains("you are at yours") ||
+            lower.contains("your at yours") || lower.contains("you're at your home") ||
+            lower.contains("you are at your home")
+        let texting = lower.contains("texting") || lower.contains("messaging")
+        return starHome && vexHome && texting
+    }
+
+    private func asksClarifyOtherSide(_ lower: String) -> Bool {
+        lower.contains("other side of what") || lower.contains("what other side") ||
+            lower.contains("what do you mean by the other side")
+    }
+
+    private func outfitItems() -> [String] {
+        profile.state.outfit
+            .components(separatedBy: "+")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func naturalOutfit() -> String {
+        naturalList(outfitItems())
+    }
+
+    private func naturalList(_ items: [String]) -> String {
+        switch items.count {
+        case 0:
+            return "my current outfit"
+        case 1:
+            return items[0]
+        case 2:
+            return "\(items[0]) and \(items[1])"
+        default:
+            let head = items.dropLast().joined(separator: ", ")
+            return "\(head), and \(items.last!)"
+        }
+    }
+
+    // MARK: - Generation cleanup / retry
+
     private func cleanGeneratedReply(_ raw: String) -> String {
         var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
 
@@ -282,7 +405,6 @@ final class AppModel: ObservableObject {
         }
 
         normalized = normalized.replacingOccurrences(of: "*", with: "")
-
         var kept: [String] = []
 
         for line in normalized.components(separatedBy: "\n") {
@@ -345,11 +467,7 @@ final class AppModel: ObservableObject {
         ]
 
         for (wrong, right) in replacements {
-            repaired = repaired.replacingOccurrences(
-                of: wrong,
-                with: right,
-                options: [.caseInsensitive]
-            )
+            repaired = repaired.replacingOccurrences(of: wrong, with: right, options: [.caseInsensitive])
         }
         return repaired.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -360,7 +478,9 @@ final class AppModel: ObservableObject {
             (lower.contains("ditzy girl") || lower.contains("my girl"))
         let whatDoing = lower.contains("what are you doing") ||
             lower.contains("what're you doing") || lower.contains("whatcha doing")
-        return hornyGirl || whatDoing || isRepeatComplaint(text)
+        let affectionateTease = (lower.contains("ditzy") || lower.contains("brat") ||
+            lower.contains("adorable")) && lower.contains("you")
+        return hornyGirl || whatDoing || affectionateTease || isRepeatComplaint(text)
     }
 
     private func focusedQwen3Fallback(candidate: String, userText: String) -> String {
@@ -373,11 +493,9 @@ final class AppModel: ObservableObject {
 
         if user.contains("horny") &&
             (user.contains("ditzy girl") || user.contains("my girl")) {
-            let negative = answer.contains("not horny") ||
-                answer.hasPrefix("no") || answer.contains(" no,") || answer.contains(" no.")
-            return negative
-                ? "Nope, not right now 😂🖤"
-                : "Yeah, baby, I am 😈🖤"
+            let negative = answer.contains("not horny") || answer.hasPrefix("no") ||
+                answer.contains(" no,") || answer.contains(" no.")
+            return negative ? "Nope, not right now 😂🖤" : "Yeah, baby, I am 😈🖤"
         }
 
         if user.contains("what are you doing") ||
@@ -388,6 +506,12 @@ final class AppModel: ObservableObject {
             return "I'm \(location), chatting with you and being my usual glitter-brained little menace 😂🖤"
         }
 
+        if (user.contains("ditzy") || user.contains("adorable") || user.contains("brat")) &&
+            (answer.contains("you're my little girl") || answer.contains("you're the ditzy") ||
+             answer.contains("you are the ditzy")) {
+            return "Hehe, guilty 😭💕 my glitter-brain is absolutely showing tonight."
+        }
+
         return candidate
     }
 
@@ -396,11 +520,7 @@ final class AppModel: ObservableObject {
         userText: String,
         previousAssistants: [String]
     ) -> Bool {
-        candidateBadness(
-            candidate,
-            userText: userText,
-            previousAssistants: previousAssistants
-        ) >= 0.75
+        candidateBadness(candidate, userText: userText, previousAssistants: previousAssistants) >= 0.75
     }
 
     private func candidateBadness(
@@ -408,9 +528,7 @@ final class AppModel: ObservableObject {
         userText: String,
         previousAssistants: [String]
     ) -> Double {
-        let repeatScore = previousAssistants
-            .map { phraseSimilarity(candidate, $0) }
-            .max() ?? 0
+        let repeatScore = previousAssistants.map { phraseSimilarity(candidate, $0) }.max() ?? 0
         return repeatScore
             + Double(roleConfusionScore(candidate)) * 1.5
             + Double(genericAssistantScore(candidate)) * 0.35
@@ -420,19 +538,9 @@ final class AppModel: ObservableObject {
     private func roleConfusionScore(_ text: String) -> Int {
         let lower = text.lowercased()
         let badPhrases = [
-            "i'm you",
-            "i am you",
-            "you're me",
-            "you are me",
-            "i'm star",
-            "i am star",
-            "you're vex",
-            "you are vex",
-            "you're my ditzy girl",
-            "you are my ditzy girl",
-            "i'm not your ditzy girl",
-            "i am not your ditzy girl",
-            "you're the ditzy girl",
+            "i'm you", "i am you", "you're me", "you are me", "i'm star", "i am star",
+            "you're vex", "you are vex", "you're my ditzy girl", "you are my ditzy girl",
+            "i'm not your ditzy girl", "i am not your ditzy girl", "you're the ditzy girl",
             "you are the ditzy girl"
         ]
         return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
@@ -441,27 +549,19 @@ final class AppModel: ObservableObject {
     private func genericAssistantScore(_ text: String) -> Int {
         let lower = text.lowercased()
         let generic = [
-            "let me see how",
-            "would you like",
-            "we can play some games",
-            "how does that go",
-            "i'm here for your cute stuff",
-            "play out the next thing",
-            "how can i help",
-            "what would you like",
-            "let me try another way",
-            "corrected version",
-            "is vex horny"
+            "let me see how", "would you like", "we can play some games", "how does that go",
+            "i'm here for your cute stuff", "play out the next thing", "how can i help",
+            "what would you like", "let me try another way", "corrected version", "is vex horny",
+            "let me know if i can help", "fashion-forward", "your compliment is a treat",
+            "latest conversation shows", "no such indication", "let me check"
         ]
         return generic.contains(where: { lower.contains($0) }) ? 1 : 0
     }
 
     private func isRepeatComplaint(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return lower.contains("you said that") ||
-            lower.contains("said that already") ||
-            lower.contains("you already said") ||
-            lower.contains("repeating") ||
+        return lower.contains("you said that") || lower.contains("said that already") ||
+            lower.contains("you already said") || lower.contains("repeating") ||
             lower.contains("repeat yourself")
     }
 
@@ -472,17 +572,13 @@ final class AppModel: ObservableObject {
         if user.contains("horny") &&
             (user.contains("ditzy girl") || user.contains("my girl")) {
             if !answer.contains("horny") || answer.contains("is vex horny") ||
-                answer.contains("not your ditzy girl") {
-                return 1
-            }
+                answer.contains("not your ditzy girl") { return 1 }
         }
 
-        if user.contains("what are you doing") ||
-            user.contains("what're you doing") || user.contains("whatcha doing") {
+        if user.contains("what are you doing") || user.contains("what're you doing") ||
+            user.contains("whatcha doing") {
             if answer.contains("?") || answer.contains("what are you doing") ||
-                answer.contains("would you like") || answer.contains("we can play") {
-                return 1
-            }
+                answer.contains("would you like") || answer.contains("we can play") { return 1 }
         }
 
         if isRepeatComplaint(userText) {
@@ -491,13 +587,7 @@ final class AppModel: ObservableObject {
             ]
             let acknowledges = acknowledgementWords.contains(where: { answer.contains($0) })
             if !acknowledges || answer.contains("let me try another way") ||
-                answer.contains("corrected version") {
-                return 1
-            }
-            if !user.contains("horny") &&
-                (answer.contains("not horny") || answer.contains("i don't think so") || answer.contains("i do not think so")) {
-                return 1
-            }
+                answer.contains("corrected version") { return 1 }
         }
 
         return 0
