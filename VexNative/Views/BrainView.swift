@@ -42,6 +42,37 @@ struct BrainView: View {
                     .disabled(app.isLoadingModel)
                 }
 
+                Section("Vex Brain Pack") {
+                    HStack {
+                        Text("Installed teacher pack")
+                        Spacer()
+                        Text(app.profile.brainPackVersion ?? "legacy")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Semantic rules")
+                        Spacer()
+                        Text("\(app.profile.semanticRules?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Teaching examples")
+                        Spacer()
+                        Text("\(app.profile.examples?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Import Vex Brain Pack") {
+                        app.showBrainImporter = true
+                    }
+
+                    Text("Brain Packs are small private JSON teacher files. They can update personality, relationship rules, examples, and memories without replacing the GGUF model or wiping the current chat. That means future Vex education can usually be installed without rebuilding the app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Three glitter-coated neurons") {
                     TextField("Mood", text: $app.profile.state.mood)
                     TextField("Outfit", text: $app.profile.state.outfit)
@@ -98,7 +129,7 @@ struct BrainView: View {
                 }
 
                 Section("Private brain file") {
-                    Button("Import Vex / Star profile JSON") {
+                    Button("Import legacy Vex / Star profile JSON") {
                         app.showBrainImporter = true
                     }
 
