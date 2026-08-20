@@ -77,9 +77,23 @@ final class LocalStore {
             }
             if let rules = pack.semanticRules {
                 profile.semanticRules = rules
+                for rule in rules where !rule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    profile.memories = MemoryEngine.deduplicatedAppend(
+                        BrainMemory(text: "Brain Pack rule: \(rule)", kind: .rule, importance: 0.98),
+                        to: profile.memories
+                    )
+                }
             }
             if let examples = pack.examples {
                 profile.examples = examples
+                for example in examples {
+                    let teachingText = "Teaching example — Star: \(example.user) | Vex: \(example.assistant)"
+                    let importance = min(1.0, max(0.60, example.weight))
+                    profile.memories = MemoryEngine.deduplicatedAppend(
+                        BrainMemory(text: teachingText, kind: .note, importance: importance),
+                        to: profile.memories
+                    )
+                }
             }
             if let memories = pack.memories {
                 for text in memories where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -105,8 +119,25 @@ final class LocalStore {
         if let userProfile = partial.userProfile { profile.userProfile = userProfile }
         if let state = partial.state { profile.state = state }
         if let version = partial.brainPackVersion { profile.brainPackVersion = version }
-        if let rules = partial.semanticRules { profile.semanticRules = rules }
-        if let examples = partial.examples { profile.examples = examples }
+        if let rules = partial.semanticRules {
+            profile.semanticRules = rules
+            for rule in rules where !rule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                profile.memories = MemoryEngine.deduplicatedAppend(
+                    BrainMemory(text: "Brain Pack rule: \(rule)", kind: .rule, importance: 0.95),
+                    to: profile.memories
+                )
+            }
+        }
+        if let examples = partial.examples {
+            profile.examples = examples
+            for example in examples {
+                let teachingText = "Teaching example — Star: \(example.user) | Vex: \(example.assistant)"
+                profile.memories = MemoryEngine.deduplicatedAppend(
+                    BrainMemory(text: teachingText, kind: .note, importance: min(1.0, max(0.60, example.weight))),
+                    to: profile.memories
+                )
+            }
+        }
         if let memories = partial.memories {
             for text in memories {
                 profile.memories = MemoryEngine.deduplicatedAppend(
