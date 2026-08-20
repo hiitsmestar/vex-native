@@ -58,6 +58,14 @@ final class LocalStore {
 
         if let full = try? decoder.decode(BrainProfile.self, from: data) {
             profile = full
+            if profile.brainPack == nil {
+                profile.brainPack = DefaultBrain.teacherPack
+            }
+            return
+        }
+
+        if let pack = try? decodeBrainPack(data) {
+            profile.brainPack = pack
             return
         }
 
@@ -65,6 +73,7 @@ final class LocalStore {
         if let persona = partial.persona { profile.persona = persona }
         if let userProfile = partial.userProfile { profile.userProfile = userProfile }
         if let state = partial.state { profile.state = state }
+        if let pack = partial.brainPack { try validate(pack); profile.brainPack = pack }
         if let memories = partial.memories {
             for text in memories {
                 profile.memories = MemoryEngine.deduplicatedAppend(
@@ -75,10 +84,60 @@ final class LocalStore {
         }
     }
 
+    func importBrainPack(from source: URL, into profile: inout BrainProfile) throws -> VexBrainPack {
+        let accessed = source.startAccessingSecurityScopedResource()
+        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: source)
+        return try installBrainPack(data: data, into: &profile)
+    }
+
+    @discardableResult
+    func installBrainPack(data: Data, into profile: inout BrainProfile) throws -> VexBrainPack {
+        let pack = try decodeBrainPack(data)
+        profile.brainPack = pack
+        return pack
+    }
+
+    func decodeBrainPack(_ data: Data) throws -> VexBrainPack {
+        let pack = try decoder.decode(VexBrainPack.self, from: data)
+        try validate(pack)
+        return pack
+    }
+
+    private func validate(_ pack: VexBrainPack) throws {
+        guard pack.schemaVersion == 1 else {
+            throw NSError(
+                domain: "VexBrainPack",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "This teacher pack uses schema v\(pack.schemaVersion). This build supports schema v1."]
+            )
+        }
+        guard !pack.packID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !pack.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !pack.version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw NSError(
+                domain: "VexBrainPack",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Teacher pack is missing its id, name, or version."]
+            )
+        }
+    }
+
     func exportBackup(_ profile: BrainProfile) throws -> URL {
         let data = try encoder.encode(profile)
         let url = fileManager.temporaryDirectory
             .appendingPathComponent("VexNative-Backup-\(Int(Date().timeIntervalSince1970)).json")
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url
+    }
+
+    func exportBrainPack(_ pack: VexBrainPack) throws -> URL {
+        try validate(pack)
+        let data = try encoder.encode(pack)
+        let safeVersion = pack.version.replacingOccurrences(of: "/", with: "-")
+        let url = fileManager.temporaryDirectory
+            .appendingPathComponent("Vex-Teacher-Pack-\(safeVersion).json")
         try data.write(to: url, options: [.atomic, .completeFileProtection])
         return url
     }
