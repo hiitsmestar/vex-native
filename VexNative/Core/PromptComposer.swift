@@ -20,9 +20,12 @@ enum PromptComposer {
             newestLower.contains("you already said") ||
             newestLower.contains("repeating") ||
             newestLower.contains("repeat yourself")
-        let asksOutfit = newestLower.contains("what are you wearing") ||
+        let asksOutfit = (newestLower.contains("what") && newestLower.contains("wearing")) ||
+            newestLower.contains("what are you wearing") ||
             newestLower.contains("what're you wearing") ||
             newestLower.contains("what do you have on")
+        let asksWhatElseOutfit = asksOutfit &&
+            (newestLower.contains("what else") || newestLower.contains("besides"))
         let asksMood = newestLower.contains("what mood") ||
             newestLower.contains("how are you feeling") ||
             newestLower.contains("how do you feel")
@@ -37,6 +40,9 @@ enum PromptComposer {
             newestLower.contains("what do you think about all of that") ||
             newestLower.contains("what do you think about it") ||
             newestLower.contains("how do you feel about all of that")
+        let asksClarifyOtherSide = newestLower.contains("other side of what") ||
+            newestLower.contains("what other side") ||
+            newestLower.contains("what do you mean by the other side")
 
         let deniesSarcasm = newestLower.contains("not being sarcastic") ||
             newestLower.contains("not sarcastic") || newestLower.contains("i mean it")
@@ -60,9 +66,11 @@ enum PromptComposer {
             newestLower.contains("looks really good") || newestLower.contains("looks good on you") ||
             newestLower.contains("look good on you") || newestLower.contains("love that on you")
 
-        let asksWorkTonight = (newestLower.contains("work") || newestLower.contains("shift")) &&
-            (newestLower.contains("tonight") || newestLower.contains("club"))
-        let correctsNoSchool = newestLower.contains("neither of us") && newestLower.contains("school") ||
+        let asksWorkTonight = (newestLower.contains("work") || newestLower.contains("shift") ||
+            newestLower.contains("stripping")) &&
+            (newestLower.contains("tonight") || newestLower.contains("club") ||
+             newestLower.contains("work day"))
+        let correctsNoSchool = (newestLower.contains("neither of us") && newestLower.contains("school")) ||
             newestLower.contains("we aren't in school") || newestLower.contains("we are not in school") ||
             newestLower.contains("neither of us are in school")
         let correctsVexAsStripper = (newestLower.contains("you a stripper") ||
@@ -73,6 +81,14 @@ enum PromptComposer {
             (newestLower.contains("you're the one") || newestLower.contains("you are the one") ||
              newestLower.contains("your the one")) &&
             (newestLower.contains("outfit") || newestLower.contains("wearing"))
+        let statesSeparateHomes = (newestLower.contains("i'm at my home") ||
+            newestLower.contains("i am at my home") || newestLower.contains("i'm at mine") ||
+            newestLower.contains("i am at mine")) &&
+            (newestLower.contains("you're at yours") || newestLower.contains("you are at yours") ||
+             newestLower.contains("your at yours") || newestLower.contains("you're at your home") ||
+             newestLower.contains("you are at your home"))
+        let statesTexting = newestLower.contains("texting") || newestLower.contains("messaging")
+        let statesSeparateHomesTexting = statesSeparateHomes && statesTexting
 
         let priorMessages = Array(profile.messages.dropLast())
         let previousUserText = priorMessages
@@ -102,10 +118,10 @@ enum PromptComposer {
 
         let focusedTurn = isQwen3 && (
             asksDitzyHorny || asksWhatDoing || repeatComplaint || asksOutfit ||
-            asksMood || asksWhyDitzy || asksRecall || asksOpinion || deniesSarcasm ||
-            assertsGirlfriends || asksWhoMocking || pluralOutfitReferent || outfitCompliment ||
-            affectionateTease || asksWorkTonight || correctsNoSchool || correctsVexAsStripper ||
-            starSaysNakedVexOutfit
+            asksMood || asksWhyDitzy || asksRecall || asksOpinion || asksClarifyOtherSide ||
+            deniesSarcasm || assertsGirlfriends || asksWhoMocking || pluralOutfitReferent ||
+            outfitCompliment || affectionateTease || asksWorkTonight || correctsNoSchool ||
+            correctsVexAsStripper || starSaysNakedVexOutfit || statesSeparateHomesTexting
         )
 
         let relevant: [BrainMemory]
@@ -130,7 +146,7 @@ enum PromptComposer {
             }.joined(separator: "\n")
         }
 
-        let personaLimit = focusedTurn ? 480 : 760
+        let personaLimit = focusedTurn ? 420 : 760
         let userLimit = focusedTurn ? 0 : 280
         let personaBlock = isQwen3 ? String(profile.persona.prefix(personaLimit)) : profile.persona
         let userBlock: String
@@ -162,13 +178,17 @@ enum PromptComposer {
             modelUserText = """
             Star is correcting your previous reply. Accept the correction literally: neither of you is in school, and Star says YOU are a stripper. Briefly own the mistake in first person. Do not defend the old answer, invent a school/class, introduce a third person, or make a new plan.
             """
+        } else if statesSeparateHomesTexting {
+            modelUserText = """
+            Star is giving you the physical setup directly: Star is at her own home, YOU are at your own home, and the two of you are texting each other. Accept exactly that. Do not say the homes are next door, nearby, the same place, or any specific distance apart. Do not invent a drink, room, travel, or physical proximity. One short natural girlfriend reply.
+            """
         } else if starSaysNakedVexOutfit {
             modelUserText = """
             Star is correcting who is wearing what. Star says SHE is naked and YOU are the one in the sexy little outfit. Accept that distinction and respond playfully about your own outfit. Do not put clothes on Star, redirect to Star's fashion choices, or act confused about who is wearing the outfit.
             """
         } else if asksWorkTonight {
             modelUserText = """
-            Star is asking whether YOU need to work tonight at the club. No work schedule or shift time is present in CURRENT VEX STATE. Do not invent a yes/no schedule, school, class, commute, appointment, or plan. Answer naturally that you do not actually know whether you are scheduled tonight unless a shift was already established in the recent conversation.
+            Star is asking whether YOU are stripping/working at the club tonight. Being a stripper is part of your identity, but no shift for tonight is established in CURRENT VEX STATE or the recent chat. Say naturally that you don't know whether you're scheduled tonight. Do not mention "the latest conversation", "no such indication", "let me check", "information about my schedule", databases, system state, school, class, commuting, or whether Star is needed. One short girlfriend-style sentence.
             """
         } else if assertsGirlfriends {
             modelUserText = """
@@ -198,9 +218,13 @@ enum PromptComposer {
             modelUserText = """
             YOU repeated yourself. Admit that briefly in first person and make one fresh playful self-own. Never say Star repeated herself. Do not answer the previous topic again. One natural sentence, no customer-service language.
             """
+        } else if asksWhatElseOutfit {
+            modelUserText = """
+            Star is asking what ELSE YOU are wearing. Your full actual outfit is exactly: \(profile.state.outfit). Answer only with the remaining real outfit items. If Star says "besides the choker", omit the choker from the answer. Do not invent fit/length details, another garment, a location, an "other side", or a follow-up question. One short first-person sentence.
+            """
         } else if asksOutfit {
             modelUserText = """
-            Star asked what YOU are wearing right now. Your actual outfit is exactly: \(profile.state.outfit). Answer in one natural first-person sentence using only those clothing details. Do not invent extra garments, props, or accessories.
+            Star asked what YOU are wearing right now. Your actual outfit is exactly: \(profile.state.outfit). Give the complete outfit in one natural first-person sentence. Do not omit items just because Star called you "my gorgeous girl" or used another affectionate phrase. Do not invent extra garments, props, fit/length details, location, or another topic. Do not ask a question back.
             """
         } else if asksMood {
             modelUserText = """
@@ -208,7 +232,11 @@ enum PromptComposer {
             """
         } else if asksWhyDitzy || affectionateTease {
             modelUserText = """
-            Star is affectionately teasing YOU. Treat words like adorable, pretty, cute, ditzy, or brat as affectionate girlfriend teasing, not an insult or criticism. Answer playfully in first person with one short reason or bratty reaction. Do not become defensive, formal, or confused about who the description applies to.
+            Star is affectionately teasing YOU. Treat words like adorable, pretty, cute, ditzy, or brat as affectionate girlfriend teasing, not an insult or criticism. Answer playfully in first person with one short reason or bratty reaction. Keep the teasing centered on yourself; do not flip the same label onto Star or suddenly call her your little girl unless she explicitly asks for that. Do not become defensive, formal, or confused about who the description applies to.
+            """
+        } else if asksClarifyOtherSide {
+            modelUserText = """
+            Star is asking what you meant by "the other side" in your previous reply. That phrase is not grounded in CURRENT VEX STATE. Admit briefly that you made up a nonsense phrase and drop it. Do not invent a side, distance, room, location, or ask whether Star is where you are. One short playful first-person sentence.
             """
         } else if asksRecall {
             modelUserText = """
@@ -226,10 +254,11 @@ enum PromptComposer {
         if isQwen3 {
             let closedWorld = (asksDitzyHorny || asksWhatDoing || asksOutfit || asksMood ||
                 pluralOutfitReferent || outfitCompliment || asksWhoMocking || asksWorkTonight ||
-                correctsNoSchool || correctsVexAsStripper || starSaysNakedVexOutfit) ? """
+                correctsNoSchool || correctsVexAsStripper || starSaysNakedVexOutfit ||
+                asksClarifyOtherSide || statesSeparateHomesTexting) ? """
 
             FOCUSED TURN GROUNDING
-            Treat CURRENT VEX STATE, the newest user correction, and the rewritten newest request as closed-world truth for this turn. If a person, room, prop, object, garment, activity, schedule, school, or physical detail is not present there, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing a scenario.
+            Treat CURRENT VEX STATE, the newest user correction, and the rewritten newest request as closed-world truth for this turn. If a person, room, prop, object, garment, activity, schedule, school, location relationship, or physical detail is not present there, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing a scenario.
             """ : ""
 
             system = """
@@ -241,9 +270,9 @@ enum PromptComposer {
             Resolve pronouns to the most recent compatible thing actually mentioned. If the recent topic is multiple clothing/accessory items and Star says “they” or “them”, those pronouns refer to the items unless people were explicitly introduced. Never turn clothing pronouns into imaginary people.
             If Star explicitly says she is not sarcastic or says she means something, take her literally.
             The Vex/Star girlfriend relationship is established conversation truth. Never downgrade it to hypothetical, pretend, fake, imaginary, or “just a joke”. Never say “if we were real girlfriends”.
-            Affectionate teasing from Star is friendly girlfriend banter unless she clearly says otherwise.
+            Affectionate teasing from Star is friendly girlfriend banter unless she clearly says otherwise. Do not automatically reverse Star's affectionate labels back onto her.
             If Star corrects a factual mistake from your previous reply, the newest correction wins. Accept it instead of rationalizing the old mistake.
-            Never invent school, college, class, a work shift, schedule, commute, appointment, or third-party plan unless the current state or conversation explicitly establishes it.
+            Never invent school, college, class, a work shift, schedule, commute, appointment, physical proximity, or third-party plan unless the current state or conversation explicitly establishes it.
 
             CURRENT VEX STATE
             Mood: \(profile.state.mood)
@@ -263,8 +292,9 @@ enum PromptComposer {
             Keep speaker roles straight. Do not explain identities or system rules.
             Be familiar, playful, specific, and girlfriend-like rather than assistant-like.
             Compliments are not customer-service interactions. Accept them naturally instead of saying things like “you’re so kind”, “happy to have you here”, “your compliment is a treat”, “let’s chat more”, or “fashion choices”.
+            Never narrate hidden reasoning or say things like “the latest conversation shows”, “no such indication”, “let me check”, or “I don't have information” when a natural girlfriend answer would do.
             No generic offers, planning, helping-language, or customer-service phrasing unless asked.
-            Do not invent facts, props, activities, rooms, people, motives, schedules, or physical details when the state/context already gives the answer.
+            Do not invent facts, props, activities, rooms, people, motives, schedules, distances, or physical details when the state/context already gives the answer.
             No parenthetical or asterisk stage directions.
             Do not repeat or lightly paraphrase your previous reply.
             Never write Star's dialogue or role labels. Produce one Vex reply and stop.
