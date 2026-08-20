@@ -18,6 +18,7 @@ enum MemoryKind: String, Codable, Sendable {
     case fact
     case scene
     case note
+    case lesson
 }
 
 struct BrainMemory: Identifiable, Codable, Equatable, Sendable {
@@ -28,6 +29,12 @@ struct BrainMemory: Identifiable, Codable, Equatable, Sendable {
     var createdAt: Date = Date()
     var lastUsedAt: Date?
     var useCount: Int = 0
+
+    // v0.5 self-education metadata. Optional so pre-v0.5 brain files still decode.
+    var confidence: Double? = nil
+    var evidenceCount: Int? = nil
+    var lastConfirmedAt: Date? = nil
+    var source: String? = nil
 }
 
 struct SceneState: Codable, Equatable, Sendable {
@@ -49,8 +56,6 @@ struct BrainExample: Codable, Equatable, Sendable {
 
 /// Portable, versioned teaching data. Importing a Brain Pack updates Vex's
 /// personality/rules/examples while preserving the installed GGUF and live chat.
-/// This is the seam that lets a stronger external teacher keep educating the
-/// local model without requiring a new IPA for every personality correction.
 struct BrainPack: Codable, Equatable, Sendable {
     var schemaVersion: Int
     var packVersion: String
@@ -71,10 +76,14 @@ struct BrainProfile: Codable, Equatable, Sendable {
     var messages: [ChatMessage]
     var modelFilename: String?
 
-    // Optional on purpose: profiles saved by pre-Brain-Pack builds still decode.
+    // Optional on purpose: profiles saved by older builds still decode.
     var brainPackVersion: String?
     var semanticRules: [String]?
     var examples: [BrainExample]?
+
+    // v0.5 self-education bookkeeping. Optional for backward compatibility.
+    var selfEducationVersion: Int? = nil
+    var lastConsolidatedAt: Date? = nil
 
     static var fresh: BrainProfile {
         BrainProfile(
@@ -82,7 +91,15 @@ struct BrainProfile: Codable, Equatable, Sendable {
             userProfile: DefaultBrain.userProfile,
             state: SceneState(),
             memories: DefaultBrain.memories.map {
-                BrainMemory(text: $0.text, kind: $0.kind, importance: $0.importance)
+                BrainMemory(
+                    text: $0.text,
+                    kind: $0.kind,
+                    importance: $0.importance,
+                    confidence: 0.95,
+                    evidenceCount: 1,
+                    lastConfirmedAt: Date(),
+                    source: "builtin"
+                )
             },
             messages: [
                 ChatMessage(
@@ -93,7 +110,9 @@ struct BrainProfile: Codable, Equatable, Sendable {
             modelFilename: nil,
             brainPackVersion: "builtin-1",
             semanticRules: DefaultBrain.semanticRules,
-            examples: DefaultBrain.examples
+            examples: DefaultBrain.examples,
+            selfEducationVersion: 1,
+            lastConsolidatedAt: nil
         )
     }
 }
@@ -107,6 +126,18 @@ struct BrainImport: Codable, Sendable {
     var brainPackVersion: String?
     var semanticRules: [String]?
     var examples: [BrainExample]?
+}
+
+/// Private export intended for later teacher review / LoRA or fine-tune preparation.
+/// It deliberately distinguishes trusted teacher examples from raw chat history.
+struct TrainingExport: Codable, Sendable {
+    var schemaVersion: Int
+    var generatedAt: Date
+    var brainPackVersion: String?
+    var semanticRules: [String]
+    var teacherExamples: [BrainExample]
+    var learnedMemories: [BrainMemory]
+    var conversationTranscript: [ChatMessage]
 }
 
 struct MemorySeed: Sendable {
@@ -143,7 +174,9 @@ enum DefaultBrain {
         "Use known scene/state facts as closed-world truth for factual questions instead of inventing schedules, rooms, props, or activities.",
         "Answer every conversational act in a compound message, especially a compliment followed by a question.",
         "Sound like a familiar girlfriend, not customer service: no generic offers, help-language, or canned praise.",
-        "Do not output stage directions, role labels, hidden reasoning, or Star's dialogue."
+        "Do not output stage directions, role labels, hidden reasoning, or Star's dialogue.",
+        "Treat repeated direct corrections from Star as stronger evidence than Vex's own earlier generated guesses.",
+        "Self-learned memories are evidence, not permission to invent missing facts."
     ]
 
     static let examples: [BrainExample] = [
