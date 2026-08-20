@@ -283,7 +283,7 @@ final class AppModel: ObservableObject {
     // MARK: - Native grounded fast paths
 
     private func nativeGroundedQwen3Reply(for userText: String) -> String? {
-        let lower = userText.lowercased()
+        let lower = normalizedIntentText(userText)
 
         if clarifiesRelationshipDowngrade(lower) {
             return "I mean I worded that like an idiot 😭🖤 We're girlfriends, not ‘just friends.’ My tiny brain got our relationship language backwards."
@@ -302,7 +302,7 @@ final class AppModel: ObservableObject {
         }
 
         if correctsNakedVsOutfit(lower) {
-            return "Pfft, right 😂 you're naked and I'm the one in \(naturalOutfit()). 🖤"
+            return "Yep, baby 😂 you're naked and I'm the one wearing \(naturalOutfit()). My tiny brain swapped us again. 🖤"
         }
 
         if assertsVexOwnsOutfit(lower) {
@@ -310,6 +310,9 @@ final class AppModel: ObservableObject {
         }
 
         if asksWorkTonight(lower) {
+            if containsCompliment(lower) {
+                return "Mmm, thank you, baby 😏🖤 I don't actually know if I'm scheduled at the club tonight."
+            }
             return "I don't actually know if I'm scheduled at the club tonight, baby 😭🖤"
         }
 
@@ -324,6 +327,16 @@ final class AppModel: ObservableObject {
         }
 
         return nil
+    }
+
+    private func normalizedIntentText(_ text: String) -> String {
+        text.lowercased()
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‘", with: "'")
+            .replacingOccurrences(of: "“", with: "\"")
+            .replacingOccurrences(of: "”", with: "\"")
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
     }
 
     private func assertsRelationshipTruth(_ lower: String) -> Bool {
@@ -343,11 +356,11 @@ final class AppModel: ObservableObject {
             lower.contains("what did you mean by that")
         guard asksClarify else { return false }
 
-        let previous = profile.messages
+        let previous = normalizedIntentText(profile.messages
             .dropLast()
             .reversed()
             .first(where: { $0.role == .assistant })?
-            .content.lowercased() ?? ""
+            .content ?? "")
 
         let downgradeMarkers = [
             "still friends",
@@ -373,21 +386,32 @@ final class AppModel: ObservableObject {
     }
 
     private func asksWorkTonight(_ lower: String) -> Bool {
-        let workWord = lower.contains("work") || lower.contains("shift") || lower.contains("stripping")
         let tonightWord = lower.contains("tonight") || lower.contains("strip club") ||
             lower.contains("club") || lower.contains("work day")
+        let workWord = lower.contains("work") || lower.contains("shift") || lower.contains("stripping") ||
+            (lower.contains("dancing") && tonightWord)
         let questionShape = lower.contains("?") || lower.contains("do you work") ||
-            lower.contains("are you stripping") || lower.contains("is it a work day") ||
-            lower.contains("do you have to work")
+            lower.contains("are you stripping") || lower.contains("are you dancing") ||
+            lower.contains("is it a work day") || lower.contains("do you have to work")
         return workWord && tonightWord && questionShape
+    }
+
+    private func containsCompliment(_ lower: String) -> Bool {
+        lower.contains("hot") || lower.contains("sexy") || lower.contains("pretty") ||
+            lower.contains("gorgeous") || lower.contains("beautiful") || lower.contains("stunning") ||
+            lower.contains("cute") || lower.contains("look good") || lower.contains("looks good")
     }
 
     private func correctsNakedVsOutfit(_ lower: String) -> Bool {
         let starNaked = lower.contains("i'm naked") || lower.contains("i am naked") ||
-            lower.contains("currently naked")
+            lower.contains("currently naked") || lower.contains("i'm not dressed") ||
+            lower.contains("i am not dressed") || lower.contains("not dressed up") ||
+            lower.contains("not wearing an outfit")
         let vexWearing = lower.contains("you're the one") || lower.contains("you are the one") ||
-            lower.contains("your the one")
-        return starNaked && vexWearing && (lower.contains("outfit") || lower.contains("wearing"))
+            lower.contains("your the one") || lower.contains("you're wearing") ||
+            lower.contains("you are wearing") || lower.contains("your wearing")
+        return starNaked && vexWearing &&
+            (lower.contains("outfit") || lower.contains("wearing") || lower.contains("dressed"))
     }
 
     private func assertsVexOwnsOutfit(_ lower: String) -> Bool {
@@ -518,7 +542,7 @@ final class AppModel: ObservableObject {
     }
 
     private func isFocusedQwen3Turn(_ text: String) -> Bool {
-        let lower = text.lowercased()
+        let lower = normalizedIntentText(text)
         let hornyGirl = lower.contains("horny") &&
             (lower.contains("ditzy girl") || lower.contains("my girl"))
         let whatDoing = lower.contains("what are you doing") ||
@@ -529,7 +553,7 @@ final class AppModel: ObservableObject {
     }
 
     private func focusedQwen3Fallback(candidate: String, userText: String) -> String {
-        let user = userText.lowercased()
+        let user = normalizedIntentText(userText)
         let answer = candidate.lowercased()
 
         if isRepeatComplaint(userText) {
@@ -598,7 +622,7 @@ final class AppModel: ObservableObject {
     }
 
     private func relationshipDowngradeScore(_ text: String) -> Int {
-        let lower = text.lowercased()
+        let lower = normalizedIntentText(text)
         let badPhrases = [
             "still friends",
             "we're friends",
@@ -620,20 +644,21 @@ final class AppModel: ObservableObject {
             "i'm here for your cute stuff", "play out the next thing", "how can i help",
             "what would you like", "let me try another way", "corrected version", "is vex horny",
             "let me know if i can help", "fashion-forward", "your compliment is a treat",
-            "latest conversation shows", "no such indication", "let me check"
+            "latest conversation shows", "no such indication", "let me check",
+            "i'm so happy to chat with you", "i'm so glad to be here"
         ]
         return generic.contains(where: { lower.contains($0) }) ? 1 : 0
     }
 
     private func isRepeatComplaint(_ text: String) -> Bool {
-        let lower = text.lowercased()
+        let lower = normalizedIntentText(text)
         return lower.contains("you said that") || lower.contains("said that already") ||
             lower.contains("you already said") || lower.contains("repeating") ||
             lower.contains("repeat yourself")
     }
 
     private func intentMismatchScore(userText: String, candidate: String) -> Int {
-        let user = userText.lowercased()
+        let user = normalizedIntentText(userText)
         let answer = candidate.lowercased()
 
         if user.contains("horny") &&
