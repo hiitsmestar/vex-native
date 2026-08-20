@@ -17,15 +17,60 @@ struct BrainView: View {
                         }
                     }
 
-                    Button("Download tiny free Qwen model") {
+                    Button("Download smart-fast brain — Qwen3 0.6B") {
+                        Task { await app.downloadQwen3Model() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Button("Download fallback fast brain — Qwen 2.5 0.5B") {
                         Task { await app.downloadRecommendedModel() }
                     }
                     .disabled(app.isLoadingModel)
+
+                    Button("Download slow large brain — Qwen 2.5 1.5B") {
+                        Task { await app.downloadSmartModel() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Text("Qwen3 0.6B is the preferred phone brain: newer conversation/role-play training while staying close to the fast model's size. Qwen 2.5 0.5B stays as the known-good speed fallback. The 1.5B option is kept only for comparison because it is much slower on older phones.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     Button("Import a GGUF from Files") {
                         app.showModelImporter = true
                     }
                     .disabled(app.isLoadingModel)
+                }
+
+                Section("Vex Brain Pack") {
+                    HStack {
+                        Text("Installed teacher pack")
+                        Spacer()
+                        Text(app.profile.brainPackVersion ?? "legacy")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Semantic rules")
+                        Spacer()
+                        Text("\(app.profile.semanticRules?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Teaching examples")
+                        Spacer()
+                        Text("\(app.profile.examples?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Import Vex Brain Pack") {
+                        app.showBrainImporter = true
+                    }
+
+                    Text("Brain Packs are small private JSON teacher files. They can update personality, relationship rules, examples, and memories without replacing the GGUF model or wiping the current chat. That means future Vex education can usually be installed without rebuilding the app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Three glitter-coated neurons") {
@@ -84,7 +129,7 @@ struct BrainView: View {
                 }
 
                 Section("Private brain file") {
-                    Button("Import Vex / Star profile JSON") {
+                    Button("Import legacy Vex / Star profile JSON") {
                         app.showBrainImporter = true
                     }
 
@@ -104,7 +149,7 @@ struct BrainView: View {
                         app.clearChat()
                     }
                 } footer: {
-                    Text("The app stores its brain and chat locally. No API key is used. The only network download built in is the optional free model download.")
+                    Text("The app stores its brain and chat locally. No API key is used. The only network downloads built in are the optional free model downloads.")
                 }
             }
             .navigationTitle("Vex Brain")
