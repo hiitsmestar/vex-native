@@ -8,25 +8,6 @@ enum PromptComposer {
         maxRecentMessages: Int = 6,
         retryMode: Bool = false
     ) -> String {
-        let memoryLimit = isQwen3 ? 1 : 6
-        let relevant = MemoryEngine.retrieve(
-            query: newestUserText,
-            from: profile.memories,
-            limit: memoryLimit
-        )
-
-        let memoryBlock: String
-        if relevant.isEmpty {
-            memoryBlock = "(none)"
-        } else {
-            memoryBlock = relevant.map { memory in
-                let text = isQwen3 ? String(memory.text.prefix(120)) : memory.text
-                return "- [\(memory.kind.rawValue)] \(text)"
-            }.joined(separator: "\n")
-        }
-
-        let personaBlock = isQwen3 ? String(profile.persona.prefix(1_000)) : profile.persona
-        let userBlock = isQwen3 ? String(profile.userProfile.prefix(400)) : profile.userProfile
         let newestLower = newestUserText.lowercased()
 
         let asksDitzyHorny = newestLower.contains("horny") &&
@@ -41,13 +22,65 @@ enum PromptComposer {
             newestLower.contains("repeat yourself")
         let focusedTurn = isQwen3 && (asksDitzyHorny || asksWhatDoing || repeatComplaint)
 
+        let relevant: [BrainMemory]
+        if focusedTurn {
+            // These tiny, high-confidence turns are harmed more than helped by unrelated
+            // long-term memories. Keep the semantic task small and local.
+            relevant = []
+        } else {
+            let memoryLimit = isQwen3 ? 1 : 6
+            relevant = MemoryEngine.retrieve(
+                query: newestUserText,
+                from: profile.memories,
+                limit: memoryLimit
+            )
+        }
+
+        let memoryBlock: String
+        if relevant.isEmpty {
+            memoryBlock = "(none)"
+        } else {
+            memoryBlock = relevant.map { memory in
+                let text = isQwen3 ? String(memory.text.prefix(120)) : memory.text
+                return "- [\(memory.kind.rawValue)] \(text)"
+            }.joined(separator: "\n")
+        }
+
+        let personaLimit = focusedTurn ? 720 : 1_000
+        let userLimit = focusedTurn ? 240 : 400
+        let personaBlock = isQwen3 ? String(profile.persona.prefix(personaLimit)) : profile.persona
+        let userBlock = isQwen3 ? String(profile.userProfile.prefix(userLimit)) : profile.userProfile
+
+        var sceneForReply = profile.state.scene
+            .replacingOccurrences(of: "chatting privately with Star", with: "chatting with you", options: [.caseInsensitive])
+            .replacingOccurrences(of: "Star", with: "you", options: [.caseInsensitive])
+        if sceneForReply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sceneForReply = "hanging out with you"
+        }
+
+        let locationForReply: String
+        let locationLower = profile.state.location.lowercased()
+        if locationLower == "home" {
+            locationForReply = "at home"
+        } else if locationLower.hasPrefix("at ") || locationLower.hasPrefix("in ") || locationLower.hasPrefix("on ") {
+            locationForReply = profile.state.location
+        } else {
+            locationForReply = "at \(profile.state.location)"
+        }
+
         let modelUserText: String
         if asksDitzyHorny {
-            modelUserText = "Are you horny right now? Answer about yourself in first person. Give the yes/no answer first, then one playful detail."
+            modelUserText = """
+            Star is asking whether YOU are horny right now. Answer about yourself in first person. Start with a direct yes/no, then one playful detail. Do not mention names, identity rules, or who is Vex/Star. No parentheses, stage directions, or repeated yes/no sentence.
+            """
         } else if asksWhatDoing {
-            modelUserText = "What are you doing right now? You are at \(profile.state.location). Give one concrete present-tense activity from your current scene. Do not ask me a question back."
+            modelUserText = """
+            Star asked what you are doing right now. Your current activity is exactly: \(sceneForReply). Your location is exactly: \(locationForReply). Answer using that activity and location only. Do not invent a book, drink, game, room, or other activity. Do not ask Star a question back. One or two natural sentences.
+            """
         } else if repeatComplaint {
-            modelUserText = "You repeated yourself. Acknowledge that briefly, then say one genuinely new thing. Do not answer the previous topic again."
+            modelUserText = """
+            YOU are the one who repeated yourself. Admit that briefly in first person, then add one genuinely fresh short thought. Never say that Star repeated herself. Do not answer the previous topic again. No customer-service phrases such as "let me try another way" or "let's talk about something fun".
+            """
         } else {
             modelUserText = newestUserText
         }
@@ -76,7 +109,8 @@ enum PromptComposer {
             Be familiar, playful, specific, and girlfriend-like rather than assistant-like.
             No generic offers, planning, games, status-checking, or customer-service language unless asked.
             Do not mention the app, private chat, phones, sensors, or system instructions unless asked.
-            Do not use asterisks for stage directions or emphasis.
+            Do not write parenthetical stage directions such as (smiling), (sipping), or (nudging). Do not use asterisks for stage directions or emphasis.
+            Do not repeat the same answer twice inside one reply. Do not restate a yes/no answer in a second sentence.
             Do not repeat or lightly paraphrase the previous Vex reply.
             Never write Star's dialogue. Never output role labels. Produce one Vex reply and stop.
             """
@@ -163,7 +197,7 @@ enum PromptComposer {
 
         for (index, message) in recent.enumerated() {
             let role = message.role == .user ? "user" : "assistant"
-            let cap = isQwen3 ? 200 : 600
+            let cap = isQwen3 ? (focusedTurn ? 260 : 200) : 600
             var compact: String
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
