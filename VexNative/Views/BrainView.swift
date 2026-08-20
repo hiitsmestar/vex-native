@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct BrainView: View {
     @EnvironmentObject private var app: AppModel
     @Environment(\.dismiss) private var dismiss
+    @State private var trainingExportURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -17,15 +18,124 @@ struct BrainView: View {
                         }
                     }
 
-                    Button("Download tiny free Qwen model") {
+                    Button("Download smart-fast brain — Qwen3 0.6B") {
+                        Task { await app.downloadQwen3Model() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Button("Download fallback fast brain — Qwen 2.5 0.5B") {
                         Task { await app.downloadRecommendedModel() }
                     }
                     .disabled(app.isLoadingModel)
+
+                    Button("Download slow large brain — Qwen 2.5 1.5B") {
+                        Task { await app.downloadSmartModel() }
+                    }
+                    .disabled(app.isLoadingModel)
+
+                    Text("Qwen3 0.6B is the preferred phone brain: newer conversation/role-play training while staying close to the fast model's size. Qwen 2.5 0.5B stays as the known-good speed fallback. The 1.5B option is kept only for comparison because it is much slower on older phones.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     Button("Import a GGUF from Files") {
                         app.showModelImporter = true
                     }
                     .disabled(app.isLoadingModel)
+                }
+
+                Section("Vex Brain Pack") {
+                    HStack {
+                        Text("Installed teacher pack")
+                        Spacer()
+                        Text(app.profile.brainPackVersion ?? "legacy")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Semantic rules")
+                        Spacer()
+                        Text("\(app.profile.semanticRules?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Teaching examples")
+                        Spacer()
+                        Text("\(app.profile.examples?.count ?? 0)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Import Vex Brain Pack") {
+                        app.showBrainImporter = true
+                    }
+
+                    Text("Brain Packs are small private JSON teacher files. They can update personality, relationship rules, examples, and memories without replacing the GGUF model or wiping the current chat.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Self-education — v0.5") {
+                    HStack {
+                        Label("Learning", systemImage: "brain.head.profile")
+                        Spacer()
+                        Text("Active")
+                            .foregroundStyle(.green)
+                    }
+
+                    HStack {
+                        Text("Learned lessons")
+                        Spacer()
+                        Text("\(MemoryEngine.learnedLessonCount(in: app.profile.memories))")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Reinforced memories")
+                        Spacer()
+                        Text("\(MemoryEngine.reinforcedCount(in: app.profile.memories))")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Memory confidence")
+                        Spacer()
+                        Text(averageConfidenceText)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Consolidate learned memory now") {
+                        app.profile.memories = MemoryEngine.consolidate(app.profile.memories)
+                        app.profile.selfEducationVersion = 1
+                        app.profile.lastConsolidatedAt = Date()
+                        app.persist()
+                    }
+
+                    if let date = app.profile.lastConsolidatedAt {
+                        Text("Last consolidation: \(date.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Create learning / training export") {
+                        do {
+                            app.profile.memories = MemoryEngine.consolidate(app.profile.memories)
+                            app.profile.lastConsolidatedAt = Date()
+                            app.persist()
+                            trainingExportURL = try LocalStore.shared.exportTrainingData(app.profile)
+                        } catch {
+                            app.lastError = "Learning export failed: \(error.localizedDescription)"
+                        }
+                    }
+
+                    if let url = trainingExportURL {
+                        ShareLink(item: url) {
+                            Label("Share learning export", systemImage: "square.and.arrow.up")
+                        }
+                    }
+
+                    Text("Vex now treats explicit corrections and preferences as confidence-weighted lessons. Repeated evidence strengthens an existing memory instead of creating endless copies. Consolidation merges near-duplicates and drops weak stale noise. The GGUF weights themselves are not rewritten on the phone; the learning export is the bridge to a later LoRA/fine-tune.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Three glitter-coated neurons") {
@@ -59,6 +169,7 @@ struct BrainView: View {
                                 Text("Rule").tag(MemoryKind.rule)
                                 Text("Fact").tag(MemoryKind.fact)
                                 Text("Scene").tag(MemoryKind.scene)
+                                Text("Lesson").tag(MemoryKind.lesson)
                                 Text("Note").tag(MemoryKind.note)
                             }
                             .pickerStyle(.menu)
@@ -70,6 +181,19 @@ struct BrainView: View {
                             HStack {
                                 Text("Importance")
                                 Slider(value: $memory.importance, in: 0...1)
+                            }
+
+                            HStack(spacing: 16) {
+                                Text("Confidence \(Int(((memory.confidence ?? 0.65) * 100).rounded()))%")
+                                Text("Evidence \(memory.evidenceCount ?? 1)x")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                            if let source = memory.source {
+                                Text("Source: \(source)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -84,7 +208,7 @@ struct BrainView: View {
                 }
 
                 Section("Private brain file") {
-                    Button("Import Vex / Star profile JSON") {
+                    Button("Import legacy Vex / Star profile JSON") {
                         app.showBrainImporter = true
                     }
 
@@ -104,7 +228,7 @@ struct BrainView: View {
                         app.clearChat()
                     }
                 } footer: {
-                    Text("The app stores its brain and chat locally. No API key is used. The only network download built in is the optional free model download.")
+                    Text("The app stores its brain, learned lessons, and chat locally. No API key is used. The only network downloads built in are the optional free model downloads.")
                 }
             }
             .navigationTitle("Vex Brain")
@@ -135,5 +259,14 @@ struct BrainView: View {
                 app.importBrain(from: url)
             }
         }
+    }
+
+    private var averageConfidenceText: String {
+        guard !app.profile.memories.isEmpty else { return "0%" }
+        let total = app.profile.memories.reduce(0.0) { partial, memory in
+            partial + (memory.confidence ?? 0.65)
+        }
+        let average = total / Double(app.profile.memories.count)
+        return "\(Int((average * 100).rounded()))%"
     }
 }
