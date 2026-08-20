@@ -101,9 +101,10 @@ public actor LlamaSession {
 
     public func complete(
         prompt: String,
-        maxNewTokens: Int = 160,
-        temperature: Float = 0.78,
-        topP: Float = 0.90
+        maxNewTokens: Int = 220,
+        temperature: Float = 0.86,
+        topP: Float = 0.94,
+        topK: Int32 = 40
     ) throws -> String {
         llama_kv_self_clear(context)
 
@@ -145,15 +146,13 @@ public actor LlamaSession {
         }
         defer { llama_sampler_free(sampler) }
 
-        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(topK))
         llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1))
-        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(96, 1.12, 0.08, 0.04))
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(256, 1.12, 0.03, 0.02))
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature))
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(UInt32.random(in: 1...UInt32.max - 1)))
 
-        // Seed repetition history with the tail of the prompt so the tiny model is less
-        // likely to parrot the most recent user/assistant wording back in a loop.
-        for token in tokens.suffix(96) {
+        for token in tokens.suffix(256) {
             llama_sampler_accept(sampler, token)
         }
 
