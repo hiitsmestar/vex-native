@@ -3,11 +3,12 @@ name: Build Vex Bridge Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches: [ "ci/v070-vex-bridge", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing" ]
+    branches: [ "ci/v070-vex-bridge", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing", "ci/v077-grounded-research" ]
     paths:
       - "Bridge/**"
       - "Tools/apply_v074_bridge_pairing_patch.py"
       - "Tools/apply_v075_search_routing_patch.py"
+      - "Tools/apply_v077_grounded_research_patch.py"
       - ".github/workflows/build-vex-bridge-windows.yml"
   pull_request:
     branches: [ "main" ]
@@ -15,6 +16,7 @@ on:
       - "Bridge/**"
       - "Tools/apply_v074_bridge_pairing_patch.py"
       - "Tools/apply_v075_search_routing_patch.py"
+      - "Tools/apply_v077_grounded_research_patch.py"
       - ".github/workflows/build-vex-bridge-windows.yml"
 
 permissions:
@@ -47,7 +49,13 @@ jobs:
         run: |
           python Tools/apply_v075_search_routing_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'scope not in'
-          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.7.5"'
+
+      - name: Apply v0.7.7 grounded research patch
+        run: |
+          python Tools/apply_v077_grounded_research_patch.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'focused_web_excerpt'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'VexBridge/0.7.7'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.7.7"'
 
       - name: Syntax check bridge
         run: |
@@ -70,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           @"
-          Vex Bridge v0.7.5 quick start
+          Vex Bridge v0.7.7 quick start
           ==============================
 
           1. Close any older VexBridge.exe window.
@@ -80,10 +88,10 @@ jobs:
           5. The bridge comes online immediately and indexes files in the background. Progress prints in the window.
           6. Windows Firewall may ask permission; allow Private networks.
           7. The bridge prints one HTTPS pairing endpoint containing your private token plus a SHA-256 certificate pin.
-          8. On iPhone open Vex -> Brain -> Web Brain -> Vex Bridge / SearXNG endpoint and paste the ENTIRE endpoint exactly as printed.
-          9. Keep the bridge window open while Vex is using it.
+          8. On iPhone open Vex -> Brain -> Web Brain -> Vex Bridge / SearXNG endpoint and paste the ENTIRE endpoint exactly as printed only if it changed.
+          9. Keep the bridge window open while Vex is using the bridge.
 
-          v0.7.5 adds intent routing: ordinary lookups and troubleshooting use web results only; explicit PC-file requests search local files; explicit combined requests can use both.
+          v0.7.7 keeps intent routing and also enriches the top web results with focused text from the actual pages. This gives the tiny local model enough concrete evidence to answer repair/how-to questions instead of returning generic search-bar advice.
           The certificate pin trusts only this bridge certificate inside VexNative. You do not need to install or globally trust a homemade root certificate on the iPhone.
           New folders are discovered automatically on recurring background scans.
           Windows Console QuickEdit is disabled, so accidentally clicking the black window does not freeze Vex Bridge in "Select" mode.
@@ -95,12 +103,12 @@ jobs:
       - name: Package bridge zip
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.7.5-Windows.zip -Force
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.7.7-Windows.zip -Force
 
       - name: Upload Windows bridge
         uses: actions/upload-artifact@v4
         with:
-          name: VexBridge-v0.7.5-Windows
-          path: VexBridge-v0.7.5-Windows.zip
+          name: VexBridge-v0.7.7-Windows
+          path: VexBridge-v0.7.7-Windows.zip
           if-no-files-found: error
           retention-days: 7
