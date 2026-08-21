@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "ci/v0711-zoomable-chat-images" ]
+  pull_request:
+    branches: [ "ci/v0710-visual-intent-fix" ]
 
 permissions:
   contents: read
