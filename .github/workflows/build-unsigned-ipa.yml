@@ -3,7 +3,7 @@ name: Build unsigned iPhone IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning" ]
+    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing" ]
   pull_request:
     branches: [ "main" ]
 
@@ -25,6 +25,14 @@ jobs:
           grep -n "certificateMismatch" VexNative/VexNativeApp.swift
           grep -n "VexBridgeNetworking.data" VexNative/ContentView.swift
           grep -n "try the bridge" VexNative/ContentView.swift
+
+      - name: Apply v0.7.5 intent routing patch
+        run: |
+          python3 Tools/apply_v075_search_routing_patch.py
+          grep -n "BridgeSearchScope" VexNative/ContentView.swift
+          grep -n 'URLQueryItem(name: "scope"' VexNative/ContentView.swift
+          grep -n "stripConversationalSearchPrefix" VexNative/ContentView.swift
+          grep -n 'scope not in {"web", "pc", "both"}' Bridge/vex_bridge.py
 
       - name: Show Apple toolchain
         run: |
@@ -54,8 +62,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=74 \
-            MARKETING_VERSION=0.7.4 \
+            CURRENT_PROJECT_VERSION=75 \
+            MARKETING_VERSION=0.7.5 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add local-network permission to built app
@@ -87,7 +95,7 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-unsigned-IPA-v0.7.4
+          name: VexNative-unsigned-IPA-v0.7.5
           path: VexNative-unsigned.ipa
           if-no-files-found: error
           retention-days: 7
@@ -96,7 +104,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-xcodebuild-log-v0.7.4
+          name: VexNative-xcodebuild-log-v0.7.5
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
