@@ -6,8 +6,8 @@ import SwiftUI
 /// LAN hosts on the dedicated bridge port; ordinary public HTTPS keeps normal
 /// system certificate validation.
 final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
-    private var task: URLSessionDataTask?
-    private var session: URLSession?
+    private var bridgeTask: URLSessionDataTask?
+    private var bridgeSession: URLSession?
 
     override class func canInit(with request: URLRequest) -> Bool {
         guard request.value(forHTTPHeaderField: "X-Vex-Bridge-Forwarded") == nil,
@@ -54,10 +54,10 @@ final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
         configuration.timeoutIntervalForRequest = 18
         configuration.timeoutIntervalForResource = 24
         configuration.protocolClasses = []
-        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-        self.session = session
+        let bridgeSession = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        self.bridgeSession = bridgeSession
 
-        task = session.dataTask(with: forwarded) { [weak self] data, response, error in
+        bridgeTask = bridgeSession.dataTask(with: forwarded) { [weak self] data, response, error in
             guard let self else { return }
             if let error {
                 self.client?.urlProtocol(self, didFailWithError: error)
@@ -71,14 +71,14 @@ final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
             }
             self.client?.urlProtocolDidFinishLoading(self)
         }
-        task?.resume()
+        bridgeTask?.resume()
     }
 
     override func stopLoading() {
-        task?.cancel()
-        session?.invalidateAndCancel()
-        task = nil
-        session = nil
+        bridgeTask?.cancel()
+        bridgeSession?.invalidateAndCancel()
+        bridgeTask = nil
+        bridgeSession = nil
     }
 
     func urlSession(
