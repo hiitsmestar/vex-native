@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "ci/v080-hybrid-brain" ]
+  pull_request:
+    branches: [ "ci/v0711-zoomable-chat-images" ]
 
 permissions:
   contents: read
@@ -19,30 +21,22 @@ jobs:
 
       - name: Apply secure bridge pairing
         run: python3 Tools/apply_v074_bridge_pairing_patch.py
-
       - name: Apply intent routing
         run: python3 Tools/apply_v075_search_routing_patch.py
-
       - name: Apply direct researched answers
         run: python3 Tools/apply_v076_direct_research_answers_patch.py
-
       - name: Apply grounded research
         run: python3 Tools/apply_v077_grounded_research_patch.py
-
       - name: Apply photo context
         run: python3 Tools/apply_v078_photo_context_patch.py
-
       - name: Apply camera and visual replies
         run: |
           python3 Tools/apply_v079_camera_visual_replies_patch.py
           python3 Tools/apply_v079_compile_hotfix.py
-
       - name: Apply robust visual intent
         run: python3 Tools/apply_v0710_visual_intent_fix.py
-
       - name: Apply zoomable image viewer
         run: python3 Tools/apply_v0711_zoomable_chat_images.py
-
       - name: Apply hybrid PC expansion brain
         run: |
           python3 Tools/apply_v080_hybrid_brain_patch.py
@@ -53,10 +47,7 @@ jobs:
 
       - name: Resolve local Swift package
         run: |
-          xcodebuild \
-            -project VexNative.xcodeproj \
-            -scheme VexNative \
-            -resolvePackageDependencies
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
 
       - name: Build unsigned device app
         run: |
