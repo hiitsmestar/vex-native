@@ -7,6 +7,11 @@ on:
     paths:
       - "Bridge/**"
       - ".github/workflows/build-vex-bridge-windows.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "Bridge/**"
+      - ".github/workflows/build-vex-bridge-windows.yml"
 
 permissions:
   contents: read
