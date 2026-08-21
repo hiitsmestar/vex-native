@@ -51,9 +51,9 @@ jobs:
           python3 Tools/apply_v084_skill_resolution_order_hotfix.py
       - name: Apply safe workflow compiler
         run: python3 Tools/apply_v085_skill_compiler_patch.py
-      - name: Apply hands-free voice and media controls
+      - name: Apply hands-free voice and media routing
         run: |
-          python3 Tools/apply_v086_handsfree_media_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
           grep -n "VoiceConversationController" VexNative/ContentView.swift
           grep -n "media_play_pause" VexNative/ContentView.swift
           grep -n "lastTargetAtKey" VexNative/ContentView.swift
