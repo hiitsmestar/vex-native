@@ -39,6 +39,13 @@ jobs:
         run: python3 Tools/apply_v0711_zoomable_chat_images.py
       - name: Apply hybrid PC expansion brain
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Tools/apply_v080_hybrid_brain_patch.py")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace('let evidence = String(webEvidence.text.prefix(1500))', 'let evidence = String(webEvidence.text.prefix(3400))')
+          p.write_text(s, encoding="utf-8")
+          PY
           python3 Tools/apply_v080_hybrid_brain_patch.py
           grep -n "PCBrainExpansion" VexNative/AppModel.swift
           grep -n "PC EXPANSION BRAIN" VexNative/Core/PromptComposer.swift
@@ -46,8 +53,7 @@ jobs:
           grep -n "class BrainVault" Bridge/vex_bridge.py
 
       - name: Resolve local Swift package
-        run: |
-          xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
 
       - name: Build unsigned device app
         run: |
