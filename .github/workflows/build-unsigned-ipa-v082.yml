@@ -36,36 +36,14 @@ jobs:
         run: python3 Tools/apply_v0710_visual_intent_fix.py
       - name: Apply zoomable image viewer
         run: python3 Tools/apply_v0711_zoomable_chat_images.py
+      - name: Prepare v0.8.2 patch chain
+        run: python3 Tools/prepare_v082_build_chain.py
       - name: Apply hybrid PC expansion brain
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('Tools/apply_v080_hybrid_brain_patch.py')
-          s = p.read_text(encoding='utf-8').replace('prefix(1500)', 'prefix(3400)')
-          p.write_text(s, encoding='utf-8')
-          PY
-          python3 Tools/apply_v080_hybrid_brain_patch.py
+        run: python3 Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('Tools/apply_v081_dual_pc_mesh_patch.py')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace('(bridge_path, ["MUSIC_EXTENSIONS", "search_music", "node_name"])', '(bridge_path, ["MUSIC_EXTENSIONS", "search_music"])')
-          p.write_text(s, encoding='utf-8')
-          PY
-          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+        run: python3 Tools/apply_v081_dual_pc_mesh_patch.py
       - name: Apply grounded PC tools
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('Tools/apply_v082_pc_tools_capability_patch.py')
-          s = p.read_text(encoding='utf-8').replace(
-              'guard !original.isEmpty, !isGenerating else { return }',
-              'guard (!original.isEmpty || pendingPhotoData != nil), !isGenerating else { return }'
-          )
-          p.write_text(s, encoding='utf-8')
-          PY
           python3 Tools/apply_v082_pc_tools_capability_patch.py
           grep -n "PCBridgeToolRouter" VexNative/ContentView.swift
           grep -n "CONNECTED TOOL REALITY" VexNative/Core/PromptComposer.swift
