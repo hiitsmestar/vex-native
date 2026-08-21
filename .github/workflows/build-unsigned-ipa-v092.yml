@@ -67,7 +67,11 @@ jobs:
         run: python3 Tools/apply_v091_youtube_context_ios_patch.py
       - name: Apply v0.9.2 device control reliability
         run: |
-          python3 Tools/apply_v092_device_control_patch.py
+          # This combined patch writes the iOS changes first. The base iOS build chain
+          # intentionally does not apply the later Windows-only Bridge patches, so its
+          # Bridge half may have no v0.9.1 executor to extend here. Validate the iOS
+          # output explicitly; the Windows workflow uses the dedicated Bridge patch.
+          python3 Tools/apply_v092_device_control_patch.py || true
           grep -n 'PhoneToolRouter' VexNative/ContentView.swift
           grep -n 'pc in the kitchen' VexNative/ContentView.swift
           grep -n 'open_windows_settings' VexNative/ContentView.swift
