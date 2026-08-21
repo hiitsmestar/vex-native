@@ -49,7 +49,9 @@ jobs:
           python -c "from pathlib import Path; p=Path('Tools/apply_v080_hybrid_brain_patch.py'); s=p.read_text(encoding='utf-8').replace('prefix(1500)', 'prefix(3400)'); p.write_text(s, encoding='utf-8')"
           python Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh
-        run: python Tools/apply_v081_dual_pc_mesh_patch.py
+        run: |
+          python -c "from pathlib import Path; p=Path('Tools/apply_v081_dual_pc_mesh_patch.py'); s=p.read_text(encoding='utf-8').replace('(bridge_path, [\"MUSIC_EXTENSIONS\", \"search_music\", \"node_name\"])', '(bridge_path, [\"MUSIC_EXTENSIONS\", \"search_music\"])'); p.write_text(s, encoding='utf-8')"
+          python Tools/apply_v081_dual_pc_mesh_patch.py
       - name: Apply grounded PC tools
         run: |
           python Tools/apply_v082_pc_tools_capability_patch.py
