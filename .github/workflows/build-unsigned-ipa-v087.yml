@@ -3,9 +3,9 @@ name: Build unsigned iPhone IPA v0.8.7
 on:
   workflow_dispatch:
   push:
-    branches: [ "ci/v087-voice-crash-hotfix" ]
-  pull_request:
     branches: [ "ci/v086-handsfree-media" ]
+  pull_request:
+    branches: [ "ci/v085-skill-compiler" ]
 
 permissions:
   contents: read
