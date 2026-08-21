@@ -3,7 +3,7 @@ name: Build unsigned iPhone IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge" ]
   pull_request:
     branches: [ "main" ]
 

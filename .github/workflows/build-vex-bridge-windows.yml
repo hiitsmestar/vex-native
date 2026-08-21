@@ -1,0 +1,90 @@
+name: Build Vex Bridge Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v070-vex-bridge" ]
+    paths:
+      - "Bridge/**"
+      - ".github/workflows/build-vex-bridge-windows.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "Bridge/**"
+      - ".github/workflows/build-vex-bridge-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography
+
+      - name: Syntax check bridge
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py
+
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+          Get-Item dist/VexBridge.exe | Format-List Name,Length
+
+      - name: Create quick-start text
+        shell: pwsh
+        run: |
+          @"
+          Vex Bridge v0.7.1 quick start
+          ==============================
+
+          1. Close any older VexBridge.exe window.
+          2. Run this VexBridge.exe on the Windows PC.
+          3. No folder selection is required. Vex automatically gets searchable access to user-readable fixed drives.
+          4. Windows/Program Files/system caches are skipped by the content index so the PC does not spend hours indexing OS noise.
+          5. The bridge comes online immediately and indexes files in the background. Progress prints in the window.
+          6. Windows Firewall may ask permission; allow Private networks.
+          7. The bridge prints one HTTPS endpoint containing your existing/private token.
+          8. On iPhone open Vex -> Brain -> Web Brain -> SearXNG endpoint and paste the ENTIRE endpoint if it changed.
+          9. Keep the bridge window open while Vex is using it.
+
+          New folders are discovered automatically on recurring background scans.
+          This version disables Windows Console QuickEdit, so accidentally clicking the black window no longer freezes Vex Bridge in "Select" mode.
+
+          The bridge indexes useful text/code/JSON/CSV/HTML/RTF, DOCX and text-readable PDF files.
+          The endpoint token is private. Do not post or share it publicly.
+          "@ | Set-Content -Encoding UTF8 dist/README-VexBridge.txt
+
+      - name: Package bridge zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.7.1-Windows.zip -Force
+
+      - name: Upload Windows bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.7.1-Windows
+          path: VexBridge-v0.7.1-Windows.zip
+          if-no-files-found: error
+          retention-days: 7
