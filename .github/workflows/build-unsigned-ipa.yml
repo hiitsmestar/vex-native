@@ -3,7 +3,7 @@ name: Build unsigned iPhone IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing" ]
+    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing", "ci/v076-direct-research-answers" ]
   pull_request:
     branches: [ "main" ]
 
@@ -34,6 +34,14 @@ jobs:
           grep -n "stripConversationalSearchPrefix" VexNative/ContentView.swift
           grep -n 'scope not in {"web", "pc", "both"}' Bridge/vex_bridge.py
 
+      - name: Apply v0.7.6 direct researched-answer patch
+        run: |
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          grep -n "WEB RESEARCH ANSWER MODE" VexNative/Core/PromptComposer.swift
+          grep -n "webGroundedTurn ? 180" VexNative/AppModel.swift
+          grep -n "MarkdownParsingOptions" VexNative/Views/ChatBubble.swift
+          grep -n "source.url.absoluteString" VexNative/ContentView.swift
+
       - name: Show Apple toolchain
         run: |
           xcodebuild -version
@@ -62,8 +70,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=75 \
-            MARKETING_VERSION=0.7.5 \
+            CURRENT_PROJECT_VERSION=76 \
+            MARKETING_VERSION=0.7.6 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add local-network permission to built app
@@ -95,7 +103,7 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-unsigned-IPA-v0.7.5
+          name: VexNative-unsigned-IPA-v0.7.6
           path: VexNative-unsigned.ipa
           if-no-files-found: error
           retention-days: 7
@@ -104,7 +112,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-xcodebuild-log-v0.7.5
+          name: VexNative-xcodebuild-log-v0.7.6
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
