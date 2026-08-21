@@ -1,0 +1,114 @@
+name: Build unsigned iPhone IPA v0.8.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v080-hybrid-brain" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Apply secure bridge pairing
+        run: python3 Tools/apply_v074_bridge_pairing_patch.py
+
+      - name: Apply intent routing
+        run: python3 Tools/apply_v075_search_routing_patch.py
+
+      - name: Apply direct researched answers
+        run: python3 Tools/apply_v076_direct_research_answers_patch.py
+
+      - name: Apply grounded research
+        run: python3 Tools/apply_v077_grounded_research_patch.py
+
+      - name: Apply photo context
+        run: python3 Tools/apply_v078_photo_context_patch.py
+
+      - name: Apply camera and visual replies
+        run: |
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+
+      - name: Apply robust visual intent
+        run: python3 Tools/apply_v0710_visual_intent_fix.py
+
+      - name: Apply zoomable image viewer
+        run: python3 Tools/apply_v0711_zoomable_chat_images.py
+
+      - name: Apply hybrid PC expansion brain
+        run: |
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          grep -n "PCBrainExpansion" VexNative/AppModel.swift
+          grep -n "PC EXPANSION BRAIN" VexNative/Core/PromptComposer.swift
+          grep -n "🧠 PC" VexNative/ContentView.swift
+          grep -n "class BrainVault" Bridge/vex_bridge.py
+
+      - name: Resolve local Swift package
+        run: |
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -resolvePackageDependencies
+
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=82 \
+            MARKETING_VERSION=0.8.0 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add device permissions to built app
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to your paired Vex Bridge computer." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose Take Photo so you can attach a picture to your private chat." "$INFO_PLIST"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-unsigned.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-unsigned.ipa"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-unsigned-IPA-v0.8.0
+          path: VexNative-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-xcodebuild-log-v0.8.0
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
