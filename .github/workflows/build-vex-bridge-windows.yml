@@ -1,0 +1,77 @@
+name: Build Vex Bridge Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v070-vex-bridge" ]
+    paths:
+      - "Bridge/**"
+      - ".github/workflows/build-vex-bridge-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography
+
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --collect-all cryptography `
+            --hidden-import tkinter `
+            Bridge/vex_bridge.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+          Get-Item dist/VexBridge.exe | Format-List Name,Length
+
+      - name: Create quick-start text
+        shell: pwsh
+        run: |
+          @"
+          Vex Bridge v0.7 quick start
+          ============================
+
+          1. Run VexBridge.exe on the Windows PC.
+          2. On first run choose the folders Vex is allowed to search.
+          3. Keep the bridge window open. Windows Firewall may ask permission; allow Private networks.
+          4. The bridge prints one HTTPS endpoint containing a private token.
+          5. On iPhone open Vex -> Brain -> Web Brain -> SearXNG endpoint.
+          6. Paste the ENTIRE endpoint, including ?token=..., and leave Web access enabled.
+          7. Ask Vex to research something or search your PC files.
+
+          Reconfigure folders later:
+              VexBridge.exe --setup
+
+          The bridge indexes text/code/JSON/CSV/HTML/RTF, DOCX and PDF files from only the folders you select.
+          The endpoint token is private. Do not post or share it publicly.
+          "@ | Set-Content -Encoding UTF8 dist/README-VexBridge.txt
+
+      - name: Package bridge zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.7-Windows.zip -Force
+
+      - name: Upload Windows bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.7-Windows
+          path: VexBridge-v0.7-Windows.zip
+          if-no-files-found: error
+          retention-days: 7
