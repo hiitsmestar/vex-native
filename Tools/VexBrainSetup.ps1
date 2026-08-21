@@ -1,13 +1,14 @@
 param(
-    [string]$Model = "qwen3:4b"
+    [string]$Model = "qwen3:4b",
+    [int]$MaxPullAttempts = 6
 )
 
 $ErrorActionPreference = "Stop"
 Write-Host ""
 Write-Host "Vex Brain Setup v0.9.3" -ForegroundColor Magenta
 Write-Host "=======================" -ForegroundColor Magenta
-Write-Host "This adds a stronger LOCAL conversation brain for VexNative." 
-Write-Host "The model stays on this Windows PC; VexBridge remains the authenticated LAN gateway." 
+Write-Host "This adds a stronger LOCAL conversation brain for VexNative."
+Write-Host "The model stays on this Windows PC; VexBridge remains the authenticated LAN gateway."
 Write-Host ""
 
 function Get-OllamaCommand {
@@ -42,8 +43,6 @@ if (-not $ollama) {
 
 Write-Host "Ollama: $ollama" -ForegroundColor Green
 
-# Ollama's Windows app normally keeps its local service running. If it is not
-# answering yet, start a local-only serve process and wait briefly.
 $healthy = $false
 try {
     & $ollama list *> $null
@@ -67,10 +66,31 @@ if (-not $healthy) {
 }
 
 Write-Host "Pulling local model $Model ..." -ForegroundColor Cyan
-Write-Host "This is a one-time download and may take a while depending on the model." -ForegroundColor DarkGray
-& $ollama pull $Model
-if ($LASTEXITCODE -ne 0) {
-    throw "The model download failed."
+Write-Host "The model is about 2.5 GB. Interrupted pulls are resumable; this setup will retry automatically." -ForegroundColor DarkGray
+
+$pulled = $false
+for ($attempt = 1; $attempt -le $MaxPullAttempts; $attempt++) {
+    Write-Host ""
+    Write-Host "Model download attempt $attempt of $MaxPullAttempts..." -ForegroundColor Cyan
+    & $ollama pull $Model
+    if ($LASTEXITCODE -eq 0) {
+        $pulled = $true
+        break
+    }
+
+    if ($attempt -lt $MaxPullAttempts) {
+        $delay = [Math]::Min(60, 10 * $attempt)
+        Write-Host "The download connection timed out or was interrupted." -ForegroundColor Yellow
+        Write-Host "Ollama keeps the partial download. Retrying in $delay seconds..." -ForegroundColor Yellow
+        Start-Sleep -Seconds $delay
+    }
+}
+
+if (-not $pulled) {
+    Write-Host ""
+    Write-Host "Ollama itself is installed correctly, but the model host could not finish the download after $MaxPullAttempts attempts." -ForegroundColor Red
+    Write-Host "Your partial model download is preserved. Run this setup again later and it will resume rather than start over." -ForegroundColor Yellow
+    throw "The model download was repeatedly interrupted by the network."
 }
 
 Write-Host ""
