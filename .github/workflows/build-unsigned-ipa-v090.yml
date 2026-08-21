@@ -59,9 +59,10 @@ jobs:
         run: python3 Tools/apply_v088_voice_transcript_patch.py
       - name: Apply conversational voice replies
         run: python3 Tools/apply_v089_voice_conversation_patch.py
-      - name: Apply v0.9.0 neural voice and media verification
+      - name: Apply v0.9.0 neural voice and named media
         run: |
-          python3 Tools/apply_v090_neural_voice_media_ios_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
           grep -n "PC Neural (online)" VexNative/ContentView.swift
           grep -n "play_named_media" VexNative/ContentView.swift
           grep -n "playback_verified" VexNative/ContentView.swift
