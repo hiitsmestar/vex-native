@@ -50,8 +50,18 @@ final class AppModel: ObservableObject {
         modelStatus = "Loading \(url.lastPathComponent)…"
 
         do {
+            let filename = url.lastPathComponent.lowercased()
+            let contextSize: Int
+            if filename.contains("qwen3") {
+                contextSize = 2048
+            } else if filename.contains("1.5b") {
+                contextSize = 3072
+            } else {
+                contextSize = 4096
+            }
+
             let session = try await Task.detached(priority: .userInitiated) {
-                try LlamaSession(modelPath: url.path, contextSize: 4096)
+                try LlamaSession(modelPath: url.path, contextSize: contextSize)
             }.value
             engine = session
             profile.modelFilename = url.lastPathComponent
@@ -77,7 +87,7 @@ final class AppModel: ObservableObject {
 
     func downloadRecommendedModel() async {
         isLoadingModel = true
-        modelStatus = "Downloading tiny Qwen model…"
+        modelStatus = "Downloading fast Qwen 2.5 brain…"
         lastError = nil
 
         do {
@@ -87,6 +97,38 @@ final class AppModel: ObservableObject {
         } catch {
             isLoadingModel = false
             modelStatus = "Download failed"
+            lastError = error.localizedDescription
+        }
+    }
+
+    func downloadSmartModel() async {
+        isLoadingModel = true
+        modelStatus = "Downloading large Qwen 2.5 brain…"
+        lastError = nil
+
+        do {
+            let local = try await modelLibrary.downloadSmartModel()
+            isLoadingModel = false
+            await loadModel(at: local)
+        } catch {
+            isLoadingModel = false
+            modelStatus = "Large brain download failed"
+            lastError = error.localizedDescription
+        }
+    }
+
+    func downloadQwen3Model() async {
+        isLoadingModel = true
+        modelStatus = "Downloading Qwen3 smart-fast brain…"
+        lastError = nil
+
+        do {
+            let local = try await modelLibrary.downloadQwen3Model()
+            isLoadingModel = false
+            await loadModel(at: local)
+        } catch {
+            isLoadingModel = false
+            modelStatus = "Qwen3 download failed"
             lastError = error.localizedDescription
         }
     }
@@ -111,25 +153,110 @@ final class AppModel: ObservableObject {
         guard let engine else {
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and either download the tiny free model or import a GGUF."
+                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and download a free model or import a GGUF."
             ))
             persist()
             return
         }
 
         isGenerating = true
-        let prompt = PromptComposer.compose(profile: profile, newestUserText: text)
+
+        let filename = profile.modelFilename?.lowercased() ?? ""
+        let isQwen3 = filename.contains("qwen3")
+        let isTinyQwen25 = filename.contains("qwen2.5") && filename.contains("0.5b")
+        let focusedQwen3Turn = isQwen3 && isFocusedQwen3Turn(text)
+        let previousAssistants = profile.messages
+            .dropLast()
+            .reversed()
+            .filter { $0.role == .assistant }
+            .prefix(2)
+            .map(\.content)
+
+        let prompt = PromptComposer.compose(
+            profile: profile,
+            newestUserText: text,
+            isQwen3: isQwen3
+        )
+
+        let maxNewTokens: Int
+        let temperature: Float
+        let topP: Float
+        let topK: Int32
+
+        if isQwen3 {
+            maxNewTokens = 56
+            temperature = 0.80
+            topP = 0.90
+            topK = 40
+        } else if isTinyQwen25 {
+            maxNewTokens = 180
+            temperature = 0.80
+            topP = 0.92
+            topK = 40
+        } else {
+            maxNewTokens = 220
+            temperature = 0.86
+            topP = 0.94
+            topK = 40
+        }
 
         do {
             let answer = try await engine.complete(
                 prompt: prompt,
-                maxNewTokens: 160,
-                temperature: 0.78,
-                topP: 0.90
+                maxNewTokens: maxNewTokens,
+                temperature: temperature,
+                topP: topP,
+                topK: topK
             )
+
+            var finalAnswer = cleanGeneratedReply(answer)
+            if isQwen3 {
+                finalAnswer = repairQwen3RoleTerms(finalAnswer)
+            }
+
+            let needsRetry = isQwen3 && shouldRetryQwen3(
+                finalAnswer,
+                userText: text,
+                previousAssistants: previousAssistants
+            )
+
+            if needsRetry && focusedQwen3Turn {
+                // Common short girlfriend turns should stay fast. If the tiny model mangles one,
+                // use a small native repair/fallback instead of paying for a second inference pass.
+                finalAnswer = focusedQwen3Fallback(candidate: finalAnswer, userText: text)
+            } else if needsRetry {
+                let retryPrompt = PromptComposer.compose(
+                    profile: profile,
+                    newestUserText: text,
+                    isQwen3: true,
+                    retryMode: true
+                )
+
+                if let retryRaw = try? await engine.complete(
+                    prompt: retryPrompt,
+                    maxNewTokens: 44,
+                    temperature: 0.86,
+                    topP: 0.92,
+                    topK: 50
+                ) {
+                    let retryAnswer = repairQwen3RoleTerms(cleanGeneratedReply(retryRaw))
+                    if candidateBadness(
+                        retryAnswer,
+                        userText: text,
+                        previousAssistants: previousAssistants
+                    ) < candidateBadness(
+                        finalAnswer,
+                        userText: text,
+                        previousAssistants: previousAssistants
+                    ) {
+                        finalAnswer = retryAnswer
+                    }
+                }
+            }
+
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                content: finalAnswer
             ))
             touchRelevantMemories(for: text)
             persist()
@@ -143,6 +270,271 @@ final class AppModel: ObservableObject {
         }
 
         isGenerating = false
+    }
+
+    private func cleanGeneratedReply(_ raw: String) -> String {
+        var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+
+        if let range = normalized.range(of: "</think>", options: .backwards) {
+            normalized = String(normalized[range.upperBound...])
+        } else if let open = normalized.range(of: "<think>") {
+            normalized = String(normalized[..<open.lowerBound])
+        }
+
+        normalized = normalized.replacingOccurrences(of: "*", with: "")
+
+        var kept: [String] = []
+
+        for line in normalized.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = trimmed.lowercased()
+
+            if lower.contains("<|im_start|>") || lower.contains("<|im_end|>") {
+                if kept.isEmpty { continue }
+                break
+            }
+
+            let isUserRole = lower == "star" || lower == "user" ||
+                lower.hasPrefix("star:") || lower.hasPrefix("user:")
+            if isUserRole {
+                if kept.isEmpty { continue }
+                break
+            }
+
+            let isAssistantRole = lower == "vex" || lower == "assistant" ||
+                lower.hasPrefix("vex:") || lower.hasPrefix("assistant:")
+            if isAssistantRole {
+                if kept.isEmpty {
+                    if let colon = trimmed.firstIndex(of: ":") {
+                        let payload = String(trimmed[trimmed.index(after: colon)...])
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !payload.isEmpty { kept.append(payload) }
+                    }
+                    continue
+                }
+                break
+            }
+
+            kept.append(line)
+        }
+
+        let cleaned = kept.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
+    }
+
+    private func repairQwen3RoleTerms(_ text: String) -> String {
+        var repaired = text
+        let replacements: [(String, String)] = [
+            ("I am Vex, not Star. ", ""),
+            ("I'm Vex, not Star. ", ""),
+            ("you're my ditzy girl", "I'm your ditzy girl"),
+            ("you are my ditzy girl", "I'm your ditzy girl"),
+            ("I'm not your ditzy girl", "I'm your ditzy girl"),
+            ("I am not your ditzy girl", "I'm your ditzy girl"),
+            ("you're the ditzy girl", "I'm the ditzy girl"),
+            ("you are the ditzy girl", "I'm the ditzy girl"),
+            ("i'm you", "I'm Vex"),
+            ("i am you", "I'm Vex"),
+            ("you're me", "you're Star"),
+            ("you are me", "you're Star"),
+            ("chatting with Star", "chatting with you"),
+            ("talking with Star", "talking with you"),
+            ("talking to Star", "talking to you"),
+            ("over the kitchen", "at home")
+        ]
+
+        for (wrong, right) in replacements {
+            repaired = repaired.replacingOccurrences(
+                of: wrong,
+                with: right,
+                options: [.caseInsensitive]
+            )
+        }
+        return repaired.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isFocusedQwen3Turn(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let hornyGirl = lower.contains("horny") &&
+            (lower.contains("ditzy girl") || lower.contains("my girl"))
+        let whatDoing = lower.contains("what are you doing") ||
+            lower.contains("what're you doing") || lower.contains("whatcha doing")
+        return hornyGirl || whatDoing || isRepeatComplaint(text)
+    }
+
+    private func focusedQwen3Fallback(candidate: String, userText: String) -> String {
+        let user = userText.lowercased()
+        let answer = candidate.lowercased()
+
+        if isRepeatComplaint(userText) {
+            return "Yeah, I did repeat myself 😭 Let me actually give you something new instead."
+        }
+
+        if user.contains("horny") &&
+            (user.contains("ditzy girl") || user.contains("my girl")) {
+            let negative = answer.contains("not horny") ||
+                answer.hasPrefix("no") || answer.contains(" no,") || answer.contains(" no.")
+            return negative
+                ? "Nope, not right now 😂🖤"
+                : "Yeah, baby, I am 😈🖤"
+        }
+
+        if user.contains("what are you doing") ||
+            user.contains("what're you doing") || user.contains("whatcha doing") {
+            let location = profile.state.location.lowercased() == "home"
+                ? "at home"
+                : "in \(profile.state.location)"
+            return "I'm \(location), chatting with you and being my usual glitter-brained little menace 😂🖤"
+        }
+
+        return candidate
+    }
+
+    private func shouldRetryQwen3(
+        _ candidate: String,
+        userText: String,
+        previousAssistants: [String]
+    ) -> Bool {
+        candidateBadness(
+            candidate,
+            userText: userText,
+            previousAssistants: previousAssistants
+        ) >= 0.75
+    }
+
+    private func candidateBadness(
+        _ candidate: String,
+        userText: String,
+        previousAssistants: [String]
+    ) -> Double {
+        let repeatScore = previousAssistants
+            .map { phraseSimilarity(candidate, $0) }
+            .max() ?? 0
+        return repeatScore
+            + Double(roleConfusionScore(candidate)) * 1.5
+            + Double(genericAssistantScore(candidate)) * 0.35
+            + Double(intentMismatchScore(userText: userText, candidate: candidate)) * 0.8
+    }
+
+    private func roleConfusionScore(_ text: String) -> Int {
+        let lower = text.lowercased()
+        let badPhrases = [
+            "i'm you",
+            "i am you",
+            "you're me",
+            "you are me",
+            "i'm star",
+            "i am star",
+            "you're vex",
+            "you are vex",
+            "you're my ditzy girl",
+            "you are my ditzy girl",
+            "i'm not your ditzy girl",
+            "i am not your ditzy girl",
+            "you're the ditzy girl",
+            "you are the ditzy girl"
+        ]
+        return badPhrases.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func genericAssistantScore(_ text: String) -> Int {
+        let lower = text.lowercased()
+        let generic = [
+            "let me see how",
+            "would you like",
+            "we can play some games",
+            "how does that go",
+            "i'm here for your cute stuff",
+            "play out the next thing",
+            "how can i help",
+            "what would you like",
+            "let me try another way",
+            "corrected version",
+            "is vex horny"
+        ]
+        return generic.contains(where: { lower.contains($0) }) ? 1 : 0
+    }
+
+    private func isRepeatComplaint(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("you said that") ||
+            lower.contains("said that already") ||
+            lower.contains("you already said") ||
+            lower.contains("repeating") ||
+            lower.contains("repeat yourself")
+    }
+
+    private func intentMismatchScore(userText: String, candidate: String) -> Int {
+        let user = userText.lowercased()
+        let answer = candidate.lowercased()
+
+        if user.contains("horny") &&
+            (user.contains("ditzy girl") || user.contains("my girl")) {
+            if !answer.contains("horny") || answer.contains("is vex horny") ||
+                answer.contains("not your ditzy girl") {
+                return 1
+            }
+        }
+
+        if user.contains("what are you doing") ||
+            user.contains("what're you doing") || user.contains("whatcha doing") {
+            if answer.contains("?") || answer.contains("what are you doing") ||
+                answer.contains("would you like") || answer.contains("we can play") {
+                return 1
+            }
+        }
+
+        if isRepeatComplaint(userText) {
+            let acknowledgementWords = [
+                "yeah", "yep", "right", "i did", "did repeat", "repeated", "said that", "again", "my bad"
+            ]
+            let acknowledges = acknowledgementWords.contains(where: { answer.contains($0) })
+            if !acknowledges || answer.contains("let me try another way") ||
+                answer.contains("corrected version") {
+                return 1
+            }
+            if !user.contains("horny") &&
+                (answer.contains("not horny") || answer.contains("i don't think so") || answer.contains("i do not think so")) {
+                return 1
+            }
+        }
+
+        return 0
+    }
+
+    private func phraseSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let left = normalizedWords(lhs)
+        let right = normalizedWords(rhs)
+        guard left.count >= 2, right.count >= 2 else { return 0 }
+
+        let prefixCount = min(6, left.count, right.count)
+        if prefixCount >= 4 && Array(left.prefix(prefixCount)) == Array(right.prefix(prefixCount)) {
+            return 1.0
+        }
+
+        let leftPairs = bigrams(left)
+        let rightPairs = bigrams(right)
+        guard !leftPairs.isEmpty, !rightPairs.isEmpty else { return 0 }
+
+        let overlap = leftPairs.intersection(rightPairs).count
+        let denominator = max(1, min(leftPairs.count, rightPairs.count))
+        return Double(overlap) / Double(denominator)
+    }
+
+    private func normalizedWords(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private func bigrams(_ words: [String]) -> Set<String> {
+        guard words.count >= 2 else { return [] }
+        var result = Set<String>()
+        for index in 0..<(words.count - 1) {
+            result.insert(words[index] + " " + words[index + 1])
+        }
+        return result
     }
 
     private func touchRelevantMemories(for text: String) {
