@@ -3,7 +3,7 @@ name: Build unsigned iPhone IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session" ]
+    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning" ]
   pull_request:
     branches: [ "main" ]
 
@@ -19,11 +19,12 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Apply v0.7.3 bridge transport patch
+      - name: Apply v0.7.4 secure bridge pairing patch
         run: |
-          python3 Tools/apply_v073_bridge_patch.py
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          grep -n "certificateMismatch" VexNative/VexNativeApp.swift
           grep -n "VexBridgeNetworking.data" VexNative/ContentView.swift
-          grep -n "through my computer" VexNative/ContentView.swift
+          grep -n "try the bridge" VexNative/ContentView.swift
 
       - name: Show Apple toolchain
         run: |
@@ -53,8 +54,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=73 \
-            MARKETING_VERSION=0.7.3 \
+            CURRENT_PROJECT_VERSION=74 \
+            MARKETING_VERSION=0.7.4 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add local-network permission to built app
@@ -86,7 +87,7 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-unsigned-IPA-v0.7.3
+          name: VexNative-unsigned-IPA-v0.7.4
           path: VexNative-unsigned.ipa
           if-no-files-found: error
           retention-days: 7
@@ -95,7 +96,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-xcodebuild-log-v0.7.3
+          name: VexNative-xcodebuild-log-v0.7.4
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
