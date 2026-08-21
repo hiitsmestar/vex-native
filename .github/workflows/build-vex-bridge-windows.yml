@@ -8,6 +8,7 @@ on:
       - "Bridge/**"
       - "Tools/apply_v074_bridge_pairing_patch.py"
       - "Tools/apply_v075_search_routing_patch.py"
+      - "Tools/apply_v076_direct_research_answers_patch.py"
       - "Tools/apply_v077_grounded_research_patch.py"
       - ".github/workflows/build-vex-bridge-windows.yml"
   pull_request:
@@ -16,6 +17,7 @@ on:
       - "Bridge/**"
       - "Tools/apply_v074_bridge_pairing_patch.py"
       - "Tools/apply_v075_search_routing_patch.py"
+      - "Tools/apply_v076_direct_research_answers_patch.py"
       - "Tools/apply_v077_grounded_research_patch.py"
       - ".github/workflows/build-vex-bridge-windows.yml"
 
@@ -49,6 +51,10 @@ jobs:
         run: |
           python Tools/apply_v075_search_routing_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'scope not in'
+
+      - name: Apply v0.7.6 direct researched-answer prerequisites
+        run: |
+          python Tools/apply_v076_direct_research_answers_patch.py
 
       - name: Apply v0.7.7 grounded research patch
         run: |
