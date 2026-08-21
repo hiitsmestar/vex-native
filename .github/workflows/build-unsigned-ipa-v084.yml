@@ -48,6 +48,7 @@ jobs:
       - name: Apply self-learning safe skills
         run: |
           python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
           grep -n "tryLearnedSkill" VexNative/ContentView.swift
           grep -n "SAFE SKILLS" VexNative/Core/PromptComposer.swift
       - name: Resolve local Swift package
