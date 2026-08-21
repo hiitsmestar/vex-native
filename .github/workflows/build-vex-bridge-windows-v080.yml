@@ -45,7 +45,15 @@ jobs:
           python Tools/apply_v0710_visual_intent_fix.py
           python Tools/apply_v0711_zoomable_chat_images.py
       - name: Apply hybrid PC expansion brain
+        shell: pwsh
         run: |
+          @'
+          from pathlib import Path
+          p = Path("Tools/apply_v080_hybrid_brain_patch.py")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace('let evidence = String(webEvidence.text.prefix(1500))', 'let evidence = String(webEvidence.text.prefix(3400))')
+          p.write_text(s, encoding="utf-8")
+          '@ | python
           python Tools/apply_v080_hybrid_brain_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'class BrainVault'
           Select-String -Path Bridge/vex_bridge.py -Pattern '/brain/context'
