@@ -1,0 +1,102 @@
+name: Build Vex Bridge v0.8.0 Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v080-hybrid-brain" ]
+  pull_request:
+    branches: [ "ci/v0711-zoomable-chat-images" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography
+      - name: Apply secure pairing
+        run: python Tools/apply_v074_bridge_pairing_patch.py
+      - name: Apply search routing
+        run: python Tools/apply_v075_search_routing_patch.py
+      - name: Apply direct-answer prerequisites
+        run: python Tools/apply_v076_direct_research_answers_patch.py
+      - name: Apply grounded web research
+        run: python Tools/apply_v077_grounded_research_patch.py
+      - name: Apply photo prerequisites
+        run: python Tools/apply_v078_photo_context_patch.py
+      - name: Apply visual replies
+        run: |
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+      - name: Apply visual routing and viewer prerequisites
+        run: |
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+      - name: Apply hybrid PC expansion brain
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          p = Path("Tools/apply_v080_hybrid_brain_patch.py")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace('let evidence = String(webEvidence.text.prefix(1500))', 'let evidence = String(webEvidence.text.prefix(3400))')
+          p.write_text(s, encoding="utf-8")
+          '@ | python
+          python Tools/apply_v080_hybrid_brain_patch.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'class BrainVault'
+          Select-String -Path Bridge/vex_bridge.py -Pattern '/brain/context'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'brain_vault.sqlite3'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.8.0"'
+      - name: Syntax check bridge
+        run: python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+      - name: Create quick-start text
+        shell: pwsh
+        run: |
+          @"
+          Vex Bridge v0.8.0 quick start
+          ==============================
+
+          1. Close any older VexBridge.exe window.
+          2. Run this VexBridge.exe on the Windows PC.
+          3. Keep the bridge window open while Vex is using it.
+          4. Existing private token and certificate pairing are reused, so the iPhone endpoint normally does not change.
+          5. Vex now uses the PC as an expansion brain: trusted phone memories and conversation turns are mirrored into a private SQLite vault under the existing VexBridge app-data folder.
+          6. The PC ranks long-term memories and relevant older conversation, then returns only a compact context block to the tiny phone model.
+          7. If the PC is offline, Vex automatically falls back to the phone brain; normal local chat still works.
+          8. Web image selection is stricter in v0.8.0. Irrelevant image candidates are rejected instead of blindly returning the first image result.
+
+          The brain vault and bridge stay on your PC. The pairing token remains private; do not post or share it publicly.
+          "@ | Set-Content -Encoding UTF8 dist/README-VexBridge.txt
+      - name: Package bridge zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.8.0-Windows.zip -Force
+      - name: Upload Windows bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.8.0-Windows
+          path: VexBridge-v0.8.0-Windows.zip
+          if-no-files-found: error
+          retention-days: 7
