@@ -56,6 +56,7 @@ jobs:
       - name: Apply self-learning safe skills
         run: |
           python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'learn_and_execute_skill'
           Select-String -Path Bridge/vex_bridge.py -Pattern '/skills/execute'
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.8.4"'
