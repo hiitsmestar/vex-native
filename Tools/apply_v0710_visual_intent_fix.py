@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+# v0.7.10 device-test patch: robust visual intent and contextual picture follow-ups.
 path = Path("VexNative/ContentView.swift")
 text = path.read_text(encoding="utf-8")
 
