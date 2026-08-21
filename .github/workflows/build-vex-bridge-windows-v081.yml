@@ -45,7 +45,9 @@ jobs:
           python Tools/apply_v0710_visual_intent_fix.py
           python Tools/apply_v0711_zoomable_chat_images.py
       - name: Apply hybrid PC expansion brain
-        run: python Tools/apply_v080_hybrid_brain_patch.py
+        run: |
+          python -c "from pathlib import Path; p=Path('Tools/apply_v080_hybrid_brain_patch.py'); s=p.read_text(encoding='utf-8').replace('prefix(1500)', 'prefix(3400)'); p.write_text(s, encoding='utf-8')"
+          python Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh and music metadata
         run: |
           python Tools/apply_v081_dual_pc_mesh_patch.py
