@@ -1,0 +1,104 @@
+name: Build Vex Bridge v0.8.4 Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v084-self-learning-skills" ]
+  pull_request:
+    branches: [ "ci/v083-browser-url-tools" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography
+      - name: Apply secure pairing
+        run: python Tools/apply_v074_bridge_pairing_patch.py
+      - name: Apply search routing
+        run: python Tools/apply_v075_search_routing_patch.py
+      - name: Apply direct-answer prerequisites
+        run: python Tools/apply_v076_direct_research_answers_patch.py
+      - name: Apply grounded web research
+        run: python Tools/apply_v077_grounded_research_patch.py
+      - name: Apply photo prerequisites
+        run: python Tools/apply_v078_photo_context_patch.py
+      - name: Apply visual replies
+        run: |
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+      - name: Apply visual routing and viewer prerequisites
+        run: |
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+      - name: Prepare v0.8.2 patch chain
+        run: python Tools/prepare_v082_build_chain.py
+      - name: Apply hybrid PC expansion brain
+        run: python Tools/apply_v080_hybrid_brain_patch.py
+      - name: Apply dual-PC mesh
+        run: python Tools/apply_v081_dual_pc_mesh_patch.py
+      - name: Apply grounded PC tools
+        run: python Tools/apply_v082_pc_tools_capability_patch.py
+      - name: Apply browser and URL tools
+        run: python Tools/apply_v083_browser_url_tools_patch.py
+      - name: Apply self-learning safe skills
+        run: |
+          python Tools/apply_v084_self_learning_skills_patch.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'learn_and_execute_skill'
+          Select-String -Path Bridge/vex_bridge.py -Pattern '/skills/execute'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.8.4"'
+      - name: Syntax check bridge
+        run: python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+      - name: Create quick-start text
+        shell: pwsh
+        run: |
+          @"
+          Vex Bridge v0.8.4 self-learning skills
+          =====================================
+
+          Run the same VexBridge.exe on both Windows PCs.
+          Existing per-PC pairing tokens and certificate pins are reused.
+
+          v0.8.4 keeps the dual-PC brain mesh and adds a persistent safe skill library.
+          When a named-PC command is not hard-coded, Vex can try to resolve it using:
+          - verified http/https site discovery
+          - installed Start Menu/Desktop application shortcuts
+          - existing user folders
+
+          Successful skills are saved privately in the Bridge config and reused later.
+
+          The skill engine does NOT download or execute code from web pages and does NOT expose arbitrary shell/PowerShell execution.
+          "@ | Set-Content -Encoding UTF8 dist/README-VexBridge.txt
+      - name: Package bridge zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.8.4-Windows.zip -Force
+      - name: Upload Windows bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.8.4-Windows
+          path: VexBridge-v0.8.4-Windows.zip
+          if-no-files-found: error
+          retention-days: 7
