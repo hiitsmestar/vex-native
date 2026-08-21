@@ -47,6 +47,12 @@ jobs:
           python3 Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Tools/apply_v081_dual_pc_mesh_patch.py')
+          s = p.read_text(encoding='utf-8').replace('"context": context', '"context": STATE.brain.context(query)')
+          p.write_text(s, encoding='utf-8')
+          PY
           python3 Tools/apply_v081_dual_pc_mesh_patch.py
           grep -n "secondaryBridgeEndpointKey" VexNative/ContentView.swift
           grep -n "PC mesh" VexNative/AppModel.swift
