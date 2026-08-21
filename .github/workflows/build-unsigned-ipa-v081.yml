@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "ci/v081-dual-pc-mesh" ]
+  pull_request:
+    branches: [ "ci/v080-hybrid-brain" ]
 
 permissions:
   contents: read
