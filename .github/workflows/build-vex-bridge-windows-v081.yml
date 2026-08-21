@@ -50,6 +50,7 @@ jobs:
           python Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh and music metadata
         run: |
+          python -c "from pathlib import Path; p=Path('Tools/apply_v081_dual_pc_mesh_patch.py'); s=p.read_text(encoding='utf-8').replace(chr(34)+'context'+chr(34)+': context', chr(34)+'context'+chr(34)+': STATE.brain.context(query)'); p.write_text(s, encoding='utf-8')"
           python Tools/apply_v081_dual_pc_mesh_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'MUSIC_EXTENSIONS'
           Select-String -Path Bridge/vex_bridge.py -Pattern 'search_music'
