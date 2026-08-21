@@ -1,0 +1,129 @@
+name: Build Vex Bridge v0.9.2 Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v092-device-control-reliability" ]
+  pull_request:
+    branches: [ "ci/v091-youtube-context-control" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+          python -c "import edge_tts, yt_dlp; from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager; print('neural TTS + Windows media control + yt-dlp imports OK')"
+      - name: Apply secure pairing
+        run: python Tools/apply_v074_bridge_pairing_patch.py
+      - name: Apply search routing
+        run: python Tools/apply_v075_search_routing_patch.py
+      - name: Apply direct-answer prerequisites
+        run: python Tools/apply_v076_direct_research_answers_patch.py
+      - name: Apply grounded web research
+        run: python Tools/apply_v077_grounded_research_patch.py
+      - name: Apply photo prerequisites
+        run: python Tools/apply_v078_photo_context_patch.py
+      - name: Apply visual replies
+        run: |
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+      - name: Apply visual routing and viewer prerequisites
+        run: |
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+      - name: Prepare v0.8.2 patch chain
+        run: python Tools/prepare_v082_build_chain.py
+      - name: Apply hybrid PC expansion brain
+        run: python Tools/apply_v080_hybrid_brain_patch.py
+      - name: Apply dual-PC mesh
+        run: python Tools/apply_v081_dual_pc_mesh_patch.py
+      - name: Apply grounded PC tools
+        run: python Tools/apply_v082_pc_tools_capability_patch.py
+      - name: Apply browser and URL tools
+        run: python Tools/apply_v083_browser_url_tools_patch.py
+      - name: Apply self-learning safe skills
+        run: |
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+      - name: Apply safe workflow compiler
+        run: python Tools/apply_v085_skill_compiler_patch.py
+      - name: Apply media Bridge controls
+        run: python Tools/apply_v086_bridge_media_patch.py
+      - name: Apply v0.9.0 neural TTS and verified named media
+        run: python Tools/apply_v090_bridge_neural_media_patch.py
+      - name: Apply v0.9.1 YouTube context control
+        run: python Tools/apply_v091_youtube_context_bridge_patch.py
+      - name: Apply v0.9.2 expanded authenticated PC controls
+        run: |
+          python Tools/apply_v092_bridge_control_patch.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'lock_screen'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'open_windows_settings'
+          Select-String -Path Bridge/vex_bridge.py -Pattern '_press_windows_combo'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.9.2"'
+      - name: Parser regression checks
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert v._clean_named_media_query('Can you open the playlist on YouTube called star vibes on the kitchen PC') == 'star vibes'; assert v._clean_named_media_query('Play a playlist off of there') == ''; assert v._is_contextual_media_request('Play the first playlist on that channel'); assert 'lock_screen' in v.PC_TOOL_ACTIONS; assert 'open_windows_settings' in v.PC_TOOL_ACTIONS; print('v0.9.2 Bridge parser/control regressions OK')"
+      - name: Syntax check bridge
+        run: python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+          Get-Item dist/VexBridge.exe | Format-List Name,Length,LastWriteTime
+      - name: Create quick-start text
+        shell: pwsh
+        run: |
+          @"
+          Vex Bridge v0.9.2 device-control quick start
+          =============================================
+
+          Replace the existing VexBridge.exe on BOTH Windows PCs with this one.
+          Existing pairing tokens, certificate pins, brain vaults, indexed state, learned skills and voice choices remain in AppData and are reused.
+
+          v0.9.2 keeps all v0.9.1 YouTube/media behavior and expands authenticated PC control:
+          - browser/URL, file/folder, media and volume actions
+          - open Windows Settings and Task Manager
+          - Start, Search, Run and Task View
+          - minimize/restore windows and close the active window
+          - lock the workstation
+          - natural PC targeting is handled by the matching v0.9.2 iPhone app
+
+          The Bridge still has no arbitrary remote shell/PowerShell endpoint and does not download or execute code sent by the phone.
+          "@ | Set-Content -Encoding UTF8 dist/README-VexBridge.txt
+      - name: Package bridge zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-VexBridge.txt -DestinationPath VexBridge-v0.9.2-Windows.zip -Force
+          Expand-Archive -Path VexBridge-v0.9.2-Windows.zip -DestinationPath "$env:RUNNER_TEMP\bridge-check" -Force
+          if (!(Test-Path "$env:RUNNER_TEMP\bridge-check\VexBridge.exe")) { throw "Bridge ZIP integrity check failed" }
+      - name: Upload Windows bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.2-Windows
+          path: VexBridge-v0.9.2-Windows.zip
+          if-no-files-found: error
+          retention-days: 7
