@@ -1,86 +1,14 @@
 import Foundation
 import SwiftUI
 
-/// v0.7: allow the paired desktop Vex Bridge to expose a local HTTPS endpoint
-/// with a per-install self-signed certificate. Trust is relaxed only for private
-/// LAN hosts on the dedicated bridge port; ordinary public HTTPS keeps normal
-/// system certificate validation.
-final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
-    private var bridgeTask: URLSessionDataTask?
-    private var bridgeSession: URLSession?
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        guard request.value(forHTTPHeaderField: "X-Vex-Bridge-Forwarded") == nil,
-              let url = request.url,
-              url.scheme?.lowercased() == "https",
-              url.port == 8765,
-              let host = url.host?.lowercased(),
-              isPrivateLANHost(host)
-        else { return false }
-        return true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        var forwarded = request
-        forwarded.setValue("1", forHTTPHeaderField: "X-Vex-Bridge-Forwarded")
-
-        // The Web Brain normally sends only the newest sentence as the search query.
-        // For bridge requests, add the immediately preceding Star turn as context so
-        // follow-ups such as "look up why this is happening" retain the dryer/error/
-        // device details that were just described instead of becoming a vague search.
-        if let url = forwarded.url,
-           var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-           var items = components.queryItems,
-           let qIndex = items.firstIndex(where: { $0.name == "q" }),
-           let current = items[qIndex].value,
-           !current.isEmpty {
-            let profile = LocalStore.shared.load()
-            let previousUser = profile.messages
-                .reversed()
-                .first(where: { $0.role == .user })?
-                .content
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !previousUser.isEmpty && !current.localizedCaseInsensitiveContains(previousUser) {
-                let context = String(previousUser.prefix(700))
-                items[qIndex] = URLQueryItem(name: "q", value: "\(current) | previous context: \(context)")
-                components.queryItems = items
-                forwarded.url = components.url
-            }
-        }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 18
-        configuration.timeoutIntervalForResource = 24
-        configuration.protocolClasses = []
-        let bridgeSession = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-        self.bridgeSession = bridgeSession
-
-        bridgeTask = bridgeSession.dataTask(with: forwarded) { [weak self] data, response, error in
-            guard let self else { return }
-            if let error {
-                self.client?.urlProtocol(self, didFailWithError: error)
-                return
-            }
-            if let response {
-                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            }
-            if let data, !data.isEmpty {
-                self.client?.urlProtocol(self, didLoad: data)
-            }
-            self.client?.urlProtocolDidFinishLoading(self)
-        }
-        bridgeTask?.resume()
-    }
-
-    override func stopLoading() {
-        bridgeTask?.cancel()
-        bridgeSession?.invalidateAndCancel()
-        bridgeTask = nil
-        bridgeSession = nil
-    }
-
+/// Dedicated LAN transport for Vex Bridge.
+///
+/// URLSession.shared follows normal iOS trust rules and correctly rejects the
+/// bridge's per-install self-signed certificate. For the paired bridge only,
+/// create an ephemeral session whose delegate accepts server trust exclusively
+/// for private-LAN hosts on the dedicated Vex Bridge port. Public HTTPS never
+/// uses this relaxed path.
+final class VexBridgeTrustDelegate: NSObject, URLSessionDelegate {
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,
@@ -89,15 +17,45 @@ final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
         guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               challenge.protectionSpace.port == 8765,
               let trust = challenge.protectionSpace.serverTrust,
-              Self.isPrivateLANHost(challenge.protectionSpace.host.lowercased())
+              VexBridgeNetworking.isPrivateLANHost(challenge.protectionSpace.host.lowercased())
         else {
             completionHandler(.performDefaultHandling, nil)
             return
         }
+
         completionHandler(.useCredential, URLCredential(trust: trust))
     }
+}
 
-    private static func isPrivateLANHost(_ host: String) -> Bool {
+enum VexBridgeNetworking {
+    static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url, isBridgeURL(url) else {
+            return try await URLSession.shared.data(for: request)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 18
+        configuration.timeoutIntervalForResource = 24
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // Avoid custom/global URLProtocol recursion. This session speaks directly
+        // to the paired bridge and handles its TLS challenge with the delegate.
+        configuration.protocolClasses = []
+
+        let delegate = VexBridgeTrustDelegate()
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        return try await session.data(for: request)
+    }
+
+    static func isBridgeURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              url.port == 8765,
+              let host = url.host?.lowercased()
+        else { return false }
+        return isPrivateLANHost(host)
+    }
+
+    static func isPrivateLANHost(_ host: String) -> Bool {
         if host == "localhost" || host.hasSuffix(".local") { return true }
         if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") || host.hasPrefix("169.254.") {
             return true
@@ -110,10 +68,6 @@ final class VexBridgeURLProtocol: URLProtocol, URLSessionDataDelegate {
 @main
 struct VexNativeApp: App {
     @StateObject private var appModel = AppModel()
-
-    init() {
-        URLProtocol.registerClass(VexBridgeURLProtocol.self)
-    }
 
     var body: some Scene {
         WindowGroup {
