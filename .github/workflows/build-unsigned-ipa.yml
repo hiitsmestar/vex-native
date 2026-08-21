@@ -3,7 +3,7 @@ name: Build unsigned iPhone IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing", "ci/v076-direct-research-answers", "ci/v077-grounded-research" ]
+    branches: [ "main", "ci/v060-web-brain", "ci/v070-vex-bridge", "ci/v072-bridge-pinned-tls", "ci/v073-bridge-direct-tls-session", "ci/v074-bridge-cert-pinning", "ci/v075-bridge-search-routing", "ci/v076-direct-research-answers", "ci/v077-grounded-research", "ci/v078-photo-context-grounded-procedures" ]
   pull_request:
     branches: [ "main" ]
 
@@ -50,6 +50,15 @@ jobs:
           grep -n "webGroundedTurn ? 240" VexNative/AppModel.swift
           grep -n "focused_web_excerpt" Bridge/vex_bridge.py
 
+      - name: Apply v0.7.8 photo context and grounded procedure patch
+        run: |
+          python3 Tools/apply_v078_photo_context_patch.py
+          grep -n "PhotosPicker" VexNative/ContentView.swift
+          grep -n "PhotoContextAnalyzer" VexNative/ContentView.swift
+          grep -n "groundedProceduralAnswer" VexNative/ContentView.swift
+          grep -n "pendingPhotoData" VexNative/AppModel.swift
+          grep -n "imageFilename" VexNative/Core/BrainModels.swift
+
       - name: Show Apple toolchain
         run: |
           xcodebuild -version
@@ -78,8 +87,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=77 \
-            MARKETING_VERSION=0.7.7 \
+            CURRENT_PROJECT_VERSION=78 \
+            MARKETING_VERSION=0.7.8 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add local-network permission to built app
@@ -111,7 +120,7 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-unsigned-IPA-v0.7.7
+          name: VexNative-unsigned-IPA-v0.7.8
           path: VexNative-unsigned.ipa
           if-no-files-found: error
           retention-days: 7
@@ -120,7 +129,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-xcodebuild-log-v0.7.7
+          name: VexNative-xcodebuild-log-v0.7.8
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
