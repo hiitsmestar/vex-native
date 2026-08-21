@@ -1,0 +1,153 @@
+name: Build Vex Bridge v0.9.4 Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v094-local-art-engine" ]
+  pull_request:
+    branches: [ "ci/v093-cognition-overlay" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bridge dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+          python -c "import requests, edge_tts, yt_dlp; from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager; print('Bridge dependencies OK')"
+      - name: Apply secure pairing
+        run: python Tools/apply_v074_bridge_pairing_patch.py
+      - name: Apply search routing
+        run: python Tools/apply_v075_search_routing_patch.py
+      - name: Apply direct-answer prerequisites
+        run: python Tools/apply_v076_direct_research_answers_patch.py
+      - name: Apply grounded web research
+        run: python Tools/apply_v077_grounded_research_patch.py
+      - name: Apply photo prerequisites
+        run: python Tools/apply_v078_photo_context_patch.py
+      - name: Apply visual replies
+        run: |
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+      - name: Apply visual routing/viewer prerequisites
+        run: |
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+      - name: Prepare v0.8.2 patch chain
+        run: python Tools/prepare_v082_build_chain.py
+      - name: Apply hybrid PC expansion brain
+        run: python Tools/apply_v080_hybrid_brain_patch.py
+      - name: Apply dual-PC mesh
+        run: python Tools/apply_v081_dual_pc_mesh_patch.py
+      - name: Apply grounded PC tools
+        run: python Tools/apply_v082_pc_tools_capability_patch.py
+      - name: Apply browser and URL tools
+        run: python Tools/apply_v083_browser_url_tools_patch.py
+      - name: Apply self-learning safe skills
+        run: |
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+      - name: Apply safe workflow compiler
+        run: python Tools/apply_v085_skill_compiler_patch.py
+      - name: Apply media controls
+        run: python Tools/apply_v086_bridge_media_patch.py
+      - name: Apply neural TTS and verified named media
+        run: python Tools/apply_v090_bridge_neural_media_patch.py
+      - name: Apply v0.9.1 YouTube context control
+        run: python Tools/apply_v091_youtube_context_bridge_patch.py
+      - name: Apply v0.9.2 Windows controls
+        run: python Tools/apply_v092_bridge_control_patch.py
+      - name: Apply v0.9.3 cognition overlay
+        run: python Tools/apply_v093_cognition_bridge_patch.py
+      - name: Apply v0.9.4 local art engine
+        run: |
+          python Tools/apply_v094_art_bridge_patch.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'Vex Art Engine v0.9.4'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'parsed.path == "/art/generate"'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'RealVisXL_V5.0_Lightning_fp16.safetensors'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.9.4"'
+      - name: Parser and syntax checks
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert hasattr(v, '_art_start_job'); assert hasattr(v, '_art_workflow'); assert hasattr(v, '_art_result'); w=v._art_workflow('test portrait','portrait',123); assert w['5']['inputs']['steps']==6; print('v0.9.4 art imports/workflow OK')"
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v094_art_bridge_patch.py
+      - name: Build standalone VexBridge.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe was not created" }
+      - name: Create one-click launchers and guide
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          Copy-Item Tools/VexArtSetup.ps1 dist/VexArtSetup.ps1
+          @'
+          @echo off
+          title Vex Brain Setup v0.9.4
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0VexBrainSetup.ps1"
+          echo.
+          pause
+          '@ | Set-Content -Encoding ASCII dist/RUN-VEX-BRAIN-SETUP.cmd
+          @'
+          @echo off
+          title Vex Art Engine Setup v0.9.4
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0VexArtSetup.ps1"
+          echo.
+          pause
+          '@ | Set-Content -Encoding ASCII dist/RUN-VEX-ART-SETUP.cmd
+          @"
+          Vex v0.9.4 - local cognition + photoreal art
+          =============================================
+
+          1. Replace the old VexBridge.exe on each paired PC with this VexBridge.exe.
+          2. For the stronger conversation brain, run RUN-VEX-BRAIN-SETUP.cmd.
+          3. For local image generation, run RUN-VEX-ART-SETUP.cmd on at least one PC.
+
+          Vex Art Engine is free/local. The setup installs open-source ComfyUI and the
+          RealVisXL V5 Lightning SDXL checkpoint, aimed at photorealism. No paid API or
+          cloud rendering account is required. The checkpoint download is about 7 GB
+          and uses resumable curl retries for unstable connections.
+
+          VexBridge starts the local ComfyUI process automatically on first render,
+          keeps it bound to 127.0.0.1:8188, submits structured workflows, stores finished
+          renders in Pictures\VexRenders, and sends the finished image back to VexNative
+          through the authenticated/certificate-pinned Bridge connection.
+
+          The stronger local conversation model, when available, rewrites raw natural
+          language into a cleaner image prompt before rendering. If it is unavailable,
+          the art engine still works with deterministic prompt cleanup and realism cues.
+          "@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.9.4.txt
+      - name: Package Windows bundle
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/RUN-VEX-BRAIN-SETUP.cmd,dist/RUN-VEX-ART-SETUP.cmd,dist/README-Vex-v0.9.4.txt -DestinationPath VexBridge-v0.9.4-Windows-Art.zip -Force
+          Expand-Archive -Path VexBridge-v0.9.4-Windows-Art.zip -DestinationPath "$env:RUNNER_TEMP\bridge-check" -Force
+          if (!(Test-Path "$env:RUNNER_TEMP\bridge-check\VexBridge.exe")) { throw "Bridge ZIP integrity check failed" }
+          if (!(Test-Path "$env:RUNNER_TEMP\bridge-check\RUN-VEX-ART-SETUP.cmd")) { throw "Art setup launcher missing" }
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.4-Windows-Art
+          path: VexBridge-v0.9.4-Windows-Art.zip
+          if-no-files-found: error
+          retention-days: 7
