@@ -59,11 +59,11 @@ jobs:
           python Tools/apply_v084_skill_resolution_order_hotfix.py
       - name: Apply safe workflow compiler
         run: python Tools/apply_v085_skill_compiler_patch.py
-      - name: Apply hands-free media Bridge controls
+      - name: Apply media Bridge controls
         run: |
-          python Tools/apply_v086_handsfree_media_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'media_play_pause'
-          Select-String -Path Bridge/vex_bridge.py -Pattern '_discover_media_url'
+          Select-String -Path Bridge/vex_bridge.py -Pattern '_resolve_named_media'
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.8.6"'
       - name: Syntax check bridge
         run: python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py
