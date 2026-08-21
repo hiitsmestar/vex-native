@@ -30,8 +30,8 @@ once(
 )
 
 # Prefer a recognizable feminine system voice when installed, then fall back to
-# the best normal en-US voice available on that iPhone.
-old_voice = '''        let utterance = AVSpeechUtterance(string: text)\n        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")\n        utterance.rate = 0.49\n        utterance.pitchMultiplier = 1.06\n        utterance.volume = 1.0\n        synthesizer.speak(utterance)\n'''
+# the normal en-US system voice on that iPhone.
+old_voice = '''        let utterance = AVSpeechUtterance(string: text)\n        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")\n        utterance.rate = 0.49\n        utterance.pitchMultiplier = 1.06\n        synthesizer.speak(utterance)\n'''
 new_voice = '''        let utterance = AVSpeechUtterance(string: text)\n        utterance.voice = Self.preferredVexVoice()\n        utterance.rate = 0.49\n        utterance.pitchMultiplier = 1.08\n        utterance.volume = 1.0\n        synthesizer.speak(utterance)\n'''
 once(old_voice, new_voice, "preferred Vex voice")
 
@@ -113,9 +113,6 @@ text = text.replace(textfield_marker, mode_menu + textfield_marker, 1)
 old_loop = '''                            ForEach(app.messages) { message in\n                                ChatBubble(message: message)\n                                    .id(message.id)\n                            }\n'''
 new_loop = '''                            ForEach(app.messages) { message in\n                                if voice.replyMode != .voiceOnly || message.role != .assistant {\n                                    ChatBubble(message: message)\n                                        .id(message.id)\n                                }\n                            }\n'''
 once(old_loop, new_loop, "voice-only chat visibility")
-
-# Make the visible status explain what the microphone now does.
-text = text.replace('Text(voice.voiceHint)', 'Text(voice.voiceHint)')
 
 path.write_text(text, encoding="utf-8")
 for marker in [
