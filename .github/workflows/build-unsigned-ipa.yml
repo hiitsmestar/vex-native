@@ -62,11 +62,13 @@ jobs:
       - name: Apply v0.7.9 camera and visual reply patch
         run: |
           python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
           grep -n "CameraCaptureView" VexNative/ContentView.swift
           grep -n "Take Photo" VexNative/ContentView.swift
           grep -n "fetchVisualImage" VexNative/ContentView.swift
           grep -n "VisualReplyRenderer" VexNative/ContentView.swift
           grep -n "web_image_search" Bridge/vex_bridge.py
+          grep -n "cgContext.fill" VexNative/ContentView.swift
 
       - name: Show Apple toolchain
         run: |
