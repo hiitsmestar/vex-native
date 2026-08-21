@@ -46,7 +46,15 @@ jobs:
           PY
           python3 Tools/apply_v080_hybrid_brain_patch.py
       - name: Apply dual-PC mesh
-        run: python3 Tools/apply_v081_dual_pc_mesh_patch.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Tools/apply_v081_dual_pc_mesh_patch.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('(bridge_path, ["MUSIC_EXTENSIONS", "search_music", "node_name"])', '(bridge_path, ["MUSIC_EXTENSIONS", "search_music"])')
+          p.write_text(s, encoding='utf-8')
+          PY
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
       - name: Apply grounded PC tools
         run: |
           python3 Tools/apply_v082_pc_tools_capability_patch.py
