@@ -46,8 +46,8 @@ jobs:
       - name: Apply v0.7.5 intent routing patch
         run: |
           python Tools/apply_v075_search_routing_patch.py
-          findstr /C:"scope not in" Bridge\vex_bridge.py
-          findstr /C:"VERSION = \"0.7.5\"" Bridge\vex_bridge_full.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'scope not in'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.7.5"'
 
       - name: Syntax check bridge
         run: |
