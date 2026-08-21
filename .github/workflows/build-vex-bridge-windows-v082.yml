@@ -54,6 +54,7 @@ jobs:
           python Tools/apply_v081_dual_pc_mesh_patch.py
       - name: Apply grounded PC tools
         run: |
+          python -c "from pathlib import Path; p=Path('Tools/apply_v082_pc_tools_capability_patch.py'); s=p.read_text(encoding='utf-8').replace('guard !original.isEmpty, !isGenerating else { return }', 'guard (!original.isEmpty || pendingPhotoData != nil), !isGenerating else { return }'); p.write_text(s, encoding='utf-8')"
           python Tools/apply_v082_pc_tools_capability_patch.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'PC_TOOL_ACTIONS'
           Select-String -Path Bridge/vex_bridge.py -Pattern '/tools/action'
