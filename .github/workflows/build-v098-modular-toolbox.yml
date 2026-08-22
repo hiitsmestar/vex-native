@@ -3,6 +3,8 @@ name: Build VexBridge v0.9.8 Modular Toolbox
 on:
   push:
     branches: [ "ci/v098-modular-toolbox" ]
+  pull_request:
+    branches: [ "ci/v097-learning-engine" ]
   workflow_dispatch:
 
 permissions:
