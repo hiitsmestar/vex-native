@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "tools": [
+    {
+      "id": "vex.doctor",
+      "displayName": "Vex Doctor",
+      "kind": "diagnostic",
+      "role": "on-demand-tool",
+      "entrypoint": "RUN-VEX-DOCTOR.cmd",
+      "safeRepairEntrypoint": "RUN-VEX-DOCTOR-SAFE-REPAIR.cmd",
+      "resourceClass": "light",
+      "preferredNode": "any",
+      "idleStopSeconds": 0,
+      "implemented": true
+    },
+    {
+      "id": "vex.art",
+      "displayName": "Vex Art Studio",
+      "kind": "renderer",
+      "role": "on-demand-tool",
+      "installRoot": "%LOCALAPPDATA%\\VexArt",
+      "entrypoint": "%LOCALAPPDATA%\\VexArt\\RUN-VEX-ART.cmd",
+      "health": {
+        "type": "http",
+        "url": "http://127.0.0.1:8188/system_stats"
+      },
+      "resourceClass": "heavy",
+      "preferredNode": "upstairs",
+      "idleStopSeconds": 900,
+      "implemented": true
+    },
+    {
+      "id": "vex.cognition.ollama",
+      "displayName": "Vex PC Cognition",
+      "kind": "cognition",
+      "role": "persistent-core",
+      "health": {
+        "type": "http",
+        "url": "http://127.0.0.1:11434/api/tags"
+      },
+      "resourceClass": "medium",
+      "preferredNode": "upstairs",
+      "implemented": true
+    },
+    {
+      "id": "vex.bridge",
+      "displayName": "Vex Bridge",
+      "kind": "gateway-broker",
+      "role": "persistent-core",
+      "defaultPort": 8765,
+      "resourceClass": "light",
+      "preferredNode": "any",
+      "implemented": true
+    },
+    {
+      "id": "vex.maintenance",
+      "displayName": "Vex Maintenance",
+      "kind": "maintenance",
+      "role": "on-demand-tool",
+      "resourceClass": "light",
+      "preferredNode": "downstairs",
+      "implemented": false
+    },
+    {
+      "id": "vex.media",
+      "displayName": "Vex Media Lab",
+      "kind": "media",
+      "role": "on-demand-tool",
+      "resourceClass": "heavy",
+      "preferredNode": "upstairs",
+      "implemented": false
+    }
+  ]
+}
