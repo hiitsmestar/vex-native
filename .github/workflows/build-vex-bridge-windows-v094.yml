@@ -5,7 +5,7 @@ on:
   push:
     branches: [ "ci/v094-local-art-engine", "ci/v0943-bridge-configdir-hotfix" ]
   pull_request:
-    branches: [ "ci/v093-cognition-overlay" ]
+    branches: [ "ci/v093-cognition-overlay", "ci/v094-local-art-engine" ]
 
 permissions:
   contents: read
