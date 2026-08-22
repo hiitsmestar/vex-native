@@ -1,4 +1,4 @@
-name: Build unsigned iPhone IPA v0.9.4.3
+name: Build unsigned iPhone IPA v0.9.4.4
 
 on:
   workflow_dispatch:
@@ -78,11 +78,12 @@ jobs:
       - name: Apply v0.9.4.2 send reliability hotfix
         run: python3 Tools/apply_v0942_send_reliability_patch.py
       - name: Apply v0.9.4.3 dual-node cognition race
+        run: python3 Tools/apply_v0943_dual_node_race_patch.py
+      - name: Apply v0.9.4.4 Bridge long-request timeout fix
         run: |
-          python3 Tools/apply_v0943_dual_node_race_patch.py
-          grep -n 'v0.9.4.3: dual-node race' VexNative/ContentView.swift
-          grep -n 'withTaskGroup(of: CognitionAttempt?.self)' VexNative/ContentView.swift
-          grep -n 'lastGoodEndpoint' VexNative/ContentView.swift
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          grep -n 'v0.9.4.4: cognition and local rendering' VexNative/VexNativeApp.swift
+          grep -n 'timeoutIntervalForResource = 100' VexNative/VexNativeApp.swift
       - name: Resolve local Swift package
         run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
       - name: Build unsigned device app
@@ -100,8 +101,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=99 \
-            MARKETING_VERSION=0.9.4.3 \
+            CURRENT_PROJECT_VERSION=100 \
+            MARKETING_VERSION=0.9.4.4 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
       - name: Add device permissions to built app
         run: |
@@ -120,8 +121,8 @@ jobs:
         run: |
           APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
           INFO_PLIST="$APP_PATH/Info.plist"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.9.4.3"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "99"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.9.4.4"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "100"
           file "$APP_PATH/VexNative" | tee "$RUNNER_TEMP/app-file.txt"
           grep -q "arm64" "$RUNNER_TEMP/app-file.txt"
       - name: Package unsigned IPA
@@ -130,20 +131,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.9.4.3-dual-node.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.9.4.3-dual-node.ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.9.4.4-bridge-timeout.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.9.4.4-bridge-timeout.ipa"
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.9.4.3-Dual-Node-Failover
-          path: VexNative-v0.9.4.3-dual-node.ipa
+          name: VexNative-v0.9.4.4-Bridge-Timeout-Fix
+          path: VexNative-v0.9.4.4-bridge-timeout.ipa
           if-no-files-found: error
           retention-days: 7
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-xcodebuild-log-v0.9.4.3
+          name: VexNative-xcodebuild-log-v0.9.4.4
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
