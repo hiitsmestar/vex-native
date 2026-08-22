@@ -1,0 +1,110 @@
+name: Build VexBridge v0.9.6.1 stability hotfix
+
+on:
+  push:
+    branches: [ "ci/v0961-bridge-stability" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v0961_bridge_stability_patch.py
+          python -c "import sys; sys.path.insert(0,'Bridge'); import vex_bridge as v; assert v.CONFIG_DIR == v.CONFIG_PATH.parent; assert v._skills_path() == v.CONFIG_PATH.parent / 'learned_skills.json'; assert hasattr(v,'_art_runtime_mode'); assert hasattr(v,'_art_log_tail'); assert hasattr(v,'_hk_run_maintenance'); print('Bridge v0.9.6.1 stability checks OK')"
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Package stability hotfix
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          Copy-Item Tools/VexArtSetup.ps1 dist/VexArtSetup.ps1
+          @'
+          VexBridge v0.9.6.1 - Stability Hotfix
+          =====================================
+
+          Fixes the CONFIG_DIR / learned-skills NameError that could make /status
+          requests fail even while the Bridge itself was alive.
+
+          Local cognition is now warmed first at startup, then the art engine is
+          warmed afterward so Ollama and ComfyUI do not cold-start against each
+          other on CPU/RAM-constrained Windows machines.
+
+          ComfyUI launches with --cpu when the VexArt Python environment reports
+          no usable CUDA device. Cold startup is allowed up to five minutes, and
+          startup failures now include the useful tail of comfyui-bridge.log.
+
+          The v0.9.6 Active Maintenance housekeeping policy is unchanged.
+          Existing Bridge pairing/configuration is reused automatically.
+
+          INSTALL:
+          1. Close the currently running VexBridge window.
+          2. Extract this ZIP to a normal folder.
+          3. Run VexBridge.exe.
+          4. Repeat on the other PC.
+
+          Do NOT reinstall VexNative, Qwen/Ollama, ComfyUI, or the art model.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.9.6.1.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/README-v0.9.6.1.txt -DestinationPath VexBridge-v0.9.6.1-Stability-Hotfix.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.6.1-Stability-Hotfix
+          path: VexBridge-v0.9.6.1-Stability-Hotfix.zip
+          retention-days: 7
