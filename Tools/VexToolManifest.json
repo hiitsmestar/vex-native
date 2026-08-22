@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "version": "0.9.8",
+  "philosophy": "Vex keeps cognition, memory, routing, time grounding, and the Bridge lightweight. Heavy or specialized capabilities are separate on-demand tools that may be launched, used, inspected, repaired, and closed independently.",
+  "tools": [
+    {
+      "id": "doctor",
+      "name": "Vex Doctor",
+      "executable": "VexDoctor.exe",
+      "mode": "one-shot-or-gui",
+      "capabilities": ["diagnostics", "health-check", "report-export"],
+      "headless_args": ["--headless"],
+      "always_running": false
+    },
+    {
+      "id": "toolbox",
+      "name": "Vex Toolbox",
+      "executable": "VexToolbox.exe",
+      "mode": "gui",
+      "capabilities": ["tool-launcher", "app-drawer"],
+      "always_running": false
+    },
+    {
+      "id": "art",
+      "name": "Vex Art / ComfyUI",
+      "external": true,
+      "install_root": "%LOCALAPPDATA%\\VexArt",
+      "mode": "on-demand-service",
+      "capabilities": ["image-generation"],
+      "always_running": false,
+      "idle_shutdown_target": true
+    },
+    {
+      "id": "cognition",
+      "name": "Ollama Cognition",
+      "external": true,
+      "mode": "local-service",
+      "capabilities": ["reasoning", "conversation"],
+      "always_running": true
+    },
+    {
+      "id": "bridge",
+      "name": "Vex Bridge",
+      "executable": "VexBridge.exe",
+      "mode": "core-service",
+      "capabilities": ["routing", "authentication", "pc-tools", "tool-broker", "clock", "knowledge-access"],
+      "always_running": true
+    }
+  ],
+  "planned_extractions": [
+    "VexMaintenance",
+    "VexResearchWorker",
+    "VexMediaWorker",
+    "VexArtWorker adapter"
+  ]
+}
