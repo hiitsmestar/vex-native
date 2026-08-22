@@ -3,7 +3,7 @@ name: Build Vex Bridge v0.9.4 Windows
 on:
   workflow_dispatch:
   push:
-    branches: [ "ci/v094-local-art-engine" ]
+    branches: [ "ci/v094-local-art-engine", "ci/v0943-bridge-configdir-hotfix" ]
   pull_request:
     branches: [ "ci/v093-cognition-overlay" ]
 
@@ -77,11 +77,16 @@ jobs:
           Select-String -Path Bridge/vex_bridge.py -Pattern 'parsed.path == "/art/generate"'
           Select-String -Path Bridge/vex_bridge.py -Pattern 'RealVisXL_V5.0_Lightning_fp16.safetensors'
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.9.4"'
+      - name: Apply v0.9.4.3 Bridge crash hotfix
+        run: |
+          python Tools/apply_v0943_bridge_configdir_hotfix.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'CONFIG_PATH.parent / "learned_skills.json"'
+          if (Select-String -Path Bridge/vex_bridge.py -Pattern 'CONFIG_DIR' -Quiet) { throw "CONFIG_DIR reference still present" }
       - name: Parser and syntax checks
         shell: pwsh
         run: |
-          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert hasattr(v, '_art_start_job'); assert hasattr(v, '_art_workflow'); assert hasattr(v, '_art_result'); w=v._art_workflow('test portrait','portrait',123); assert w['5']['inputs']['steps']==6; print('v0.9.4 art imports/workflow OK')"
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v094_art_bridge_patch.py
+          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert hasattr(v, '_art_start_job'); assert hasattr(v, '_art_workflow'); assert hasattr(v, '_art_result'); w=v._art_workflow('test portrait','portrait',123); assert w['5']['inputs']['steps']==6; assert v._skills_path().name == 'learned_skills.json'; assert isinstance(v._load_skills(), dict); print('v0.9.4 art + learned-skills path regression checks OK')"
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v094_art_bridge_patch.py Tools/apply_v0943_bridge_configdir_hotfix.py
       - name: Build standalone VexBridge.exe
         shell: pwsh
         run: |
