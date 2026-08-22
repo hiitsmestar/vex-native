@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "registry_version": "0.1.0",
+  "policy": {
+    "default_lifecycle": "on-demand",
+    "background_residency": "disabled-unless-explicitly-required",
+    "paid_api_allowed": false,
+    "cloud_rendering_allowed": false,
+    "untrusted_web_code_execution_allowed": false
+  },
+  "apps": [
+    {
+      "id": "vex.doctor",
+      "name": "VexDoctor",
+      "platform": "windows",
+      "kind": "diagnostic",
+      "version": "0.1.0",
+      "entrypoint": "RUN-VEX-DIAGNOSTIC.cmd",
+      "repair_entrypoint": "RUN-VEX-SAFE-REPAIR.cmd",
+      "resident": false,
+      "bridge_required": false,
+      "safe_for_vex_to_launch": true,
+      "safe_for_vex_to_read_outputs": true,
+      "outputs": [
+        "%APPDATA%\\VexBridge\\diagnostics\\VexDiagnostic-LATEST.txt",
+        "%APPDATA%\\VexBridge\\diagnostics\\VexDiagnostic-LATEST.json"
+      ],
+      "capabilities": [
+        "bridge-process-health",
+        "watchdog-health",
+        "bridge-authenticated-endpoints",
+        "ollama-direct-health",
+        "comfyui-direct-health",
+        "art-install-health",
+        "learning-store-health",
+        "self-repair-state",
+        "log-tail-capture",
+        "bounded-safe-repair",
+        "post-repair-verification"
+      ]
+    }
+  ]
+}
