@@ -23,8 +23,6 @@ def replace_once(old: str, new: str, label: str) -> None:
 # DLL/PATH contamination.
 # ---------------------------------------------------------------------------
 
-# Sanitized environment only for VexArt subprocesses. This does not alter the
-# user's global Windows PATH or installed apps.
 marker = "def _art_torch_smoke() -> tuple[bool, str]:\n"
 if marker not in text:
     raise SystemExit("v0.9.7 torch smoke marker missing")
@@ -63,9 +61,6 @@ def _art_try_vcredist_repair() -> tuple[bool, str]:
     try:
         import subprocess
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        # Winget is built into current Windows and the package itself is free.
-        # If the machine lacks winget or elevation is required, fail cleanly and
-        # continue to the pinned PyTorch fallback instead of touching Windows.
         result = subprocess.run(
             ["winget", "install", "--id", "Microsoft.VCRedist.2015+.x64", "--exact",
              "--silent", "--accept-package-agreements", "--accept-source-agreements"],
@@ -118,7 +113,6 @@ def _art_recover_dll_runtime(detail: str = "", force: bool = False) -> tuple[boo
     if not _art_runtime_repair_needed(detail):
         return False, "startup failure is not the recognized PyTorch DLL error"
 
-    # First eliminate low-memory and global-PATH causes, then test torch by itself.
     _art_release_cognition_memory()
     smoke_ok, smoke = _art_torch_smoke()
     if smoke_ok:
@@ -130,8 +124,6 @@ def _art_recover_dll_runtime(detail: str = "", force: bool = False) -> tuple[boo
         if smoke_ok:
             return True, "repaired/verified Microsoft Visual C++ runtime and torch now imports"
 
-    # PyTorch 2.9.x has a current Windows WinError 1114 regression on some hosts;
-    # use the known-working 2.8 CPU family for the local CPU art engine.
     pinned_ok, pinned_detail = _art_repair_pytorch_280()
     if pinned_ok:
         _learning_queue_topic(
@@ -140,7 +132,6 @@ def _art_recover_dll_runtime(detail: str = "", force: bool = False) -> tuple[boo
         )
         return True, pinned_detail
 
-    # Last attempt keeps the existing v0.9.7 generic free-CPU reinstall path.
     generic_ok, generic_detail = _art_repair_cpu_torch(force=force)
     if generic_ok:
         return True, generic_detail
@@ -153,24 +144,27 @@ def _art_recover_dll_runtime(detail: str = "", force: bool = False) -> tuple[boo
 '''
 text = text.replace(marker, helpers + marker, 1)
 
-# Make torch smoke tests use the sanitized VexArt-only environment.
+# Torch smoke uses only VexArt's intended DLL search environment.
 old_smoke = '''            cwd=str(ART_ROOT),\n            stdout=subprocess.PIPE,\n            stderr=subprocess.STDOUT,\n            text=True,\n            timeout=50,\n            creationflags=flags,\n'''
 new_smoke = '''            cwd=str(ART_ROOT),\n            env=_art_clean_env(),\n            stdout=subprocess.PIPE,\n            stderr=subprocess.STDOUT,\n            text=True,\n            timeout=50,\n            creationflags=flags,\n'''
 replace_once(old_smoke, new_smoke, "sanitized torch smoke environment")
 
-# Make ComfyUI itself use the same clean subprocess environment.
-old_popen = '''                cwd=str(ART_COMFY_DIR),\n                stdout=log,\n                stderr=subprocess.STDOUT,\n                creationflags=flags,\n'''
-new_popen = '''                cwd=str(ART_COMFY_DIR),\n                env=_art_clean_env(),\n                stdout=log,\n                stderr=subprocess.STDOUT,\n                creationflags=flags,\n'''
+# The CPU/CUDA probe introduced in v0.9.6.1 also needs the clean environment.
+old_mode = '''            cwd=str(ART_COMFY_DIR),\n            stdout=subprocess.PIPE,\n            stderr=subprocess.STDOUT,\n            text=True,\n            timeout=25,\n            creationflags=flags,\n'''
+new_mode = '''            cwd=str(ART_COMFY_DIR),\n            env=_art_clean_env(),\n            stdout=subprocess.PIPE,\n            stderr=subprocess.STDOUT,\n            text=True,\n            timeout=25,\n            creationflags=flags,\n'''
+replace_once(old_mode, new_mode, "sanitized art runtime probe")
+
+# v0.9.6.1's launcher includes stdin=DEVNULL; match that exact live source.
+old_popen = '''                cwd=str(ART_COMFY_DIR),\n                stdin=subprocess.DEVNULL,\n                stdout=log,\n                stderr=subprocess.STDOUT,\n                creationflags=flags,\n'''
+new_popen = '''                cwd=str(ART_COMFY_DIR),\n                env=_art_clean_env(),\n                stdin=subprocess.DEVNULL,\n                stdout=log,\n                stderr=subprocess.STDOUT,\n                creationflags=flags,\n'''
 replace_once(old_popen, new_popen, "sanitized ComfyUI environment")
 
-# Most important field fix: a render request now performs dependency recovery
-# immediately instead of returning the raw startup failure and waiting for the
-# background supervisor to maybe reach it later.
+# A render request now triggers dependency recovery immediately.
 old_run = '''    ok, error = _ensure_art_comfy()\n    if not ok:\n        with _ART_JOB_LOCK:\n            _ART_JOBS[job_id]["status"] = "error"\n            _ART_JOBS[job_id]["error"] = error\n        return\n'''
 new_run = '''    ok, error = _ensure_art_comfy()\n    if not ok and _art_runtime_repair_needed(str(error or "")):\n        with _ART_JOB_LOCK:\n            _ART_JOBS[job_id]["status"] = "repairing-art-runtime"\n        repaired, repair_detail = _art_recover_dll_runtime(str(error or ""), force=False)\n        if repaired:\n            ok, error = _ensure_art_comfy()\n        else:\n            error = f"Automatic art DLL repair did not finish: {repair_detail}"\n    if not ok:\n        with _ART_JOB_LOCK:\n            _ART_JOBS[job_id]["status"] = "error"\n            _ART_JOBS[job_id]["error"] = error\n        return\n'''
 replace_once(old_run, new_run, "direct render DLL recovery")
 
-# Reuse the stronger recovery from background self-heal too.
+# Background self-heal shares the same stronger dependency path.
 old_dep = '''    detail = str(error or "ComfyUI restart failed")\n    if _art_runtime_repair_needed(detail):\n        smoke_ok, smoke = _art_torch_smoke()\n        if not smoke_ok:\n            repaired, repair_detail = _art_repair_cpu_torch(force=force)\n            if repaired:\n                ok2, error2 = _ensure_art_comfy()\n                if ok2:\n                    _learning_queue_topic("ComfyUI CPU-only Windows startup reliability and memory management", reason="self-repair-learn", priority=60)\n                    return True, "repaired CPU PyTorch runtime and restarted ComfyUI"\n                return False, f"PyTorch repaired but ComfyUI still failed: {error2}"\n            return False, f"ComfyUI torch runtime failure. {repair_detail}"\n        # Torch imports now, so the original failure was likely transient memory\n        # pressure. Give ComfyUI one clean retry with cognition unloaded.\n        ok3, error3 = _ensure_art_comfy()\n        if ok3:\n            return True, "recovered transient PyTorch DLL startup failure"\n        return False, str(error3 or detail)\n    return False, detail\n'''
 new_dep = '''    detail = str(error or "ComfyUI restart failed")\n    if _art_runtime_repair_needed(detail):\n        repaired, repair_detail = _art_recover_dll_runtime(detail, force=force)\n        if repaired:\n            ok2, error2 = _ensure_art_comfy()\n            if ok2:\n                _learning_queue_topic("ComfyUI CPU-only Windows startup reliability and memory management", reason="self-repair-learn", priority=60)\n                return True, "repaired PyTorch/Windows DLL runtime and restarted ComfyUI"\n            return False, f"DLL runtime repaired but ComfyUI still failed: {error2}"\n        return False, f"ComfyUI torch runtime failure. {repair_detail}"\n    return False, detail\n'''
 replace_once(old_dep, new_dep, "stronger background art recovery")
