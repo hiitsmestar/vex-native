@@ -1,0 +1,45 @@
+name: Build Vex Toolbox v0.1 Modular Apps + Diagnostics
+
+on:
+  push:
+    branches: [ "ci/v098-modular-apps-diagnostics" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-toolbox:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate toolbox sources
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-Content Tools/VexAppRegistry.json -Raw | ConvertFrom-Json | Out-Null
+          $null = [scriptblock]::Create((Get-Content Tools/VexDoctor.ps1 -Raw))
+          $null = [scriptblock]::Create((Get-Content Tools/VexAppHost.ps1 -Raw))
+          if (!(Test-Path Tools/RUN-VEX-DIAGNOSTIC.cmd)) { throw 'RUN-VEX-DIAGNOSTIC.cmd missing' }
+          Write-Host 'Vex Toolbox source validation OK'
+
+      - name: Package Vex Toolbox v0.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist/VexToolbox | Out-Null
+          Copy-Item Tools/VexDoctor.ps1 dist/VexToolbox/VexDoctor.ps1
+          Copy-Item Tools/VexAppHost.ps1 dist/VexToolbox/VexAppHost.ps1
+          Copy-Item Tools/VexAppRegistry.json dist/VexToolbox/VexAppRegistry.json
+          Copy-Item Tools/RUN-VEX-DIAGNOSTIC.cmd dist/VexToolbox/RUN-VEX-DIAGNOSTIC.cmd
+          Copy-Item Tools/README-VexToolbox-v0.1.txt dist/VexToolbox/README.txt
+          Compress-Archive -Path dist/VexToolbox/* -DestinationPath VexToolbox-v0.1-Modular-Apps-Diagnostics.zip -Force
+          if (!(Test-Path VexToolbox-v0.1-Modular-Apps-Diagnostics.zip)) { throw 'Toolbox ZIP missing' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexToolbox-v0.1-Modular-Apps-Diagnostics
+          path: VexToolbox-v0.1-Modular-Apps-Diagnostics.zip
+          retention-days: 7
