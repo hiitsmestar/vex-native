@@ -3,6 +3,8 @@ name: Build Vex Remote Support v0.9.9
 on:
   push:
     branches: [ "ci/v099-remote-support" ]
+  pull_request:
+    branches: [ "ci/v098-modular-toolbox" ]
   workflow_dispatch:
 
 permissions:
