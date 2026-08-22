@@ -1,0 +1,123 @@
+name: Build VexBridge v0.9.7.2 Learning Engine
+
+on:
+  push:
+    branches: [ "ci/v097-learning-engine" ]
+  pull_request:
+    branches: [ "ci/v0962-self-healing" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v097_learning_engine_art_repair_patch.py Tools/apply_v0971_art_dll_hotfix.py Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python -c "import sys; sys.path.insert(0,'Bridge'); import vex_bridge as v; assert hasattr(v,'_learning_worker_loop'); assert hasattr(v,'_learning_status'); assert hasattr(v,'_art_repair_cpu_torch'); assert hasattr(v,'_art_recover_dll_runtime'); assert hasattr(v,'_art_clean_env'); assert hasattr(v,'_cognition_rewarm_async'); assert hasattr(v,'_sr_run_once'); assert v.CONFIG_DIR == v.CONFIG_PATH.parent; assert v._art_torch_smoke.__defaults__[0] == 420; print('Bridge v0.9.7.2 checks OK')"
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Package v0.9.7.2
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          Copy-Item Tools/VexArtSetup.ps1 dist/VexArtSetup.ps1
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          @'
+          VexBridge v0.9.7.2 - Slow CPU Art/Cognition Coordination Hotfix
+          ==================================================================
+
+          Keeps v0.9.7.1 direct DLL recovery, v0.9.7 learning, v0.9.6.2
+          self-healing, housekeeping, full-PC access, cognition, dual-node,
+          and protected-file policies.
+
+          FIELD FIXES FROM THE 2026-08-22 LIVE TEST:
+          - PyTorch 2.8 CPU fallback had installed, but the old 50-second smoke
+            test timed out while import torch was still initializing. The test now
+            allows up to 420 seconds on very slow Windows CPU hosts.
+          - ordinary art warmup no longer evicts the 4B cognition model unless
+            memory is actually constrained; recognized DLL repair can still force
+            a temporary unload when needed.
+          - after heavy art work Vex asynchronously warms the cognition model again.
+          - local cognition stays resident for 2 hours instead of 30 minutes.
+          - CPU cognition request timeout is raised from 85 to 180 seconds and
+            prompt history is trimmed to reduce unnecessary tokenization load.
+          - first render after a PyTorch replacement may still take several minutes;
+            that is now treated as startup work instead of another corrupt install.
+
+          NO PAID API / NO CLOUD RENDERING.
+
+          START:
+          Stop the previous build with STOP-VEX-SELF-HEAL.cmd, extract this ZIP,
+          then double-click START-VEX-SELF-HEAL.cmd. Keep its windows running.
+          Do not rerun VexBrainSetup.ps1 or VexArtSetup.ps1 for this update.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.9.7.2.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/VexBridgeWatchdog.ps1,dist/START-VEX-SELF-HEAL.cmd,dist/STOP-VEX-SELF-HEAL.cmd,dist/README-v0.9.7.2.txt -DestinationPath VexBridge-v0.9.7.2-SlowCPU-Hotfix.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.7.2-SlowCPU-Hotfix
+          path: VexBridge-v0.9.7.2-SlowCPU-Hotfix.zip
+          retention-days: 7
