@@ -1,0 +1,96 @@
+name: Build VexDoctor v0.1.0
+
+on:
+  push:
+    branches: [ "ci/v098-modular-tools" ]
+    paths:
+      - "Tools/VexDoctor.ps1"
+      - "Tools/RUN-VEX-DIAGNOSTIC.cmd"
+      - "Tools/RUN-VEX-SAFE-REPAIR.cmd"
+      - "Tools/VexApps.json"
+      - ".github/workflows/build-vex-doctor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-tool:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PowerShell syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "Tools/VexDoctor.ps1"), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "VexDoctor.ps1 has PowerShell parser errors"
+          }
+          Write-Host "VexDoctor.ps1 syntax OK"
+
+      - name: Validate app manifest
+        shell: powershell
+        run: |
+          $manifest = Get-Content -Raw "Tools/VexApps.json" | ConvertFrom-Json
+          if ($manifest.schema -ne 1) { throw "Unexpected VexApps schema" }
+          $doctor = @($manifest.apps | Where-Object { $_.id -eq "vex.doctor" })
+          if ($doctor.Count -ne 1) { throw "vex.doctor manifest entry missing" }
+          if ($doctor[0].resident -ne $false) { throw "VexDoctor must remain on-demand/non-resident" }
+          Write-Host "VexApps manifest OK"
+
+      - name: Package VexDoctor
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item Tools/VexDoctor.ps1 dist/VexDoctor.ps1
+          Copy-Item Tools/RUN-VEX-DIAGNOSTIC.cmd dist/RUN-VEX-DIAGNOSTIC.cmd
+          Copy-Item Tools/RUN-VEX-SAFE-REPAIR.cmd dist/RUN-VEX-SAFE-REPAIR.cmd
+          Copy-Item Tools/VexApps.json dist/VexApps.json
+          @'
+          VexDoctor v0.1.0 - Standalone VexNative Diagnostics
+          ==================================================
+
+          PURPOSE
+          VexDoctor is an independent, on-demand Windows diagnostic tool. It does
+          not ask the language model whether the system is healthy. It checks real
+          processes, local ports, authenticated VexBridge endpoints, Ollama,
+          ComfyUI, install files, learning/self-repair state, and relevant logs.
+
+          USE
+          Put these files in the same folder as VexBridge.exe, then double-click:
+            RUN-VEX-DIAGNOSTIC.cmd
+
+          For a bounded repair pass followed by fresh verification, double-click:
+            RUN-VEX-SAFE-REPAIR.cmd
+
+          REPORTS
+          Stable latest reports are written to:
+            %APPDATA%\VexBridge\diagnostics\VexDiagnostic-LATEST.txt
+            %APPDATA%\VexBridge\diagnostics\VexDiagnostic-LATEST.json
+
+          The JSON report is intended for Vex herself to read through PC/file tools
+          so Star does not have to relay console screenshots for ordinary diagnosis.
+
+          SAFE-REPAIR POLICY
+          The repair launcher may start the existing watchdog, start Ollama, and
+          call VexBridge's bounded /repair/run endpoint. It then reruns diagnostics.
+          It does not delete personal files, run registry cleaners, or install paid
+          services/APIs.
+
+          ARCHITECTURE
+          VexDoctor is the first registered modular Vex app. It is non-resident and
+          exists independently of the cognition model. VexApps.json is the seed of
+          the app/tool registry for future on-demand workers.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexDoctor.txt
+          Compress-Archive -Path dist/* -DestinationPath VexDoctor-v0.1.0.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexDoctor-v0.1.0
+          path: VexDoctor-v0.1.0.zip
+          retention-days: 14
