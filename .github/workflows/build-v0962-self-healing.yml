@@ -3,6 +3,8 @@ name: Build VexBridge v0.9.6.2 self-healing
 on:
   push:
     branches: [ "ci/v0962-self-healing" ]
+  pull_request:
+    branches: [ "ci/v096-active-maintenance" ]
   workflow_dispatch:
 
 permissions:
