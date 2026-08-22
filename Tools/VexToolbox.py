@@ -22,12 +22,13 @@ def expand(value: str) -> Path:
 
 
 def manifest() -> dict:
-    path = root_dir() / "VexToolManifest.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text("utf-8"))
-        except Exception:
-            pass
+    candidates = [root_dir() / "VexToolManifest.json", root_dir() / "Tools" / "VexToolManifest.json"]
+    for path in candidates:
+        if path.exists():
+            try:
+                return json.loads(path.read_text("utf-8"))
+            except Exception:
+                pass
     return {"tools": []}
 
 
@@ -39,6 +40,14 @@ def launch_path(path: Path, args: list[str] | None = None) -> None:
         subprocess.Popen(["cmd.exe", "/c", "start", "", str(path), *args], cwd=str(path.parent))
     else:
         subprocess.Popen([str(path), *args], cwd=str(path.parent))
+
+
+def open_folder(path: Path) -> None:
+    target = path if path.exists() else path.parent
+    if os.name == "nt":
+        os.startfile(str(target))
+    else:
+        raise RuntimeError("Folder opening is currently packaged for Windows.")
 
 
 def main() -> int:
@@ -67,14 +76,14 @@ def main() -> int:
     frame = tk.Frame(app)
     frame.pack(fill="both", expand=True, padx=18, pady=8)
 
-    def add_row(title: str, description: str, callback, enabled: bool = True) -> None:
+    def add_row(title: str, description: str, callback, enabled: bool = True, button_text: str = "Open") -> None:
         row = tk.Frame(frame, bd=1, relief="groove")
         row.pack(fill="x", pady=5)
         left = tk.Frame(row)
         left.pack(side="left", fill="both", expand=True, padx=12, pady=10)
         tk.Label(left, text=title, font=("Segoe UI", 11, "bold"), anchor="w").pack(fill="x")
         tk.Label(left, text=description, anchor="w", justify="left", wraplength=500).pack(fill="x")
-        button = tk.Button(row, text="Open", width=12, command=callback)
+        button = tk.Button(row, text=button_text, width=12, command=callback)
         button.pack(side="right", padx=12)
         if not enabled:
             button.configure(state="disabled")
@@ -96,12 +105,12 @@ def main() -> int:
     )
 
     art_root = expand(r"%LOCALAPPDATA%\VexArt")
-    art_cmd = art_root / "RUN-VEX-ART.cmd"
     add_row(
         "Vex Art / ComfyUI",
-        "Local image renderer. Start it only when needed; it can stay closed the rest of the time.",
-        safe(lambda: launch_path(art_cmd)),
-        art_cmd.exists(),
+        "External local renderer workspace. VexBridge starts it with the current safe CPU/GPU settings only when a render needs it; this button opens the workspace without bypassing those launch rules.",
+        safe(lambda: open_folder(art_root)),
+        art_root.exists(),
+        "Workspace",
     )
 
     start_heal = root_dir() / "START-VEX-SELF-HEAL.cmd"
@@ -110,22 +119,25 @@ def main() -> int:
         "Starts the lightweight always-on Bridge/watchdog layer.",
         safe(lambda: launch_path(start_heal)),
         start_heal.exists(),
+        "Start",
     )
 
     reports = expand(r"%APPDATA%\VexBridge\diagnostics")
     add_row(
         "Diagnostic Reports",
-        "Open the folder containing latest.json and latest.txt from Vex Doctor.",
-        safe(lambda: os.startfile(str(reports if reports.exists() else reports.parent))),
+        "Open the folder containing deterministic Vex Doctor JSON/text reports.",
+        safe(lambda: open_folder(reports)),
         True,
+        "Reports",
     )
 
     learning = expand(r"%APPDATA%\VexBridge\learning")
     add_row(
         "Learning Store",
-        "Open Vex's source-grounded local learning database folder. The database remains persistent even when workers are idle.",
-        safe(lambda: os.startfile(str(learning if learning.exists() else learning.parent))),
+        "Open Vex's source-grounded local learning database folder. Persistent knowledge remains here even while research workers are idle.",
+        safe(lambda: open_folder(learning)),
         True,
+        "Open",
     )
 
     info = tk.Text(app, height=7, wrap="word")
