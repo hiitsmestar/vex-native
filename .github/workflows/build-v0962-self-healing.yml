@@ -1,0 +1,117 @@
+name: Build VexBridge v0.9.6.2 self-healing
+
+on:
+  push:
+    branches: [ "ci/v0962-self-healing" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v0962_self_healing_patch.py
+          python -c "import sys; sys.path.insert(0,'Bridge'); import vex_bridge as v; assert hasattr(v,'_sr_run_once'); assert hasattr(v,'_sr_status'); assert hasattr(v,'_sr_supervisor_loop'); assert v.CONFIG_DIR == v.CONFIG_PATH.parent; print('Bridge v0.9.6.2 self-healing checks OK')"
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Package self-healing build
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          Copy-Item Tools/VexArtSetup.ps1 dist/VexArtSetup.ps1
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          @'
+          VexBridge v0.9.6.2 - Self-Healing
+          ==================================
+
+          Includes all v0.9.6.1 stability fixes plus bounded automatic recovery.
+
+          Vex can now automatically:
+          - repair/recreate a damaged learned-skills JSON store
+          - back up and salvage a damaged Bridge config instead of silently losing it
+          - restart Ollama when the local cognition service disappears
+          - restart ComfyUI when the local art service dies
+          - refresh a stalled or stale file index
+          - record repair history/diagnostics under the Bridge config folder
+          - avoid restart storms with cooldowns and circuit breakers
+
+          START:
+          Use START-VEX-SELF-HEAL.cmd instead of launching VexBridge.exe directly.
+          The watchdog will restart the whole Bridge after an unexpected process exit.
+          Use STOP-VEX-SELF-HEAL.cmd when you intentionally want it stopped.
+
+          Safety boundary:
+          Self-healing repairs runtime state and restarts installed local services.
+          It does NOT invent/download/execute arbitrary code, alter personal photos or
+          videos, uninstall programs, delete system files, or silently rewrite Vex's code.
+          A genuinely new software defect still needs a tested update.
+
+          Existing VexNative v0.9.6, Qwen/Ollama, ComfyUI, art model, pairing/config,
+          housekeeping policy, and protected files are reused unchanged.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.9.6.2.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/VexBridgeWatchdog.ps1,dist/START-VEX-SELF-HEAL.cmd,dist/STOP-VEX-SELF-HEAL.cmd,dist/README-v0.9.6.2.txt -DestinationPath VexBridge-v0.9.6.2-Self-Healing.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.6.2-Self-Healing
+          path: VexBridge-v0.9.6.2-Self-Healing.zip
+          retention-days: 7
