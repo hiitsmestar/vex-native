@@ -3,6 +3,8 @@ name: Build VexBridge v0.9.7 Learning Engine
 on:
   push:
     branches: [ "ci/v097-learning-engine" ]
+  pull_request:
+    branches: [ "ci/v0962-self-healing" ]
   workflow_dispatch:
 
 permissions:
