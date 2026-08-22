@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "registryVersion": "0.1.0",
+  "description": "Trusted local capability registry for Vex-owned tools. Heavy/on-demand apps should stay stopped until requested whenever practical.",
+  "apps": [
+    {
+      "id": "vexbridge",
+      "name": "Vex Bridge",
+      "category": "core",
+      "lifecycle": "always-on",
+      "resourceClass": "light",
+      "preferredNode": "either",
+      "health": {
+        "type": "bridge",
+        "config": "%APPDATA%\\VexBridge\\config.json"
+      },
+      "notes": "Authenticated LAN gateway and coordinator. Keep this small; capability implementations should progressively move behind app/tool contracts."
+    },
+    {
+      "id": "ollama",
+      "name": "Vex Cognition / Ollama",
+      "category": "cognition",
+      "lifecycle": "service",
+      "resourceClass": "medium-heavy",
+      "preferredNode": "upstairs",
+      "health": {
+        "type": "http",
+        "url": "http://127.0.0.1:11434/api/tags"
+      },
+      "launch": {
+        "candidates": [
+          "%LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe",
+          "%ProgramFiles%\\Ollama\\ollama.exe"
+        ],
+        "arguments": ["serve"]
+      },
+      "notes": "Local cognition server. Model residency can be managed independently from the Vex conversation layer."
+    },
+    {
+      "id": "comfyui",
+      "name": "Vex Art / ComfyUI",
+      "category": "art",
+      "lifecycle": "on-demand",
+      "resourceClass": "heavy",
+      "preferredNode": "upstairs",
+      "health": {
+        "type": "http",
+        "url": "http://127.0.0.1:8188/system_stats"
+      },
+      "installChecks": [
+        "%LOCALAPPDATA%\\VexArt\\ComfyUI\\main.py",
+        "%LOCALAPPDATA%\\VexArt\\venv\\Scripts\\python.exe",
+        "%LOCALAPPDATA%\\VexArt\\ComfyUI\\models\\checkpoints\\RealVisXL_V5.0_Lightning_fp16.safetensors"
+      ],
+      "managedBy": "vexbridge-art-runner",
+      "notes": "Heavy renderer. Intentionally on-demand; Bridge currently owns CPU/GPU-safe launch flags until the art runner is fully extracted."
+    },
+    {
+      "id": "vexdoctor",
+      "name": "Vex Doctor",
+      "category": "diagnostics",
+      "lifecycle": "on-demand",
+      "resourceClass": "light",
+      "preferredNode": "either",
+      "health": {
+        "type": "file",
+        "path": "%APPDATA%\\VexBridge\\diagnostics\\latest.json"
+      },
+      "launch": {
+        "executable": "powershell.exe",
+        "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$TOOLBOX\\VexDoctor.ps1"]
+      },
+      "notes": "Independent source-of-truth diagnostics. It does not ask the language model whether a subsystem is healthy."
+    },
+    {
+      "id": "learning",
+      "name": "Vex Learning Worker",
+      "category": "learning",
+      "lifecycle": "idle-background",
+      "resourceClass": "medium",
+      "preferredNode": "downstairs",
+      "health": {
+        "type": "file",
+        "path": "%APPDATA%\\VexBridge\\learning\\vex-learning.sqlite3"
+      },
+      "managedBy": "vexbridge-learning",
+      "notes": "Currently lives inside Bridge. Extraction target: an independent research/knowledge worker that can sleep when idle."
+    },
+    {
+      "id": "housekeeper",
+      "name": "Vex Housekeeper",
+      "category": "maintenance",
+      "lifecycle": "idle-background",
+      "resourceClass": "light-medium",
+      "preferredNode": "downstairs",
+      "managedBy": "vexbridge-maintenance",
+      "notes": "Currently Bridge-managed. Extraction target with the same protected-file and safe-deletion rules."
+    },
+    {
+      "id": "media",
+      "name": "Vex Media Tools",
+      "category": "media",
+      "lifecycle": "on-demand",
+      "resourceClass": "medium-heavy",
+      "preferredNode": "upstairs",
+      "managedBy": "vexbridge-media",
+      "notes": "Future independent media/video/transcode worker. Should only run while a media job exists."
+    },
+    {
+      "id": "browser",
+      "name": "Vex Browser / Research Tools",
+      "category": "research",
+      "lifecycle": "on-demand",
+      "resourceClass": "light-medium",
+      "preferredNode": "either",
+      "managedBy": "vexbridge-browser",
+      "notes": "Future independent browser/research worker with stable job/result contracts."
+    }
+  ]
+}
