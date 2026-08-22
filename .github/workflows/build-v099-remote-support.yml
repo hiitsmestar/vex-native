@@ -28,7 +28,8 @@ jobs:
       - name: Verify source
         shell: pwsh
         run: |
-          python -m py_compile Tools/VexRemoteSupport.py Tools/VexDoctor.py
+          python Tools/fix_v099_remote_support_syntax.py
+          python -m py_compile Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/fix_v099_remote_support_syntax.py
           python -c "from pathlib import Path; t=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'ISSUE_NUMBER = 52' in t; assert 'local safe-maintenance permission is OFF' in t; assert 'technical topics only' in t; assert 'SESSION_SECONDS = 2 * 60 * 60' in t; print('Vex Remote Support source checks OK')"
 
       - name: Build Vex Remote Support
