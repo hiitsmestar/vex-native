@@ -29,12 +29,21 @@ def replace_once(old: str, new: str, label: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-# 1) Replace the art cognition-release helper with memory-aware release and add
-#    an asynchronous rewarm after a heavy art job completes.
+# 1) Replace only the art cognition-release function. v0.9.7.1 inserted its DLL
+# helpers immediately after it, so preserve those helpers intact.
 release_start = text.find("def _art_release_cognition_memory(")
-release_end = text.find("\n\ndef _art_torch_smoke", release_start)
-if release_start < 0 or release_end < 0:
-    raise SystemExit("art cognition-release markers missing")
+if release_start < 0:
+    raise SystemExit("art cognition-release marker missing")
+release_candidates = [
+    pos for pos in [
+        text.find("\n\ndef _art_clean_env", release_start),
+        text.find("\n\ndef _art_torch_smoke", release_start),
+    ]
+    if pos >= 0
+]
+if not release_candidates:
+    raise SystemExit("art cognition-release end marker missing")
+release_end = min(release_candidates)
 
 release_block = r'''_ART_COGNITION_REWARM_LOCK = threading.Lock()
 _ART_COGNITION_WAS_RELEASED = False
@@ -51,8 +60,6 @@ def _art_release_cognition_memory(force: bool = False) -> bool:
                 snapshot = _resource_snapshot()
                 available = snapshot.get("memory_available")
                 total = snapshot.get("memory_total")
-                # Utility/low-memory nodes benefit from unloading. Bigger nodes
-                # keep cognition warm so ordinary chat does not repeatedly cold-boot.
                 should_release = (
                     (available is not None and int(available) < 7 * 1024**3)
                     or (total is not None and int(total) < 16 * 1024**3)
@@ -164,10 +171,8 @@ text = text[:smoke_start] + smoke_block + text[smoke_end:]
 #    but ordinary warmup/restart paths remain memory-aware instead of constantly
 #    throwing the local chat model out of RAM.
 recover_start = text.find("def _art_recover_dll_runtime(")
-recover_end = text.find("\n\n", recover_start)
 if recover_start < 0:
     raise SystemExit("DLL recovery function missing")
-# Function is longer than one paragraph; restrict the replacement to a window.
 window_end = text.find("\n\ndef ", recover_start + 20)
 if window_end < 0:
     window_end = len(text)
@@ -181,10 +186,8 @@ if "_art_release_cognition_memory()" in recover:
 #    more room, while reducing needless prompt bulk. This fixes the 503 seen after
 #    art recovery had evicted the model.
 ollama_start = text.find("def _ollama_chat(")
-ollama_end = text.find("\n\n", ollama_start)
 if ollama_start < 0:
     raise SystemExit("ollama chat function missing")
-# Find the next top-level def, not an inner blank line.
 next_def = text.find("\n\ndef ", ollama_start + 20)
 if next_def < 0:
     next_def = len(text)
@@ -213,7 +216,6 @@ if error_marker not in text:
     raise SystemExit("art job error marker missing")
 text = text.replace(error_marker, error_marker + '        _cognition_rewarm_async()\n', 1)
 
-# Also rewarm when dependency recovery fails before the render body starts.
 pre_render_error = '''    if not ok:\n        with _ART_JOB_LOCK:\n            _ART_JOBS[job_id]["status"] = "error"\n            _ART_JOBS[job_id]["error"] = error\n        return\n'''
 pre_render_new = '''    if not ok:\n        with _ART_JOB_LOCK:\n            _ART_JOBS[job_id]["status"] = "error"\n            _ART_JOBS[job_id]["error"] = error\n        _cognition_rewarm_async()\n        return\n'''
 replace_once(pre_render_error, pre_render_new, "post-repair cognition rewarm")
@@ -231,6 +233,8 @@ full_path.write_text(full, encoding="utf-8")
 checks = [
     "def _art_torch_smoke(timeout_seconds: int = 420)",
     "def _cognition_rewarm_async",
+    "def _art_recover_dll_runtime",
+    "def _art_clean_env",
     "_art_release_cognition_memory(force=True)",
     '"keep_alive": "2h"',
     "timeout=180",
