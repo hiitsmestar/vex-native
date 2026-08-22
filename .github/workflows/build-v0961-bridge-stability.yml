@@ -3,6 +3,8 @@ name: Build VexBridge v0.9.6.1 stability hotfix
 on:
   push:
     branches: [ "ci/v0961-bridge-stability" ]
+  pull_request:
+    branches: [ "ci/v096-active-maintenance" ]
   workflow_dispatch:
 
 permissions:
