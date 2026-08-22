@@ -1,0 +1,197 @@
+name: Build Vex v0.9.5.1 reclaiming housekeeper
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "ci/v095-resource-housekeeper-art" ]
+  pull_request:
+    branches: [ "ci/v0943-dual-node-race" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+      - name: Apply Bridge patch chain through v0.9.5.1
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v0951_housekeeper_reclaim_patch.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v0951_housekeeper_reclaim_patch.py
+          python -c "import sys; sys.path.insert(0,'Bridge'); import vex_bridge as v; a=v._hk_audit(); assert a['ok'] and a['policy']=='delete-safe-junk'; assert hasattr(v,'_hk_maintenance_loop'); print('v0.9.5.1 reclaiming housekeeper checks OK')"
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.9.5.1"'
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+      - name: Package Windows candidate
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          Copy-Item Tools/VexArtSetup.ps1 dist/VexArtSetup.ps1
+          @'
+          VexBridge v0.9.5.1
+          ===================
+          Reclaiming Housekeeper policy:
+          - permanently deletes safe stale temp junk
+          - permanently deletes old installer/archive packages from Downloads
+          - does not create new quarantine during normal cleanup
+          - purges legacy v0.9.5 quarantine on the next cleanup
+          - automatically repeats safe maintenance every six hours
+          - refreshes the live file index after actual cleanup
+
+          Protected from destructive automatic cleanup: photos, videos, music/audio,
+          documents, creative projects/source, installed applications, Windows/system
+          data, and Vex/Ollama/ComfyUI models/data. Those require a separately approved
+          destructive operation.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.9.5.1.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/README-v0.9.5.1.txt -DestinationPath VexBridge-v0.9.5.1-Reclaiming-Housekeeper.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.9.5.1-Reclaiming-Housekeeper
+          path: VexBridge-v0.9.5.1-Reclaiming-Housekeeper.zip
+          retention-days: 7
+
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply iOS patch chain through v0.9.5.1
+        run: |
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v0951_housekeeper_ios_patch.py
+          grep -q 'Safe junk was actually deleted' VexNative/ContentView.swift
+          grep -q 'deleted_clutter_files' VexNative/ContentView.swift
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build unsigned app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=102 \
+            MARKETING_VERSION=0.9.5.1 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Add permissions and verify
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local cognition, housekeeping, and local image rendering." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your commands and conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become private chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.9.5.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "102"
+      - name: Package IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.9.5.1-reclaiming-housekeeper.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.9.5.1-reclaiming-housekeeper.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.9.5.1-Reclaiming-Housekeeper
+          path: VexNative-v0.9.5.1-reclaiming-housekeeper.ipa
+          retention-days: 7
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.9.5.1-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
