@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "ci/v0943-dual-node-race" ]
+  pull_request:
+    branches: [ "ci/v0942-send-reliability" ]
 
 permissions:
   contents: read
