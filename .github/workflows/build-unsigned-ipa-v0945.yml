@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "ci/v0945-primary-utility-routing" ]
+  pull_request:
+    branches: [ "ci/v0943-dual-node-race" ]
 
 permissions:
   contents: read
