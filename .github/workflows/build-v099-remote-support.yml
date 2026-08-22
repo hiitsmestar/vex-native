@@ -1,0 +1,110 @@
+name: Build Vex Remote Support v0.9.9
+
+on:
+  push:
+    branches: [ "ci/v099-remote-support" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography
+
+      - name: Verify source
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexRemoteSupport.py Tools/VexDoctor.py
+          python -c "from pathlib import Path; t=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'ISSUE_NUMBER = 52' in t; assert 'local safe-maintenance permission is OFF' in t; assert 'technical topics only' in t; assert 'SESSION_SECONDS = 2 * 60 * 60' in t; print('Vex Remote Support source checks OK')"
+
+      - name: Build Vex Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Build Vex Doctor companion
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexDoctor `
+            --collect-all requests `
+            Tools/VexDoctor.py
+          if (!(Test-Path dist/VexDoctor.exe)) { throw "VexDoctor.exe missing" }
+
+      - name: Package remote support
+        shell: pwsh
+        run: |
+          @'
+          Vex Remote Support v0.9.9
+          =========================
+
+          PURPOSE
+          - Gives Star an opt-in relay so ChatGPT can request sanitized diagnostics
+            and technical-learning actions through GitHub instead of relying on
+            screenshots or Vex's language-model guesses.
+          - It is NOT arbitrary remote desktop and does NOT expose a shell.
+          - The app only runs while you have it open and a visible support session
+            is active. Sessions automatically expire after 2 hours.
+
+          FIRST RUN
+          1. Double-click VexRemoteSupport.exe.
+          2. Press Set Up GitHub.
+          3. If GitHub CLI is missing, Windows winget installs it.
+          4. Complete the GitHub browser sign-in once.
+          5. Return to the app, press Test GitHub, then Start 2-Hour Session.
+
+          PRIVACY / SAFETY
+          The Vex project repository is public, so the relay publishes ONLY
+          sanitized technical state: component health, versions, counts, model
+          labels, storage totals/free space, and error classes. It never publishes
+          Bridge tokens, IP addresses, usernames, personal paths, filenames, chat
+          contents, or personal data.
+
+          Commands are ignored unless:
+          - the visible support session is active;
+          - the GitHub comment author is repository owner hiitsmestar;
+          - the command is on the built-in allowlist.
+
+          Remote actions are limited to:
+          - status / Bridge status / art health
+          - Vex Doctor quick or deep diagnostic
+          - learning status
+          - queue/run TECHNICAL learning topics only
+          - housekeeping audit
+          - maintenance status
+          - safe maintenance ONLY when Star checks the local
+            "Allow remote SAFE maintenance" box.
+
+          There is no arbitrary PowerShell/cmd execution, arbitrary file access,
+          program installation, credential access, personal-file deletion, or
+          remote desktop capability.
+
+          RELAY
+          https://github.com/hiitsmestar/vex-native/issues/52
+          '@ | Set-Content -Encoding UTF8 dist/README-VexRemoteSupport-v0.9.9.txt
+
+          Compress-Archive `
+            -Path dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/README-VexRemoteSupport-v0.9.9.txt `
+            -DestinationPath VexRemoteSupport-v0.9.9.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexRemoteSupport-v0.9.9
+          path: VexRemoteSupport-v0.9.9.zip
+          retention-days: 7
