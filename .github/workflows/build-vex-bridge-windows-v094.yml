@@ -1,4 +1,4 @@
-name: Build Vex Bridge v0.9.4 Windows
+name: Build Vex Bridge v0.9.4.4 Windows
 
 on:
   workflow_dispatch:
@@ -82,11 +82,18 @@ jobs:
           python Tools/apply_v0943_bridge_configdir_hotfix.py
           Select-String -Path Bridge/vex_bridge.py -Pattern 'CONFIG_PATH.parent / "learned_skills.json"'
           if (Select-String -Path Bridge/vex_bridge.py -Pattern 'CONFIG_DIR' -Quiet) { throw "CONFIG_DIR reference still present" }
+      - name: Apply v0.9.4.4 CPU cognition hotfix
+        run: |
+          python Tools/apply_v0944_cpu_cognition_latency_hotfix.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern '"think": False'
+          Select-String -Path Bridge/vex_bridge.py -Pattern '"num_predict": 192'
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'timeout=\(3.0, 85.0\)'
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.9.4.4"'
       - name: Parser and syntax checks
         shell: pwsh
         run: |
-          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert hasattr(v, '_art_start_job'); assert hasattr(v, '_art_workflow'); assert hasattr(v, '_art_result'); w=v._art_workflow('test portrait','portrait',123); assert w['5']['inputs']['steps']==6; assert v._skills_path().name == 'learned_skills.json'; assert isinstance(v._load_skills(), dict); print('v0.9.4 art + learned-skills path regression checks OK')"
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v094_art_bridge_patch.py Tools/apply_v0943_bridge_configdir_hotfix.py
+          python -c "import sys; sys.path.insert(0, 'Bridge'); import vex_bridge as v; assert hasattr(v, '_art_start_job'); assert hasattr(v, '_art_workflow'); assert hasattr(v, '_art_result'); w=v._art_workflow('test portrait','portrait',123); assert w['5']['inputs']['steps']==6; assert v._skills_path().name == 'learned_skills.json'; assert isinstance(v._load_skills(), dict); print('v0.9.4.4 art + skills + CPU cognition regression checks OK')"
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v094_art_bridge_patch.py Tools/apply_v0943_bridge_configdir_hotfix.py Tools/apply_v0944_cpu_cognition_latency_hotfix.py
       - name: Build standalone VexBridge.exe
         shell: pwsh
         run: |
@@ -121,38 +128,28 @@ jobs:
           pause
           '@ | Set-Content -Encoding ASCII dist/RUN-VEX-ART-SETUP.cmd
           @"
-          Vex v0.9.4 - local cognition + photoreal art
-          =============================================
+          Vex Bridge v0.9.4.4 - local cognition CPU hotfix
+          =================================================
 
-          1. Replace the old VexBridge.exe on each paired PC with this VexBridge.exe.
-          2. For the stronger conversation brain, run RUN-VEX-BRAIN-SETUP.cmd.
-          3. For local image generation, run RUN-VEX-ART-SETUP.cmd on at least one PC.
+          Replace the previous VexBridge.exe on each paired PC with this one.
+          Do NOT reinstall the local brain or art model; this hotfix reuses both.
 
-          Vex Art Engine is free/local. The setup installs open-source ComfyUI and the
-          RealVisXL V5 Lightning SDXL checkpoint, aimed at photorealism. No paid API or
-          cloud rendering account is required. The checkpoint download is about 7 GB
-          and uses resumable curl retries for unstable connections.
-
-          VexBridge starts the local ComfyUI process automatically on first render,
-          keeps it bound to 127.0.0.1:8188, submits structured workflows, stores finished
-          renders in Pictures\VexRenders, and sends the finished image back to VexNative
-          through the authenticated/certificate-pinned Bridge connection.
-
-          The stronger local conversation model, when available, rewrites raw natural
-          language into a cleaner image prompt before rendering. If it is unavailable,
-          the art engine still works with deterministic prompt cleanup and realism cues.
-          "@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.9.4.txt
+          v0.9.4.4 fixes the CPU-only Qwen3 path observed in live testing: the Bridge
+          reached Ollama correctly but timed out after 42 seconds before a response was
+          complete. The Bridge now prefers vex-qwen3-4b, disables Qwen thinking mode for
+          normal chat, keeps the model warm, trims context pressure, and gives CPU
+          inference enough time while remaining inside VexNative's live-node timeout.
+          "@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.9.4.4.txt
       - name: Package Windows bundle
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexBrainSetup.ps1,dist/VexArtSetup.ps1,dist/RUN-VEX-BRAIN-SETUP.cmd,dist/RUN-VEX-ART-SETUP.cmd,dist/README-Vex-v0.9.4.txt -DestinationPath VexBridge-v0.9.4-Windows-Art.zip -Force
-          Expand-Archive -Path VexBridge-v0.9.4-Windows-Art.zip -DestinationPath "$env:RUNNER_TEMP\bridge-check" -Force
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-Vex-v0.9.4.4.txt -DestinationPath VexBridge-v0.9.4.4-CPU-Cognition-Hotfix.zip -Force
+          Expand-Archive -Path VexBridge-v0.9.4.4-CPU-Cognition-Hotfix.zip -DestinationPath "$env:RUNNER_TEMP\bridge-check" -Force
           if (!(Test-Path "$env:RUNNER_TEMP\bridge-check\VexBridge.exe")) { throw "Bridge ZIP integrity check failed" }
-          if (!(Test-Path "$env:RUNNER_TEMP\bridge-check\RUN-VEX-ART-SETUP.cmd")) { throw "Art setup launcher missing" }
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
-          name: VexBridge-v0.9.4-Windows-Art
-          path: VexBridge-v0.9.4-Windows-Art.zip
+          name: VexBridge-v0.9.4.4-CPU-Cognition-Hotfix
+          path: VexBridge-v0.9.4.4-CPU-Cognition-Hotfix.zip
           if-no-files-found: error
           retention-days: 7
