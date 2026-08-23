@@ -3,6 +3,8 @@ name: Build Vex Art Worker v0.10.0
 on:
   push:
     branches: [ "ci/v100-vex-art-worker" ]
+  pull_request:
+    branches: [ "ci/v099-remote-support" ]
   workflow_dispatch:
 
 permissions:
