@@ -1,0 +1,109 @@
+name: Build Vex Art Worker v0.10.0
+
+on:
+  push:
+    branches: [ "ci/v100-vex-art-worker" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests pillow beautifulsoup4 pypdf cryptography
+
+      - name: Prepare sources
+        shell: pwsh
+        run: |
+          python Tools/fix_v099_remote_support_syntax.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python -m py_compile Tools/VexArtWorker.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/apply_v100_art_remote_patch.py Tools/apply_v100_art_worker_hotfix.py
+          python -c "from pathlib import Path; a=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); r=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.0\"' in a; assert 'sampler_name\": \"euler' in a; assert 'Render Test' in a; assert 'VERSION = \"0.10.0\"' in r; assert 'art_render_test' in r; assert 'art_worker_status' in r; print('Vex Art Worker v0.10.0 source checks OK')"
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Build Vex Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Build Vex Doctor
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexDoctor `
+            --collect-all requests `
+            Tools/VexDoctor.py
+          if (!(Test-Path dist/VexDoctor.exe)) { throw "VexDoctor.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Worker v0.10.0
+          ======================
+
+          WHAT THIS IS
+          - A separate on-demand local art application for VexNative.
+          - It talks directly to the existing local ComfyUI installation.
+          - It gives Star a normal prompt box, Generate button, deterministic Render Test,
+            actual node/type/message diagnostics, image preview, and render-folder access.
+          - It starts ComfyUI only when needed and only stops a ComfyUI process that it owns.
+          - If it owns ComfyUI, it shuts it down after 10 idle minutes.
+          - Existing VexBridge/self-heal services stay separate.
+
+          REMOTE SUPPORT
+          VexRemoteSupport v0.10.0 adds two narrow allowlisted commands:
+          - art_worker_status
+          - art_render_test
+          The relay returns only sanitized renderer state and render error class/node/message.
+          No arbitrary shell or file access was added.
+
+          INSTALL
+          1. Close the older VexRemoteSupport window only.
+          2. Keep VexBridge and its self-heal/watchdog running.
+          3. Extract this ZIP to a normal folder.
+          4. Open VexRemoteSupport.exe. Your existing GitHub/ntfy settings remain in AppData.
+          5. Test GitHub and phone ping, then start the 2-hour session.
+          6. Open VexArtWorker.exe and press Render Test once.
+
+          OUTPUT
+          Successful renders are written under Pictures\VexRenders.
+          Diagnostic state is written under AppData\Roaming\VexArtWorker.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtWorker-v0.10.0.txt
+
+          Compress-Archive `
+            -Path dist/VexArtWorker.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/README-VexArtWorker-v0.10.0.txt `
+            -DestinationPath VexArtWorker-v0.10.0.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtWorker-v0.10.0
+          path: VexArtWorker-v0.10.0.zip
+          retention-days: 7
