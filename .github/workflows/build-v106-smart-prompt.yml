@@ -1,0 +1,85 @@
+name: Build Vex Art Worker v0.10.6 Smart Prompt
+
+on:
+  push:
+    branches: [ "ci/v106-smart-prompt" ]
+  pull_request:
+    branches: [ "ci/v105-art-realism" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests pillow
+
+      - name: Apply Art Worker patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+
+      - name: Verify Smart Prompt build
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexArtWorker.py Tools/apply_v106_smart_prompt_patch.py Tools/apply_v106_smart_prompt_generic_fix.py Tools/verify_v106_smart_prompt.py
+          python Tools/verify_v106_smart_prompt.py
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Worker v0.10.6 - Smart Prompt
+          =====================================
+
+          DROP-IN ART WORKER UPDATE
+          - Keeps v0.10.5 Realism CPU model support and v0.10.4 clipboard controls.
+          - Adds Smart Prompt, ON by default for normal realism renders.
+          - Users can type short ordinary requests instead of learning SD1.5 prompt syntax.
+          - Automatically reinforces full-body framing, anatomy, garment/color binding, hair/makeup details, and seamless backdrops when relevant.
+          - Adds a Preview Smart Prompt button so the compiled prompt is transparent.
+          - Smart Prompt is deterministic and local: it does not launch Bridge, Ollama, or a cloud API.
+          - Generic object/scene prompts remain generic; human scaffolding is only applied to human/fashion requests.
+          - --raw-prompt disables compilation for advanced/headless use.
+          - Does not modify Bridge, cognition, Remote Support, ComfyUI core, or installed models.
+
+          INSTALL
+          Finish or stop any current render, then close the old VexArtWorker.exe.
+          Run this VexArtWorker.exe from its own folder, or replace only the old Art Worker EXE.
+          The already-installed Realism and Lite models are reused; no model re-download is required.
+          Leave Smart Prompt checked for normal use. Type what you want naturally and click Generate.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtWorker-v0.10.6.txt
+          Compress-Archive -Path dist/VexArtWorker.exe,dist/README-VexArtWorker-v0.10.6.txt -DestinationPath VexArtWorker-v0.10.6-SmartPrompt.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtWorker-v0.10.6-SmartPrompt
+          path: VexArtWorker-v0.10.6-SmartPrompt.zip
+          retention-days: 7
