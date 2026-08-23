@@ -61,7 +61,7 @@ jobs:
           python Tools/apply_v0973_render_grounding_learning_hotfix.py
           python Tools/apply_v098_modular_toolbox_time_patch.py
 
-      - name: Apply Art Worker patch chain
+      - name: Apply Art Worker and adapter chain
         shell: pwsh
         run: |
           python Tools/apply_v100_art_worker_hotfix.py
@@ -71,13 +71,15 @@ jobs:
           python Tools/apply_v105_art_realism_patch.py
           python Tools/apply_v106_smart_prompt_patch.py
           python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
           python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
 
       - name: Verify adapter source
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/apply_v107_art_worker_adapter_patch.py
-          python -c "import json,pathlib; b=pathlib.Path('Bridge/vex_bridge.py').read_text(); a=pathlib.Path('Tools/VexArtWorker.py').read_text(); m=json.loads(pathlib.Path('Tools/VexToolManifest.json').read_text()); assert 'VexArtWorker.exe' in b and '--result-file' in b and 'bridge_role\\\": \\\"broker-only' in b; assert '--result-file' in a and 'VERSION = \\\"0.10.7\\\"' in a; art=[x for x in m['tools'] if x.get('id')=='art'][0]; assert art.get('adapter')=='complete' and art.get('bridge_role')=='broker-only'; print('v0.10.7 adapter source checks OK')"
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/apply_v107_art_worker_adapter_patch.py Tools/apply_v1071_adapter_coordination_fix.py Tools/verify_v107_art_adapter.py
+          python Tools/verify_v107_art_adapter.py
 
       - name: Build VexBridge
         shell: pwsh
@@ -135,35 +137,31 @@ jobs:
           VexBridge v0.10.7 - Standalone Art Worker Adapter
           =================================================
 
-          PURPOSE
-          Vex can now use the independent VexArtWorker through the same existing
-          /art/generate, /art/status and /art/result Bridge contract already used
-          by the iPhone app.
+          VexBridge now brokers the existing iPhone art API to the independent
+          VexArtWorker.exe instead of owning ComfyUI itself.
 
-          OWNERSHIP RULE
-          - VexBridge BROKERS art requests only.
-          - VexArtWorker.exe exclusively owns ComfyUI and rendering.
-          - Bridge self-heal no longer starts/restarts ComfyUI.
-          - Art Worker stops the ComfyUI process it owns after a headless job.
-          - Existing low-memory cognition release/rewarm coordination is retained.
+          - Existing /art/generate, /art/status and /art/result contract preserved.
+          - VexArtWorker.exe exclusively owns ComfyUI/render lifecycle.
+          - Smart Prompt and the installed Realism/Lite checkpoints are reused.
+          - Bridge releases the local Ollama model before a requested art job on
+            the low-memory node and asynchronously rewarms cognition afterwards.
+          - Bridge self-heal does not restart ComfyUI behind Art Worker's back.
+          - No paid API, cloud renderer, or required subscription.
 
-          SMART PROMPT
-          VexArtWorker is v0.10.7 and retains v0.10.6 Smart Prompt by default.
-          Bridge sends the user's ordinary request to the worker; the worker performs
-          its own deterministic local prompt compilation. No paid API/cloud renderer.
+          INSTALL
+          1. Finish/stop any current manual Art Worker render and close its GUI.
+          2. Run STOP-VEX-SELF-HEAL.cmd from the old Bridge folder.
+          3. Extract this ZIP to a NEW folder.
+          4. Keep VexBridge.exe and VexArtWorker.exe in that same folder.
+          5. Do NOT reinstall the Realism or Lite model; existing model files are reused.
+          6. Run START-VEX-SELF-HEAL.cmd from this new folder.
+          7. Leave the Art Worker GUI closed for Vex-controlled renders.
 
-          IMPORTANT INSTALL
-          1. Stop the old watchdog using STOP-VEX-SELF-HEAL.cmd.
-          2. Extract this ZIP into a NEW folder.
-          3. Keep VexBridge.exe and VexArtWorker.exe together in this same folder.
-          4. Do NOT reinstall the Lite or Realism models; existing models are reused.
-          5. Start START-VEX-SELF-HEAL.cmd.
-          6. Leave VexArtWorker GUI closed for normal Vex-controlled rendering.
-             Bridge launches it headlessly only when Vex requests an image.
-
-          COMPATIBILITY
-          Existing iPhone PCArtRouter API is unchanged, so no new IPA is required
-          for the first integration test.
+          FIRST TEST
+          From the current iPhone VexNative app, ask for an image normally, e.g.
+          "generate a picture of a skinny alt woman in a pink crop top".
+          The current app already speaks the preserved Bridge art API, so no new
+          IPA is required for this first integration test.
           '@ | Set-Content -Encoding UTF8 dist/README-v0.10.7.txt
 
           Compress-Archive -Path `
