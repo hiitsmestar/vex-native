@@ -1,0 +1,60 @@
+name: Build Vex Art Memory Fix v0.10.1
+
+on:
+  pull_request:
+    branches: [ "ci/v100-vex-art-worker" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pyinstaller
+
+      - name: Source checks
+        shell: pwsh
+        run: |
+          if (!(Test-Path Tools/VexArtMemoryFix.py)) { throw "VexArtMemoryFix.py missing" }
+          python -m py_compile Tools/VexArtMemoryFix.py
+          python -c "from pathlib import Path; t=Path('Tools/VexArtMemoryFix.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.1\"' in t; assert 'AutomaticManagedPagefile' in t; assert 'Enable Windows-Managed Paging' in t; assert 'OSError 1455' in t; print('Vex Art Memory Fix source checks OK')"
+
+      - name: Build helper
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtMemoryFix `
+            Tools/VexArtMemoryFix.py
+          if (!(Test-Path dist/VexArtMemoryFix.exe)) { throw "VexArtMemoryFix.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Memory Fix v0.10.1
+          ==========================
+
+          Repairs Windows OSError 1455 at ComfyUI CheckpointLoaderSimple by enabling
+          Windows-managed paging through an explicit UAC prompt.
+
+          Run VexArtMemoryFix.exe, click Enable Windows-Managed Paging, approve UAC,
+          let the repair window finish, restart Windows, then run Vex Art Worker Render Test again.
+
+          This helper does not delete files or modify Vex cognition, models, prompts, or Bridge settings.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtMemoryFix-v0.10.1.txt
+          Compress-Archive -Path dist/VexArtMemoryFix.exe,dist/README-VexArtMemoryFix-v0.10.1.txt -DestinationPath VexArtMemoryFix-v0.10.1.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtMemoryFix-v0.10.1
+          path: VexArtMemoryFix-v0.10.1.zip
+          retention-days: 7
