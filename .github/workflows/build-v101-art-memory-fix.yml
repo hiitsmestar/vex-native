@@ -3,6 +3,8 @@ name: Build Vex Art Memory Fix v0.10.1
 on:
   push:
     branches: [ "ci/v101-art-memory-fix" ]
+  pull_request:
+    branches: [ "ci/v100-vex-art-worker" ]
   workflow_dispatch:
 
 permissions:
