@@ -80,15 +80,18 @@ jobs:
           python Tools/apply_v1091_remote_support_compile_fix.py
           python Tools/apply_v1092_cognition_recursion_hotfix.py
           python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
 
       - name: Verify Windows source and setup script
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py Tools/apply_v1093_runtime_identity_grounding.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py Tools/apply_v1093_runtime_identity_grounding.py Tools/apply_v1094_verified_runtime_fact_route.py
           python Tools/verify_v107_art_adapter.py
           Select-String -Path Bridge/vex_bridge.py -Pattern "def _cognition_capacity" -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge.py -Pattern "model_cap_billions" -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge.py -Pattern "RUNTIME COGNITION FACTS" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern '"grounding": "verified-runtime"' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern "def _runtime_fact_question" -Quiet | Out-Null
           Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
           Select-String -Path Tools/VexToolManifest.json -Pattern '"adaptive_model_tiers": true' -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
@@ -125,7 +128,7 @@ jobs:
             if (!(Test-Path (Join-Path dist $file))) { throw "$file missing" }
           }
 
-      - name: Package Windows v0.10.9 hotfix
+      - name: Package verified runtime facts build
         shell: pwsh
         run: |
           Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
@@ -134,14 +137,15 @@ jobs:
           Copy-Item Tools/VexToolManifest.json dist/VexToolManifest.json
           Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
           @'
-          VexBridge v0.10.9 - Adaptive PC Cognition Hotfix
-          ==================================================
+          VexBridge v0.10.9 - Verified Runtime Facts
+          ===========================================
 
           Field fixes:
           - Prevent adaptive cognition capacity from recursively calling itself through the general resource snapshot.
           - Correct VexBrainSetup candidate-array handling so model names remain separate.
-          - Ground PC cognition in the actual runtime model/provider/tier when Star asks implementation questions.
-          - Preserve the proven v0.10.8 art routing/state grounding and standalone Art Worker contract.
+          - Ground PC cognition in the actual runtime model/provider/tier.
+          - Answer explicit current brain/model/provider questions directly from verified Bridge runtime state before the local model can hallucinate implementation details.
+          - Preserve Vex personality for ordinary conversation and preserve the proven v0.10.8 art routing/state grounding contract.
           - No paid API or cloud inference is introduced.
 
           TEST INSTALL
@@ -164,10 +168,10 @@ jobs:
             dist/START-VEX-SELF-HEAL.cmd,`
             dist/STOP-VEX-SELF-HEAL.cmd,`
             dist/README-v0.10.9.txt `
-            -DestinationPath VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix.zip -Force
+            -DestinationPath VexBridge-v0.10.9-VerifiedRuntimeFacts.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix
-          path: VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix.zip
+          name: VexBridge-v0.10.9-VerifiedRuntimeFacts
+          path: VexBridge-v0.10.9-VerifiedRuntimeFacts.zip
           retention-days: 7
