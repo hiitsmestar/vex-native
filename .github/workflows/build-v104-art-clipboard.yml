@@ -1,0 +1,76 @@
+name: Build Vex Art Worker v0.10.4 Clipboard
+
+on:
+  push:
+    branches: [ "ci/v104-art-clipboard" ]
+  pull_request:
+    branches: [ "ci/v103-lite-art" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests pillow
+
+      - name: Apply Art Worker patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+
+      - name: Verify clipboard build
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexArtWorker.py Tools/apply_v104_art_clipboard_patch.py
+          python -c "from pathlib import Path; t=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.4\"' in t; assert 'def _prompt_paste' in t; assert 'prompt_menu.add_command(label=\"Paste\"' in t; assert '<Control-v>' in t; print('v0.10.4 clipboard checks OK')"
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Worker v0.10.4 - Clipboard UX
+          =====================================
+
+          DROP-IN ART WORKER UPDATE
+          - Keeps the v0.10.3 Lite CPU rendering path.
+          - Adds explicit Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A support in the prompt editor.
+          - Adds right-click Cut/Copy/Paste/Select All/Clear.
+          - Adds visible Paste/Copy/Select All/Clear buttons under the prompt box.
+          - Does not change Bridge, Remote Support, models, ComfyUI, or rendering parameters.
+
+          INSTALL
+          Close the old VexArtWorker.exe after any current render finishes.
+          Run this VexArtWorker.exe from its own folder, or replace only the old Art Worker EXE in the v0.10.3 folder.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtWorker-v0.10.4.txt
+          Compress-Archive -Path dist/VexArtWorker.exe,dist/README-VexArtWorker-v0.10.4.txt -DestinationPath VexArtWorker-v0.10.4-Clipboard.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtWorker-v0.10.4-Clipboard
+          path: VexArtWorker-v0.10.4-Clipboard.zip
+          retention-days: 7
