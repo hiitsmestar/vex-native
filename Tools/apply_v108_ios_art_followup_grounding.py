@@ -69,10 +69,11 @@ if marker in text and "private static func contextualPrompt" not in text:
 elif "private static func contextualPrompt" not in text:
     raise SystemExit("v0.10.8 contextualPrompt insertion marker missing")
 
-# v0.9.4.3 moved cognition networking into a nonisolated dual-node race worker.
-# Capture authoritative profile/state on MainActor, then pass only Sendable values
-# into each worker rather than trying to reach AppModel from the child task.
-race_marker = '''        // v0.9.4.3: dual-node race. Both paired PC brains are independent, so a
+# v0.9.5 Resource Director intentionally changed the earlier dual-node race into
+# primary/upstairs cognition first with utility/downstairs failover. Capture the
+# authoritative profile/state on MainActor and pass only Sendable values to the
+# nonisolated network worker, preserving that scheduling policy.
+resource_marker = '''        // v0.9.5 Resource Director: the first configured Bridge is the foreground
 '''
 context_capture = '''        let personaContext = String(app.profile.persona.prefix(6000))
         let userProfileContext = String(app.profile.userProfile.prefix(3500))
@@ -84,26 +85,42 @@ context_capture = '''        let personaContext = String(app.profile.persona.pre
         ]
 
 '''
-if race_marker in text and "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
-    text = text.replace(race_marker, context_capture + race_marker, 1)
+if resource_marker in text and "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
+    text = text.replace(resource_marker, context_capture + resource_marker, 1)
 elif "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
     raise SystemExit("v0.10.8 cognition MainActor context capture marker missing")
 
-old_worker_call = '''                    await requestReply(endpoint: endpoint, original: original, history: history)
+old_primary_call = '''            winner = await requestReply(endpoint: primary, original: original, history: history)
 '''
-new_worker_call = '''                    await requestReply(
-                        endpoint: endpoint,
-                        original: original,
-                        history: history,
-                        persona: personaContext,
-                        userProfile: userProfileContext,
-                        state: stateContext
-                    )
+new_primary_call = '''            winner = await requestReply(
+                endpoint: primary,
+                original: original,
+                history: history,
+                persona: personaContext,
+                userProfile: userProfileContext,
+                state: stateContext
+            )
 '''
-if old_worker_call in text:
-    text = text.replace(old_worker_call, new_worker_call, 1)
+if old_primary_call in text:
+    text = text.replace(old_primary_call, new_primary_call, 1)
 elif "persona: personaContext" not in text:
-    raise SystemExit("v0.10.8 cognition worker call marker missing")
+    raise SystemExit("v0.10.8 primary cognition context call marker missing")
+
+old_fallback_call = '''                if let candidate = await requestReply(endpoint: fallback, original: original, history: history) {
+'''
+new_fallback_call = '''                if let candidate = await requestReply(
+                    endpoint: fallback,
+                    original: original,
+                    history: history,
+                    persona: personaContext,
+                    userProfile: userProfileContext,
+                    state: stateContext
+                ) {
+'''
+if old_fallback_call in text:
+    text = text.replace(old_fallback_call, new_fallback_call, 1)
+elif "endpoint: fallback" not in text or text.count("persona: personaContext") < 2:
+    raise SystemExit("v0.10.8 fallback cognition context call marker missing")
 
 old_worker_sig = '''    nonisolated private static func requestReply(
         endpoint: String,
@@ -158,10 +175,14 @@ path.write_text(text, encoding="utf-8")
 for required in [
     "contextualPrompt(original, app: app)", "lets see the back view",
     "let personaContext = String(app.profile.persona.prefix(6000))",
-    '"user_profile": userProfile', '"state": state', "persona: personaContext",
+    '"user_profile": userProfile', '"state": state',
+    "v0.9.5 Resource Director", "endpoint: primary", "endpoint: fallback",
     '"back view", "rear view", "front view"',
 ]:
     if required not in text:
         raise SystemExit(f"missing v0.10.8 iOS marker: {required}")
+
+if text.count("persona: personaContext") < 2:
+    raise SystemExit("missing v0.10.8 iOS context on both primary and fallback cognition calls")
 
 print("Applied v0.10.8 iOS art follow-up routing and PC cognition context")
