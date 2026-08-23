@@ -1,0 +1,158 @@
+name: Build Vex Lite Art v0.10.3
+
+on:
+  push:
+    branches: [ "ci/v103-lite-art" ]
+  pull_request:
+    branches: [ "ci/v102-art-safe-lowmem" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests pillow beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp
+
+      - name: Build patched Bridge source chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+
+      - name: Prepare Remote Support and Art Worker
+        shell: pwsh
+        run: |
+          python Tools/fix_v099_remote_support_syntax.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+
+      - name: Verify source
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexArtMemoryFix.py Tools/apply_v103_lite_art_patch.py Tools/verify_v103_build.py
+          python Tools/verify_v103_build.py
+
+      - name: Build Vex Bridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+
+      - name: Build Remote Support and tools
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexArtMemoryFix Tools/VexArtMemoryFix.py
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          @'
+          Vex Lite Art v0.10.3
+          =====================
+
+          PURPOSE
+          - Gives low-memory CPU nodes a usable lightweight local art path.
+          - CPU-only machines no longer attempt RealVisXL/SDXL when the Lite model is absent.
+          - VexArtWorker offers Install Lite Model and verifies the free checkpoint with SHA256.
+          - Lite model source: Comfy-Org Stable Diffusion 1.5 archive, CreativeML OpenRAIL-M.
+          - Download size is about 2.13 GB and is stored in the existing local ComfyUI checkpoints folder.
+
+          CPU LITE PROFILE
+          - 320x320 / 4 steps deterministic test.
+          - Conservative 320x512 portrait, 512x320 landscape, or 384x384 square at 8 steps.
+          - SD1.5-style CFG instead of the low CFG used by the Lightning SDXL checkpoint.
+          - ComfyUI stays below-normal priority and in low-memory CPU mode.
+
+          MONITORING
+          - Art Worker writes cheap progress stages: starting, loading_model, sampling, saving, done/error.
+          - Remote Support art_worker_status uses --quick-status and no longer imports Torch just to monitor a render.
+
+          FIRST TEST
+          1. Keep Bridge/watchdog OFF. Leave Remote Support active.
+          2. Open VexArtWorker.exe.
+          3. Click Install Lite Model once. The download is ~2.13 GB and SHA256-verified.
+          4. When it says installed, click Render Test once.
+          5. After isolated render succeeds, start the included Bridge/self-heal and test again.
+
+          Existing RealVisXL remains installed for a stronger future node; this build does not delete it.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-Lite-Art-v0.10.3.txt
+
+          Compress-Archive `
+            -Path dist/VexBridge.exe,dist/VexArtWorker.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/VexArtMemoryFix.exe,dist/VexBridgeWatchdog.ps1,dist/START-VEX-SELF-HEAL.cmd,dist/STOP-VEX-SELF-HEAL.cmd,dist/README-Vex-Lite-Art-v0.10.3.txt `
+            -DestinationPath Vex-Lite-Art-v0.10.3.zip -Force
+          if (!(Test-Path Vex-Lite-Art-v0.10.3.zip)) { throw "Vex-Lite-Art-v0.10.3.zip missing" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Lite-Art-v0.10.3
+          path: Vex-Lite-Art-v0.10.3.zip
+          retention-days: 7
