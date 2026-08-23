@@ -3,6 +3,8 @@ name: Build Vex Lite Art v0.10.3
 on:
   push:
     branches: [ "ci/v103-lite-art" ]
+  pull_request:
+    branches: [ "ci/v102-art-safe-lowmem" ]
   workflow_dispatch:
 
 permissions:
