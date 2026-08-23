@@ -1,0 +1,1 @@
+Trigger PR validation after base workflow registration.
