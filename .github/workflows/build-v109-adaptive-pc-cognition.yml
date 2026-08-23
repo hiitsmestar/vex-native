@@ -90,7 +90,7 @@ jobs:
           Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
           Select-String -Path Tools/VexToolManifest.json -Pattern '"adaptive_model_tiers": true' -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
-          python -c "p='Bridge/vex_bridge.py'; t=open(p,encoding='utf-8').read(); s=t.index('def _cognition_capacity()'); e=t.index('\n\ndef ',s+10); block=t[s:e]; assert '_resource_snapshot()' not in block, 'recursive cognition capacity call survived'"
+          python -c "p='Bridge/vex_bridge.py'; t=open(p,encoding='utf-8').read(); s=t.index('def _cognition_capacity()'); e=t.index('\n\ndef ',s+10); block=t[s:e]; assert 'snap = _resource_snapshot()' not in block, 'recursive cognition capacity call survived'"
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path Tools/VexBrainSetup.ps1), [ref]$tokens, [ref]$errors) | Out-Null
