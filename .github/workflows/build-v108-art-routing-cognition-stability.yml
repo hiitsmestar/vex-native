@@ -3,6 +3,9 @@ name: Build VexNative v0.10.8 Art Routing + Cognition Stability
 on:
   push:
     branches: [ "ci/v108-art-routing-cognition-stability" ]
+  pull_request:
+    branches: [ "ci/v107-art-worker-adapter" ]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
