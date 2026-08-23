@@ -98,8 +98,13 @@ new_start = '''def _start_process(args: list[str]) -> subprocess.Popen:
 '''
 if old_start in art:
     art = art.replace(old_start, new_start, 1)
-elif 'env.setdefault("OMP_NUM_THREADS", "2")' not in art:
-    raise SystemExit("v0.10.8 Art Worker low-priority marker missing")
+else:
+    # v0.10.2 already introduced the better adaptive 2-4 thread limiter plus
+    # BELOW_NORMAL priority. Preserve it: stronger nodes may use four threads,
+    # while the tested dual-core/8 GB node stays at two.
+    existing_limits = ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "BELOW_NORMAL_PRIORITY_CLASS"]
+    if not all(marker in art for marker in existing_limits):
+        raise SystemExit("v0.10.8 Art Worker low-priority marker missing")
 
 if 'VERSION = "0.10.7"' in art:
     art = art.replace('VERSION = "0.10.7"', 'VERSION = "0.10.8"', 1)
