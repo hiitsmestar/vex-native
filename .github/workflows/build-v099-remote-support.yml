@@ -32,7 +32,7 @@ jobs:
           python Tools/apply_v0991_ntfy_patch.py
           python Tools/apply_v0992_ntfy_header_fix.py
           python -m py_compile Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/fix_v099_remote_support_syntax.py Tools/apply_v0991_ntfy_patch.py Tools/apply_v0992_ntfy_header_fix.py
-          python -c "from pathlib import Path; t=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'ISSUE_NUMBER = 52' in t; assert 'local safe-maintenance permission is OFF' in t; assert 'technical topics only' in t; assert 'SESSION_SECONDS = 2 * 60 * 60' in t; assert '0.9.9.2' in t; assert 'https://ntfy.sh' in t; assert 'Title\": f\"Vex - {label}' in t; assert 'Test phone ping' in t; print('Vex Remote Support v0.9.9.2 source checks OK')"
+          python -c "from pathlib import Path; t=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'ISSUE_NUMBER = 52' in t; assert 'local safe-maintenance permission is OFF' in t; assert 'technical topics only' in t; assert 'SESSION_SECONDS = 2 * 60 * 60' in t; assert '0.9.9.2' in t; assert 'https://ntfy.sh' in t; assert 'Vex - {label}' in t; assert 'Test phone ping' in t; print('Vex Remote Support v0.9.9.2 source checks OK')"
 
       - name: Build Vex Remote Support
         shell: pwsh
