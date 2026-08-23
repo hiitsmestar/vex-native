@@ -77,11 +77,12 @@ jobs:
           python Tools/apply_v1071_adapter_coordination_fix.py
           python Tools/apply_v108_windows_cognition_render_stability.py
           python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
 
       - name: Verify Windows source and setup script
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py
           python Tools/verify_v107_art_adapter.py
           Select-String -Path Bridge/vex_bridge.py -Pattern "def _cognition_capacity" -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge.py -Pattern "model_cap_billions" -Quiet | Out-Null
