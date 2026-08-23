@@ -3,6 +3,8 @@ name: Build Vex Art Safe Low-Memory v0.10.2
 on:
   push:
     branches: [ "ci/v102-art-safe-lowmem" ]
+  pull_request:
+    branches: [ "ci/v100-vex-art-worker" ]
   workflow_dispatch:
 
 permissions:
