@@ -78,17 +78,19 @@ jobs:
           python Tools/apply_v108_windows_cognition_render_stability.py
           python Tools/apply_v109_adaptive_pc_cognition.py
           python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
 
       - name: Verify Windows source and setup script
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py
           python Tools/verify_v107_art_adapter.py
           Select-String -Path Bridge/vex_bridge.py -Pattern "def _cognition_capacity" -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge.py -Pattern "model_cap_billions" -Quiet | Out-Null
           Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
           Select-String -Path Tools/VexToolManifest.json -Pattern '"adaptive_model_tiers": true' -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
+          python -c "p='Bridge/vex_bridge.py'; t=open(p,encoding='utf-8').read(); s=t.index('def _cognition_capacity()'); e=t.index('\n\ndef ',s+10); block=t[s:e]; assert '_resource_snapshot()' not in block, 'recursive cognition capacity call survived'"
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path Tools/VexBrainSetup.ps1), [ref]$tokens, [ref]$errors) | Out-Null
@@ -121,7 +123,7 @@ jobs:
             if (!(Test-Path (Join-Path dist $file))) { throw "$file missing" }
           }
 
-      - name: Package Windows v0.10.9
+      - name: Package Windows v0.10.9 hotfix
         shell: pwsh
         run: |
           Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
@@ -130,23 +132,21 @@ jobs:
           Copy-Item Tools/VexToolManifest.json dist/VexToolManifest.json
           Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
           @'
-          VexBridge v0.10.9 - Adaptive PC Cognition
-          ===========================================
+          VexBridge v0.10.9 - Adaptive PC Cognition Hotfix
+          ==================================================
 
-          This is the PC-side cognition follow-up to the proven v0.10.8 art/state build.
-          - Actual local RAM, available RAM, logical CPU count and sanitized GPU/VRAM are measured.
-          - Ollama model choice is hardware-tiered instead of one-size-fits-all.
-          - Runtime memory/art pressure can step cognition down when a smaller installed model exists.
-          - Existing v0.10.8 art follow-up routing, persona/state grounding and low-priority rendering remain intact.
-          - VexRemoteSupport can publish sanitized cognition fit telemetry during an opt-in support session.
-          - VexBrainSetup.ps1 uses local/open models only; no paid API or cloud inference is introduced.
+          Field fixes:
+          - Prevent adaptive cognition capacity from recursively calling itself through the general resource snapshot.
+          - Correct VexBrainSetup candidate-array handling so model names remain separate.
+          - Preserve the proven v0.10.8 art routing/state grounding and standalone Art Worker contract.
+          - No paid API or cloud inference is introduced.
 
           TEST INSTALL
-          1. Keep the proven v0.10.8 folder as rollback; do not delete it.
+          1. Keep the previous folders as rollback.
           2. Stop self-heal from the currently active Bridge folder.
           3. Extract this ZIP into a NEW folder.
           4. Start self-heal from the new folder.
-          5. Run VexBrainSetup.ps1 only when ready to let the hardware probe choose/download the best safe local model tier.
+          5. Existing Ollama models are reused; do not redownload qwen3:1.7b if it is already installed.
           '@ | Set-Content -Encoding UTF8 dist/README-v0.10.9.txt
 
           Compress-Archive -Path `
@@ -161,10 +161,10 @@ jobs:
             dist/START-VEX-SELF-HEAL.cmd,`
             dist/STOP-VEX-SELF-HEAL.cmd,`
             dist/README-v0.10.9.txt `
-            -DestinationPath VexBridge-v0.10.9-Adaptive-PC-Cognition.zip -Force
+            -DestinationPath VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexBridge-v0.10.9-Adaptive-PC-Cognition
-          path: VexBridge-v0.10.9-Adaptive-PC-Cognition.zip
+          name: VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix
+          path: VexBridge-v0.10.9-Adaptive-PC-Cognition-Hotfix.zip
           retention-days: 7
