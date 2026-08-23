@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import json
 
 
 def replace_function(text: str, name: str, replacement: str) -> str:
@@ -15,11 +16,6 @@ def replace_function(text: str, name: str, replacement: str) -> str:
 bridge_path = Path("Bridge/vex_bridge.py")
 text = bridge_path.read_text(encoding="utf-8")
 
-# ---------------------------------------------------------------------------
-# Hardware-aware cognition. Fit is based on real local headroom, not a hardcoded
-# assumption that every PC should run the same model. The phone still owns its
-# tiny offline fallback; this only selects among PC-local Ollama models.
-# ---------------------------------------------------------------------------
 choose_marker = "def _choose_ollama_model() -> str | None:\n"
 choose_at = text.find(choose_marker)
 if choose_at < 0:
@@ -60,8 +56,6 @@ def _cognition_gpu_profile() -> dict:
     except Exception:
         pass
 
-    # Generic Windows fallback. AdapterRAM can be imperfect on some drivers, so
-    # it is treated as a conservative hint rather than permission to overcommit.
     try:
         import subprocess
         ps = (
@@ -109,9 +103,6 @@ def _cognition_capacity() -> dict:
     vram_gb = int(gpu.get("vram_mb") or 0) / 1024.0
     art_running = bool(snap.get("art_running"))
 
-    # Conservative tiers leave room for Windows, Bridge, Remote Support and
-    # separately launched workers. A larger model is never selected merely
-    # because its file could technically fit in RAM.
     if (vram_gb >= 11.0 and total_gb >= 24.0) or (total_gb >= 32.0 and cpu >= 12):
         tier, max_billions = "max", 14.0
     elif (vram_gb >= 7.0 and total_gb >= 16.0) or (total_gb >= 20.0 and cpu >= 8):
@@ -171,9 +162,6 @@ def _cognition_model_rank(name: str, max_billions: float) -> tuple:
     elif "llama" in low:
         family = 2
     known = size is not None
-    # Prefer the largest fitting Qwen-family model. Unknown-size models are kept
-    # behind known fitting models so a strangely named local model cannot bypass
-    # the hardware cap.
     return (1 if fits else 0, family, 1 if known else 0, size or 0.0)
 
 '''
@@ -199,9 +187,6 @@ new_choose = r'''def _choose_ollama_model() -> str | None:
     if fitting:
         return sorted(fitting, key=lambda n: _cognition_model_rank(n, max_billions), reverse=True)[0]
 
-    # Compatibility fallback: never make cognition disappear merely because an
-    # older install has only a 4B model on a lite node. Use the smallest known
-    # installed model and surface the mismatch in /llm/status for the next setup.
     known = [(float(_model_billions(n)), n) for n in oversized if _model_billions(n) is not None]
     if known:
         known.sort(key=lambda pair: pair[0])
@@ -210,21 +195,14 @@ new_choose = r'''def _choose_ollama_model() -> str | None:
 '''
 text = replace_function(text, "_choose_ollama_model", new_choose)
 
-# Enrich /llm/status with sanitized fit telemetry. No hostname, paths, tokens,
-# user names, or file contents are exposed.
 status_start = text.find('        if parsed.path == "/llm/status":\n')
 status_end = text.find('        if parsed.path in ("/", "/status"):\n', status_start)
 if status_start < 0 or status_end < 0:
     raise SystemExit("llm status route markers missing")
 new_status = '''        if parsed.path == "/llm/status":\n            model = _choose_ollama_model()\n            capacity = _cognition_capacity()\n            selected_size = _model_billions(model or "")\n            self._json(200, {\n                "ok": model is not None,\n                "model": model,\n                "available_models": _ollama_models(),\n                "provider": "local-pc",\n                "tier": capacity.get("tier"),\n                "pressure": capacity.get("pressure"),\n                "selected_billions": selected_size,\n                "hardware": {\n                    "memory_total_gb": capacity.get("memory_total_gb"),\n                    "memory_available_gb": capacity.get("memory_available_gb"),\n                    "cpu_logical": capacity.get("cpu_logical"),\n                    "gpu_name": capacity.get("gpu_name"),\n                    "gpu_vram_gb": capacity.get("gpu_vram_gb"),\n                    "gpu_source": capacity.get("gpu_source"),\n                    "art_running": capacity.get("art_running"),\n                    "model_cap_billions": capacity.get("max_billions"),\n                },\n            })\n            return\n\n'''
 text = text[:status_start] + new_status + text[status_end:]
-
 bridge_path.write_text(text, encoding="utf-8")
 
-# ---------------------------------------------------------------------------
-# Remote Support: publish only the same sanitized cognition fit telemetry so an
-# active opt-in session can answer "what can this node actually run?".
-# ---------------------------------------------------------------------------
 remote_path = Path("Tools/VexRemoteSupport.py")
 remote = remote_path.read_text(encoding="utf-8")
 remote = remote.replace('VERSION = "0.9.9"', 'VERSION = "0.10.9"', 1)
@@ -235,8 +213,6 @@ if old_cognition not in remote:
 remote = remote.replace(old_cognition, new_cognition, 1)
 remote_path.write_text(remote, encoding="utf-8")
 
-# Build version markers for the next package without touching the proven 0.10.8
-# branch or its artifacts.
 full_path = Path("Bridge/vex_bridge_full.py")
 full = full_path.read_text(encoding="utf-8")
 if 'VERSION = "0.10.8"' not in full:
@@ -250,10 +226,21 @@ if 'VERSION = "0.10.8"' in art:
     art = art.replace('VERSION = "0.10.8"', 'VERSION = "0.10.9"', 1)
 art_path.write_text(art, encoding="utf-8")
 
+manifest_path = Path("Tools/VexToolManifest.json")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["version"] = "0.10.9"
+for tool in manifest.get("tools", []):
+    if tool.get("id") == "cognition":
+        tool["adaptive_model_tiers"] = True
+        tool["hardware_grounded_selection"] = True
+        tool["pressure_aware_stepdown"] = True
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
 checks = {
     bridge_path: ["def _cognition_capacity()", "model_cap_billions", "def _cognition_gpu_profile()", "def _model_billions("],
     remote_path: ['VERSION = "0.10.9"', '"hardware": {', '"tier": str(llm.get("tier")'],
     full_path: ['VERSION = "0.10.9"'],
+    manifest_path: ['"version": "0.10.9"', '"adaptive_model_tiers": true'],
 }
 for target, markers in checks.items():
     data = target.read_text(encoding="utf-8")
