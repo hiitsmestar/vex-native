@@ -69,28 +69,78 @@ if marker in text and "private static func contextualPrompt" not in text:
 elif "private static func contextualPrompt" not in text:
     raise SystemExit("v0.10.8 contextualPrompt insertion marker missing")
 
-old_body = '''            let body: [String: Any] = [
-                "message": String(original.prefix(5000)),
-                "history": history
-            ]
+# v0.9.4.3 moved cognition networking into a nonisolated dual-node race worker.
+# Capture authoritative profile/state on MainActor, then pass only Sendable values
+# into each worker rather than trying to reach AppModel from the child task.
+race_marker = '''        // v0.9.4.3: dual-node race. Both paired PC brains are independent, so a
 '''
-new_body = '''            let stateContext: [String: String] = [
-                "mood": app.profile.state.mood,
-                "outfit": app.profile.state.outfit,
-                "location": app.profile.state.location,
-                "scene": app.profile.state.scene
-            ]
-            let body: [String: Any] = [
-                "message": String(original.prefix(5000)),
-                "history": history,
-                "persona": String(app.profile.persona.prefix(6000)),
-                "user_profile": String(app.profile.userProfile.prefix(3500)),
-                "state": stateContext
-            ]
+context_capture = '''        let personaContext = String(app.profile.persona.prefix(6000))
+        let userProfileContext = String(app.profile.userProfile.prefix(3500))
+        let stateContext: [String: String] = [
+            "mood": app.profile.state.mood,
+            "outfit": app.profile.state.outfit,
+            "location": app.profile.state.location,
+            "scene": app.profile.state.scene
+        ]
+
+'''
+if race_marker in text and "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
+    text = text.replace(race_marker, context_capture + race_marker, 1)
+elif "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
+    raise SystemExit("v0.10.8 cognition MainActor context capture marker missing")
+
+old_worker_call = '''                    await requestReply(endpoint: endpoint, original: original, history: history)
+'''
+new_worker_call = '''                    await requestReply(
+                        endpoint: endpoint,
+                        original: original,
+                        history: history,
+                        persona: personaContext,
+                        userProfile: userProfileContext,
+                        state: stateContext
+                    )
+'''
+if old_worker_call in text:
+    text = text.replace(old_worker_call, new_worker_call, 1)
+elif "persona: personaContext" not in text:
+    raise SystemExit("v0.10.8 cognition worker call marker missing")
+
+old_worker_sig = '''    nonisolated private static func requestReply(
+        endpoint: String,
+        original: String,
+        history: [[String: String]]
+    ) async -> CognitionAttempt? {
+'''
+new_worker_sig = '''    nonisolated private static func requestReply(
+        endpoint: String,
+        original: String,
+        history: [[String: String]],
+        persona: String,
+        userProfile: String,
+        state: [String: String]
+    ) async -> CognitionAttempt? {
+'''
+if old_worker_sig in text:
+    text = text.replace(old_worker_sig, new_worker_sig, 1)
+elif "userProfile: String" not in text or "state: [String: String]" not in text:
+    raise SystemExit("v0.10.8 cognition worker signature marker missing")
+
+old_body = '''        let body: [String: Any] = [
+            "message": String(original.prefix(5000)),
+            "history": history
+        ]
+'''
+new_body = '''        let body: [String: Any] = [
+            "message": String(original.prefix(5000)),
+            "history": history,
+            "persona": persona,
+            "user_profile": userProfile,
+            "state": state
+        ]
 '''
 if old_body in text:
     text = text.replace(old_body, new_body, 1)
-elif '"persona": String(app.profile.persona.prefix(6000))' not in text:
+elif '"user_profile": userProfile' not in text:
     raise SystemExit("v0.10.8 cognition context body marker missing")
 
 old_exclusion = '''            "picture", " image", "camera", "open youtube", "open google", "open browser",
@@ -107,7 +157,8 @@ path.write_text(text, encoding="utf-8")
 
 for required in [
     "contextualPrompt(original, app: app)", "lets see the back view",
-    '"persona": String(app.profile.persona.prefix(6000))', '"state": stateContext',
+    "let personaContext = String(app.profile.persona.prefix(6000))",
+    '"user_profile": userProfile', '"state": state', "persona: personaContext",
     '"back view", "rear view", "front view"',
 ]:
     if required not in text:
