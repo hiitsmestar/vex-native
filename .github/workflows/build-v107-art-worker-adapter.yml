@@ -1,0 +1,183 @@
+name: Build VexBridge v0.10.7 Art Worker Adapter
+
+on:
+  push:
+    branches: [ "ci/v107-art-worker-adapter" ]
+  pull_request:
+    branches: [ "ci/v106-smart-prompt" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+
+      - name: Apply Art Worker and adapter chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+
+      - name: Verify adapter source
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/apply_v107_art_worker_adapter_patch.py Tools/apply_v1071_adapter_coordination_fix.py Tools/verify_v107_art_adapter.py
+          python Tools/verify_v107_art_adapter.py
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Build Vex Doctor
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexDoctor `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            Tools/VexDoctor.py
+          if (!(Test-Path dist/VexDoctor.exe)) { throw "VexDoctor.exe missing" }
+
+      - name: Build Vex Toolbox
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexToolbox `
+            --hidden-import tkinter `
+            Tools/VexToolbox.py
+          if (!(Test-Path dist/VexToolbox.exe)) { throw "VexToolbox.exe missing" }
+
+      - name: Package v0.10.7
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/VexToolManifest.json dist/VexToolManifest.json
+          @'
+          VexBridge v0.10.7 - Standalone Art Worker Adapter
+          =================================================
+
+          VexBridge now brokers the existing iPhone art API to the independent
+          VexArtWorker.exe instead of owning ComfyUI itself.
+
+          - Existing /art/generate, /art/status and /art/result contract preserved.
+          - VexArtWorker.exe exclusively owns ComfyUI/render lifecycle.
+          - Smart Prompt and the installed Realism/Lite checkpoints are reused.
+          - Bridge releases the local Ollama model before a requested art job on
+            the low-memory node and asynchronously rewarms cognition afterwards.
+          - Bridge self-heal does not restart ComfyUI behind Art Worker's back.
+          - No paid API, cloud renderer, or required subscription.
+
+          INSTALL
+          1. Finish/stop any current manual Art Worker render and close its GUI.
+          2. Run STOP-VEX-SELF-HEAL.cmd from the old Bridge folder.
+          3. Extract this ZIP to a NEW folder.
+          4. Keep VexBridge.exe and VexArtWorker.exe in that same folder.
+          5. Do NOT reinstall the Realism or Lite model; existing model files are reused.
+          6. Run START-VEX-SELF-HEAL.cmd from this new folder.
+          7. Leave the Art Worker GUI closed for Vex-controlled renders.
+
+          FIRST TEST
+          From the current iPhone VexNative app, ask for an image normally, e.g.
+          "generate a picture of a skinny alt woman in a pink crop top".
+          The current app already speaks the preserved Bridge art API, so no new
+          IPA is required for this first integration test.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.10.7.txt
+
+          Compress-Archive -Path `
+            dist/VexBridge.exe,`
+            dist/VexArtWorker.exe,`
+            dist/VexDoctor.exe,`
+            dist/VexToolbox.exe,`
+            dist/VexToolManifest.json,`
+            dist/VexBridgeWatchdog.ps1,`
+            dist/START-VEX-SELF-HEAL.cmd,`
+            dist/STOP-VEX-SELF-HEAL.cmd,`
+            dist/README-v0.10.7.txt `
+            -DestinationPath VexBridge-v0.10.7-ArtWorker-Adapter.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.10.7-ArtWorker-Adapter
+          path: VexBridge-v0.10.7-ArtWorker-Adapter.zip
+          retention-days: 7
