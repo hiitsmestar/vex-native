@@ -12,7 +12,10 @@ if old_sig in bridge:
 elif new_sig not in bridge:
     raise SystemExit("v0.10.8 cognition signature marker missing")
 
-old_system = '    safe_messages = [{"role": "system", "content": VEX_COGNITION_SYSTEM}]\n'
+# v0.9.7's Learning Engine already builds system_text from VEX_COGNITION_SYSTEM
+# plus source-aware retained research. Ground the richer v0.10.8 persona/state on
+# top of that assembled text instead of looking for the older pre-learning line.
+old_system = '    safe_messages = [{"role": "system", "content": system_text}]\n'
 new_system = r'''    context = context if isinstance(context, dict) else {}
     persona = str(context.get("persona") or "").strip()[:6000]
     user_profile = str(context.get("user_profile") or "").strip()[:3500]
@@ -33,7 +36,7 @@ Ordinary consensual adult girlfriend banter, fashion, lingerie/swimwear, rear/fr
 
 Never claim a tool action happened unless a confirmed tool result exists. Never fabricate memories, research, clothing, physical facts, or actions. If CURRENT VEX STATE conflicts with an earlier model guess, CURRENT VEX STATE wins.
 """
-    dynamic_system = VEX_COGNITION_SYSTEM + "\n\n" + grounding
+    dynamic_system = system_text + "\n\n" + grounding
     if persona:
         dynamic_system += "\n\nVEX PERSONA\n" + persona
     if user_profile:
@@ -122,7 +125,7 @@ for tool in manifest.get("tools", []):
 manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 checks = {
-    bridge_path: ["PC COGNITION GROUNDING", "CURRENT VEX STATE", "_ollama_chat(history, message, context)", "BELOW_NORMAL_PRIORITY_CLASS"],
+    bridge_path: ["PC COGNITION GROUNDING", "CURRENT VEX STATE", "_ollama_chat(history, message, context)", "BELOW_NORMAL_PRIORITY_CLASS", "RETAINED RESEARCH MEMORY"],
     art_path: ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "BELOW_NORMAL_PRIORITY_CLASS", 'VERSION = "0.10.8"'],
     full_path: ['VERSION = "0.10.8"'],
 }
