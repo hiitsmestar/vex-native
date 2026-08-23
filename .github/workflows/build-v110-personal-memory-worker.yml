@@ -1,0 +1,308 @@
+name: Build VexNative v0.11 Personal Memory Worker
+
+on:
+  push:
+    branches: [ "ci/v110-personal-memory-worker" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+
+      - name: Apply Art, cognition, and memory chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+
+      - name: Verify source and persistent memory behavior
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/VexMemoryWorker.py Tools/apply_v110_personal_memory_worker.py Tools/apply_v110_package_versions.py
+          python Tools/verify_v107_art_adapter.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern "PERSISTENT PERSONAL MEMORY RETRIEVAL" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern '/memory/status' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern '/memory/sync' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'VexMemoryWorker.exe' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern '"memory": "persistent-pc"' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.11.0"' -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.11.0"' -Quiet | Out-Null
+          Select-String -Path Tools/VexToolManifest.json -Pattern '"id": "memory"' -Quiet | Out-Null
+          Select-String -Path Tools/VexToolManifest.json -Pattern '"version": "0.11.0"' -Quiet | Out-Null
+
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "VexMemorySmoke"
+          New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+          $seed = Join-Path $env:RUNNER_TEMP "memory-smoke.json"
+          @'
+          {
+            "memories": [
+              {"canonical_key":"smoke:relationship","subject":"vex-star","kind":"relationship","text":"Star and Vex are established adult girlfriends.","authority":100,"confidence":1.0,"importance":1.0}
+            ],
+            "messages": [
+              {"id":"smoke-u","role":"user","content":"Remember our glitter goblin test.","created_at":1770000000},
+              {"id":"smoke-a","role":"assistant","content":"I remember the glitter goblin test.","created_at":1770000001}
+            ]
+          }
+          '@ | Set-Content -Encoding UTF8 $seed
+          python Tools/VexMemoryWorker.py --import $seed
+          python -c "import sys; sys.path.insert(0,'Tools'); import VexMemoryWorker as m; r=m.DB.search('girlfriends glitter goblin',8,4); assert any('girlfriends' in x['text'] for x in r['memories']); assert any('glitter goblin' in x['text'] for x in r['episodes']); print(m.DB.stats())"
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Build modular workers
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexArtWorker --collect-all requests --collect-all PIL Tools/VexArtWorker.py
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --hidden-import tkinter --hidden-import sqlite3 Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexToolbox --hidden-import tkinter Tools/VexToolbox.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests --hidden-import tkinter Tools/VexRemoteSupport.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexMemoryWorker Tools/VexMemoryWorker.py
+          foreach ($file in @("VexArtWorker.exe","VexDoctor.exe","VexToolbox.exe","VexRemoteSupport.exe","VexMemoryWorker.exe")) {
+            if (!(Test-Path (Join-Path dist $file))) { throw "$file missing" }
+          }
+
+      - name: Package Windows v0.11.0
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/VexToolManifest.json dist/VexToolManifest.json
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          @'
+          VexBridge v0.11.0 - Persistent Personal Memory
+          =================================================
+
+          - Adds VexMemoryWorker.exe as a separate local-only persistent memory service.
+          - Stores durable structured memories, raw chat history, and retrievable conversation episodes in SQLite.
+          - Retrieves a small relevant slice for each PC-brain turn instead of stuffing the entire history into qwen3.
+          - Preserves source/provenance and keeps raw model output separate from authoritative facts.
+          - Newer explicit/current corrections can replace stale conflicting structured memories.
+          - iPhone v0.11 can copy its existing local VexNative profile and chat history into this PC memory incrementally.
+          - Private Star/Vex continuity seeds are intentionally NOT stored in this public repository artifact.
+          - No paid API or cloud inference is introduced.
+
+          TEST INSTALL
+          1. Keep the currently working v0.10.9 folder as rollback.
+          2. Stop self-heal from the active v0.10.9 folder.
+          3. Extract this package into a NEW folder.
+          4. Start self-heal from the new folder.
+          5. Do not rerun Brain Setup; existing qwen3:1.7b is reused.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.0.txt
+
+          Compress-Archive -Path `
+            dist/VexBridge.exe,`
+            dist/VexArtWorker.exe,`
+            dist/VexDoctor.exe,`
+            dist/VexToolbox.exe,`
+            dist/VexRemoteSupport.exe,`
+            dist/VexMemoryWorker.exe,`
+            dist/VexBrainSetup.ps1,`
+            dist/VexToolManifest.json,`
+            dist/VexBridgeWatchdog.ps1,`
+            dist/START-VEX-SELF-HEAL.cmd,`
+            dist/STOP-VEX-SELF-HEAL.cmd,`
+            dist/README-v0.11.0.txt `
+            -DestinationPath VexBridge-v0.11.0-Personal-Memory.zip -Force
+          Expand-Archive VexBridge-v0.11.0-Personal-Memory.zip -DestinationPath verify-package -Force
+          foreach ($file in @("VexBridge.exe","VexMemoryWorker.exe","VexArtWorker.exe","VexRemoteSupport.exe","START-VEX-SELF-HEAL.cmd","README-v0.11.0.txt")) {
+            if (!(Test-Path (Join-Path verify-package $file))) { throw "packaged $file missing" }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.11.0-Personal-Memory
+          path: VexBridge-v0.11.0-Personal-Memory.zip
+          retention-days: 7
+
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply iOS patch chain
+        run: |
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
+          python3 Tools/apply_v098_ios_time_grounding_patch.py
+          python3 Tools/apply_v107_art_ios_adapter_patch.py
+          python3 Tools/apply_v108_ios_art_followup_grounding.py
+          python3 Tools/apply_v110_ios_memory_sync.py
+          grep -q 'syncPersonalMemory(endpoint: primary' VexNative/ContentView.swift
+          grep -q 'memorySyncCountPrefix' VexNative/ContentView.swift
+          grep -q '/memory/sync' VexNative/ContentView.swift
+
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+
+      - name: Build unsigned app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=110 \
+            MARKETING_VERSION=0.11.0 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add permissions and verify
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local memory, and local tools." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your commands and conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become private chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "110"
+
+      - name: Package IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.0-personal-memory.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.0-personal-memory.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.0-Personal-Memory
+          path: VexNative-v0.11.0-personal-memory.ipa
+          retention-days: 7
+
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.0-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
