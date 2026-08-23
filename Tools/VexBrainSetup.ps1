@@ -112,25 +112,23 @@ function Get-ModelCandidates {
     param([pscustomobject]$Hardware, [string]$Requested)
 
     if ($Requested -and $Requested.ToLowerInvariant() -ne "auto") {
-        return ,@($Requested)
+        return @($Requested)
     }
 
     $ram = [double]$Hardware.ram_gb
     $cpu = [int]$Hardware.cpu_logical
     $vram = [double]$Hardware.gpu_vram_gb
 
-    # These thresholds are intentionally conservative: model-file fit alone is
-    # not enough. Vex must leave room for Windows and separately launched tools.
     if (($vram -ge 11.0 -and $ram -ge 24.0) -or ($ram -ge 32.0 -and $cpu -ge 12)) {
-        return ,@("qwen3:14b", "qwen3:8b", "qwen3:4b", "qwen3:1.7b")
+        return @("qwen3:14b", "qwen3:8b", "qwen3:4b", "qwen3:1.7b")
     }
     if (($vram -ge 7.0 -and $ram -ge 16.0) -or ($ram -ge 20.0 -and $cpu -ge 8)) {
-        return ,@("qwen3:8b", "qwen3:4b", "qwen3:1.7b")
+        return @("qwen3:8b", "qwen3:4b", "qwen3:1.7b")
     }
     if ($ram -ge 9.0) {
-        return ,@("qwen3:4b", "qwen3:1.7b")
+        return @("qwen3:4b", "qwen3:1.7b")
     }
-    return ,@("qwen3:1.7b", "qwen3:4b")
+    return @("qwen3:1.7b")
 }
 
 function Get-InstalledModels {
