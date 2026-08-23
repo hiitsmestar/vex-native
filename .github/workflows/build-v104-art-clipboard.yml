@@ -36,8 +36,8 @@ jobs:
       - name: Verify clipboard build
         shell: pwsh
         run: |
-          python -m py_compile Tools/VexArtWorker.py Tools/apply_v104_art_clipboard_patch.py
-          python -c "from pathlib import Path; t=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.4\"' in t; assert 'def _prompt_paste' in t; assert 'prompt_menu.add_command(label=\"Paste\"' in t; assert '<Control-v>' in t; print('v0.10.4 clipboard checks OK')"
+          python -m py_compile Tools/VexArtWorker.py Tools/apply_v104_art_clipboard_patch.py Tools/verify_v104_clipboard.py
+          python Tools/verify_v104_clipboard.py
 
       - name: Build Vex Art Worker
         shell: pwsh
