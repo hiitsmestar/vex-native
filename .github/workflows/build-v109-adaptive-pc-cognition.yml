@@ -79,14 +79,16 @@ jobs:
           python Tools/apply_v109_adaptive_pc_cognition.py
           python Tools/apply_v1091_remote_support_compile_fix.py
           python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
 
       - name: Verify Windows source and setup script
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py Tools/apply_v1093_runtime_identity_grounding.py
           python Tools/verify_v107_art_adapter.py
           Select-String -Path Bridge/vex_bridge.py -Pattern "def _cognition_capacity" -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge.py -Pattern "model_cap_billions" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern "RUNTIME COGNITION FACTS" -Quiet | Out-Null
           Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
           Select-String -Path Tools/VexToolManifest.json -Pattern '"adaptive_model_tiers": true' -Quiet | Out-Null
           Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
@@ -138,6 +140,7 @@ jobs:
           Field fixes:
           - Prevent adaptive cognition capacity from recursively calling itself through the general resource snapshot.
           - Correct VexBrainSetup candidate-array handling so model names remain separate.
+          - Ground PC cognition in the actual runtime model/provider/tier when Star asks implementation questions.
           - Preserve the proven v0.10.8 art routing/state grounding and standalone Art Worker contract.
           - No paid API or cloud inference is introduced.
 
