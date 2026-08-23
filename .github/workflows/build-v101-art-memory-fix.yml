@@ -1,0 +1,72 @@
+name: Build Vex Art Memory Fix v0.10.1
+
+on:
+  push:
+    branches: [ "ci/v101-art-memory-fix" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pyinstaller
+
+      - name: Source checks
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexArtMemoryFix.py
+          python -c "from pathlib import Path; t=Path('Tools/VexArtMemoryFix.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.1\"' in t; assert 'AutomaticManagedPagefile' in t; assert 'Enable Windows-Managed Paging' in t; assert 'OSError 1455' in t; print('Vex Art Memory Fix source checks OK')"
+
+      - name: Build helper
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtMemoryFix `
+            Tools/VexArtMemoryFix.py
+          if (!(Test-Path dist/VexArtMemoryFix.exe)) { throw "VexArtMemoryFix.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Memory Fix v0.10.1
+          ==========================
+
+          PURPOSE
+          Repairs the Windows virtual-memory condition that caused:
+          OSError 1455 - The paging file is too small for this operation to complete
+          at ComfyUI CheckpointLoaderSimple.
+
+          USE
+          1. Run VexArtMemoryFix.exe.
+          2. Click Enable Windows-Managed Paging.
+          3. Approve the Windows UAC prompt.
+          4. Let the blue repair window say Done.
+          5. Restart Windows.
+          6. Start Vex Bridge/self-heal again if Windows does not auto-start them.
+          7. Open Vex Art Worker v0.10.0 and run Render Test again.
+
+          SAFETY
+          This helper only changes Windows AutomaticManagedPagefile to true.
+          It does not delete files, change Vex prompts/models, or alter Bridge configuration.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtMemoryFix-v0.10.1.txt
+
+          Compress-Archive `
+            -Path dist/VexArtMemoryFix.exe,dist/README-VexArtMemoryFix-v0.10.1.txt `
+            -DestinationPath VexArtMemoryFix-v0.10.1.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtMemoryFix-v0.10.1
+          path: VexArtMemoryFix-v0.10.1.zip
+          retention-days: 7
