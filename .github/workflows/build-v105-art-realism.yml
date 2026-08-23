@@ -1,0 +1,81 @@
+name: Build Vex Art Worker v0.10.5 Realism
+
+on:
+  push:
+    branches: [ "ci/v105-art-realism" ]
+  pull_request:
+    branches: [ "ci/v104-art-clipboard" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests pillow
+
+      - name: Apply Art Worker patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+
+      - name: Verify realism build
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexArtWorker.py Tools/apply_v105_art_realism_patch.py Tools/verify_v105_realism.py
+          python Tools/verify_v105_realism.py
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Worker v0.10.5 - Realism CPU Model
+          ==========================================
+
+          DROP-IN ART WORKER UPDATE
+          - Keeps v0.10.4 clipboard controls.
+          - Adds an optional 2.13 GB photorealistic SD1.5 SafeTensors checkpoint installer.
+          - Verifies the downloaded model against its published SHA256.
+          - Automatically prefers the realism checkpoint on CPU after it is installed.
+          - Uses DPM++ 2M Karras, 12 steps, CFG 6.5 for realism renders.
+          - Adds a stronger negative prompt against illustration/anime, oversized breasts, cropping and missing limbs.
+          - Keeps the existing Lite model as fallback.
+          - Does not modify Bridge, cognition, Remote Support or the installed ComfyUI core.
+
+          INSTALL
+          Close the old VexArtWorker.exe after any render finishes.
+          Run this VexArtWorker.exe from its own folder, or replace only the old Art Worker EXE.
+          Click Install Realism Model once. The existing Lite model remains available as fallback.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtWorker-v0.10.5.txt
+          Compress-Archive -Path dist/VexArtWorker.exe,dist/README-VexArtWorker-v0.10.5.txt -DestinationPath VexArtWorker-v0.10.5-Realism.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtWorker-v0.10.5-Realism
+          path: VexArtWorker-v0.10.5-Realism.zip
+          retention-days: 7
