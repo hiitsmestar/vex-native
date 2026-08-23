@@ -33,8 +33,8 @@ jobs:
           python Tools/apply_v0992_ntfy_header_fix.py
           python Tools/apply_v100_art_remote_patch.py
           python Tools/apply_v100_art_worker_hotfix.py
-          python -m py_compile Tools/VexArtWorker.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/apply_v100_art_remote_patch.py Tools/apply_v100_art_worker_hotfix.py
-          python -c "from pathlib import Path; a=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); r=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.0\"' in a; assert 'sampler_name\": \"euler' in a; assert 'Render Test' in a; assert 'VERSION = \"0.10.0\"' in r; assert 'art_render_test' in r; assert 'art_worker_status' in r; print('Vex Art Worker v0.10.0 source checks OK')"
+          python -m py_compile Tools/VexArtWorker.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/apply_v100_art_remote_patch.py Tools/apply_v100_art_worker_hotfix.py Tools/verify_v100_build.py
+          python Tools/verify_v100_build.py
 
       - name: Build Vex Art Worker
         shell: pwsh
