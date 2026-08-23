@@ -26,7 +26,12 @@ jobs:
         run: |
           if (!(Test-Path Tools/VexArtMemoryFix.py)) { throw "VexArtMemoryFix.py missing" }
           python -m py_compile Tools/VexArtMemoryFix.py
-          python -c "from pathlib import Path; t=Path('Tools/VexArtMemoryFix.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.1\"' in t; assert 'AutomaticManagedPagefile' in t; assert 'Enable Windows-Managed Paging' in t; assert 'OSError 1455' in t; print('Vex Art Memory Fix source checks OK')"
+          $src = Get-Content Tools/VexArtMemoryFix.py -Raw
+          $markers = @('VERSION = "0.10.1"','AutomaticManagedPagefile','Enable Windows-Managed Paging','OSError 1455')
+          foreach ($marker in $markers) {
+            if (-not $src.Contains($marker)) { throw "Missing source marker: $marker" }
+          }
+          Write-Host "Vex Art Memory Fix source checks OK"
 
       - name: Build helper
         shell: pwsh
