@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+path = Path("VexNative/ContentView.swift")
+text = path.read_text(encoding="utf-8")
+
+old_direct = '''        let directVisualRequests = [
+            "show me a picture", "show me a pic", "show me a photo", "show me an image",
+            "send me a picture", "send me a pic", "send me a photo", "send me an image"
+        ]
+        if directVisualRequests.contains(where: { lower.contains($0) }) { return true }
+        return createWords.contains(where: { lower.contains($0) }) &&
+            imageWords.contains(where: { lower.contains($0) })
+'''
+new_direct = '''        let directVisualRequests = [
+            "show me a picture", "show me a pic", "show me a photo", "show me an image",
+            "send me a picture", "send me a pic", "send me a photo", "send me an image",
+            "show me the back view", "show me a back view", "show me the rear view", "show me a rear view",
+            "show me the front view", "show me a front view", "lets see the back view", "let's see the back view",
+            "lets see the rear view", "let's see the rear view", "lets see the front view", "let's see the front view"
+        ]
+        if directVisualRequests.contains(where: { lower.contains($0) }) { return true }
+        let viewWords = ["back view", "rear view", "front view", "side view", "rear-view", "back-view"]
+        if createWords.contains(where: { lower.contains($0) }) && viewWords.contains(where: { lower.contains($0) }) {
+            return true
+        }
+        return createWords.contains(where: { lower.contains($0) }) &&
+            imageWords.contains(where: { lower.contains($0) })
+'''
+if old_direct in text:
+    text = text.replace(old_direct, new_direct, 1)
+elif "lets see the back view" not in text:
+    raise SystemExit("v0.10.8 direct visual routing marker missing")
+
+old_submit = '''            guard let submitted = await submit(prompt: original, orientation: orientation, endpoint: endpoint) else {
+'''
+new_submit = '''            let renderPrompt = contextualPrompt(original, app: app)
+            guard let submitted = await submit(prompt: renderPrompt, orientation: orientation, endpoint: endpoint) else {
+'''
+if old_submit in text:
+    text = text.replace(old_submit, new_submit, 1)
+elif "contextualPrompt(original, app: app)" not in text:
+    raise SystemExit("v0.10.8 contextual prompt call marker missing")
+
+marker = '''    private static func requestedOrientation(_ lower: String) -> String {
+'''
+helper = r'''    private static func contextualPrompt(_ original: String, app: AppModel) -> String {
+        let lower = normalize(original)
+        let followupTokens = [
+            "back view", "rear view", "front view", "side view", "same outfit", "that outfit",
+            "same clothes", "that look", "same girl", "same woman", "from behind", "turn around"
+        ]
+        guard followupTokens.contains(where: { lower.contains($0) }) else {
+            return String(original.prefix(7000))
+        }
+        let priorArt = app.profile.messages.reversed().first(where: { message in
+            guard message.role == .user else { return false }
+            return isArtRequest(normalize(message.content))
+        })?.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let priorArt, !priorArt.isEmpty, priorArt != original else {
+            return String(original.prefix(7000))
+        }
+        return String((priorArt + ". Follow-up view instruction: " + original).prefix(7000))
+    }
+
+'''
+if marker in text and "private static func contextualPrompt" not in text:
+    text = text.replace(marker, helper + marker, 1)
+elif "private static func contextualPrompt" not in text:
+    raise SystemExit("v0.10.8 contextualPrompt insertion marker missing")
+
+# v0.9.5 Resource Director intentionally changed the earlier dual-node race into
+# primary/upstairs cognition first with utility/downstairs failover. Capture the
+# authoritative profile/state on MainActor and pass only Sendable values to the
+# nonisolated network worker, preserving that scheduling policy.
+resource_marker = '''        // v0.9.5 Resource Director: the first configured Bridge is the foreground
+'''
+context_capture = '''        let personaContext = String(app.profile.persona.prefix(6000))
+        let userProfileContext = String(app.profile.userProfile.prefix(3500))
+        let stateContext: [String: String] = [
+            "mood": app.profile.state.mood,
+            "outfit": app.profile.state.outfit,
+            "location": app.profile.state.location,
+            "scene": app.profile.state.scene
+        ]
+
+'''
+if resource_marker in text and "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
+    text = text.replace(resource_marker, context_capture + resource_marker, 1)
+elif "let personaContext = String(app.profile.persona.prefix(6000))" not in text:
+    raise SystemExit("v0.10.8 cognition MainActor context capture marker missing")
+
+old_primary_call = '''            winner = await requestReply(endpoint: primary, original: original, history: history)
+'''
+new_primary_call = '''            winner = await requestReply(
+                endpoint: primary,
+                original: original,
+                history: history,
+                persona: personaContext,
+                userProfile: userProfileContext,
+                state: stateContext
+            )
+'''
+if old_primary_call in text:
+    text = text.replace(old_primary_call, new_primary_call, 1)
+elif "persona: personaContext" not in text:
+    raise SystemExit("v0.10.8 primary cognition context call marker missing")
+
+old_fallback_call = '''                if let candidate = await requestReply(endpoint: fallback, original: original, history: history) {
+'''
+new_fallback_call = '''                if let candidate = await requestReply(
+                    endpoint: fallback,
+                    original: original,
+                    history: history,
+                    persona: personaContext,
+                    userProfile: userProfileContext,
+                    state: stateContext
+                ) {
+'''
+if old_fallback_call in text:
+    text = text.replace(old_fallback_call, new_fallback_call, 1)
+elif "endpoint: fallback" not in text or text.count("persona: personaContext") < 2:
+    raise SystemExit("v0.10.8 fallback cognition context call marker missing")
+
+old_worker_sig = '''    nonisolated private static func requestReply(
+        endpoint: String,
+        original: String,
+        history: [[String: String]]
+    ) async -> CognitionAttempt? {
+'''
+new_worker_sig = '''    nonisolated private static func requestReply(
+        endpoint: String,
+        original: String,
+        history: [[String: String]],
+        persona: String,
+        userProfile: String,
+        state: [String: String]
+    ) async -> CognitionAttempt? {
+'''
+if old_worker_sig in text:
+    text = text.replace(old_worker_sig, new_worker_sig, 1)
+elif "userProfile: String" not in text or "state: [String: String]" not in text:
+    raise SystemExit("v0.10.8 cognition worker signature marker missing")
+
+old_body = '''        let body: [String: Any] = [
+            "message": String(original.prefix(5000)),
+            "history": history
+        ]
+'''
+new_body = '''        let body: [String: Any] = [
+            "message": String(original.prefix(5000)),
+            "history": history,
+            "persona": persona,
+            "user_profile": userProfile,
+            "state": state
+        ]
+'''
+if old_body in text:
+    text = text.replace(old_body, new_body, 1)
+elif '"user_profile": userProfile' not in text:
+    raise SystemExit("v0.10.8 cognition context body marker missing")
+
+old_exclusion = '''            "picture", " image", "camera", "open youtube", "open google", "open browser",
+'''
+new_exclusion = '''            "picture", " image", "camera", "back view", "rear view", "front view", "side view",
+            "from behind", "turn around", "open youtube", "open google", "open browser",
+'''
+if old_exclusion in text:
+    text = text.replace(old_exclusion, new_exclusion, 1)
+elif '"back view", "rear view", "front view"' not in text:
+    raise SystemExit("v0.10.8 cognition art exclusion marker missing")
+
+path.write_text(text, encoding="utf-8")
+
+for required in [
+    "contextualPrompt(original, app: app)", "lets see the back view",
+    "let personaContext = String(app.profile.persona.prefix(6000))",
+    '"user_profile": userProfile', '"state": state',
+    "v0.9.5 Resource Director", "endpoint: primary", "endpoint: fallback",
+    '"back view", "rear view", "front view"',
+]:
+    if required not in text:
+        raise SystemExit(f"missing v0.10.8 iOS marker: {required}")
+
+if text.count("persona: personaContext") < 2:
+    raise SystemExit("missing v0.10.8 iOS context on both primary and fallback cognition calls")
+
+print("Applied v0.10.8 iOS art follow-up routing and PC cognition context")

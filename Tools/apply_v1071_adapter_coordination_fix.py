@@ -12,9 +12,10 @@ def _adapter_release_cognition_memory() -> bool:
     """Release the local Ollama model immediately before a Bridge-owned art job.
 
     v0.10.2 correctly prevented an independent/manual Art Worker from evicting
-    cognition behind Bridge's back. In v0.10.7 the request originates *through*
-    Bridge, so Bridge is again the resource coordinator and may deliberately free
-    the 4B model on low-memory nodes, then rewarm it after the worker exits.
+    cognition behind Bridge's back. In the standalone-adapter generation the
+    request originates through Bridge, so Bridge is again the resource coordinator
+    and may deliberately free the 4B model on low-memory nodes, then rewarm it
+    after the worker exits.
     """
     global _ART_COGNITION_WAS_RELEASED
     try:
@@ -44,11 +45,13 @@ if old not in text:
     raise SystemExit("adapter cognition-release call marker missing")
 text = text.replace(old, new, 1)
 
-# Report the actual bundle version rather than v0.10.2 compatibility text.
-text = text.replace('"version": "0.10.2"', '"version": "0.10.7"')
+# This patch is reused by the v0.10.8 build chain, so report the actual bundle
+# version that the subsequent verifier expects instead of leaving a stale 0.10.7.
+text = text.replace('"version": "0.10.2"', '"version": "0.10.8"')
+text = text.replace('"version": "0.10.7"', '"version": "0.10.8"')
 
-for required in ["def _adapter_release_cognition_memory", "_ART_COGNITION_WAS_RELEASED = True", '"version": "0.10.7"']:
+for required in ["def _adapter_release_cognition_memory", "_ART_COGNITION_WAS_RELEASED = True", '"version": "0.10.8"']:
     if required not in text:
-        raise SystemExit(f"v0.10.7.1 coordination marker missing: {required}")
+        raise SystemExit(f"v0.10.8 coordination marker missing: {required}")
 path.write_text(text, encoding="utf-8")
-print("Applied v0.10.7 Bridge-controlled art/cognition coordination fix")
+print("Applied v0.10.8 Bridge-controlled art/cognition coordination fix")
