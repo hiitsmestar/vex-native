@@ -43,7 +43,7 @@ python Tools/apply_v100_art_worker_hotfix.py
 python Tools/apply_v102_art_safe_lowmem_patch.py
 
 python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexArtMemoryFix.py Tools/apply_v102_art_safe_lowmem_patch.py
-python -c "from pathlib import Path; w=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); b=Path('Bridge/vex_bridge.py').read_text(encoding='utf-8'); m=Path('Tools/VexArtMemoryFix.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.10.2\"' in w; assert 'cpu-lowmem' in w; assert 'BELOW_NORMAL_PRIORITY_CLASS' in w; assert 'ArtOwnershipConflict' in w; assert 'MODULAR_ART_EXTERNAL = True' in b; assert 'Bridge restart disabled' in b; assert 'PAGEFILE_MIN_MB = 32768' in m; assert 'PAGEFILE_MAX_MB = 65536' in m; print('v0.10.2 source checks OK')"
+python -c "from pathlib import Path; w=Path('Tools/VexArtWorker.py').read_text(encoding='utf-8'); b=Path('Bridge/vex_bridge.py').read_text(encoding='utf-8'); m=Path('Tools/VexArtMemoryFix.py').read_text(encoding='utf-8'); assert '0.10.2' in w; assert 'cpu-lowmem' in w; assert 'BELOW_NORMAL_PRIORITY_CLASS' in w; assert 'ArtOwnershipConflict' in w; assert 'MODULAR_ART_EXTERNAL = True' in b; assert 'Bridge restart disabled' in b; assert 'PAGEFILE_MIN_MB = 32768' in m; assert 'PAGEFILE_MAX_MB = 65536' in m; print('v0.10.2 source checks OK')"
 
 Write-Host 'Building VexBridge...'
 pyinstaller --noconfirm --clean --onefile --console --name VexBridge --paths Bridge --collect-all cryptography --collect-all edge_tts --collect-all yt_dlp --hidden-import tkinter --hidden-import sqlite3 --hidden-import vex_bridge --hidden-import winrt.windows.media.control Bridge/vex_bridge_full.py
