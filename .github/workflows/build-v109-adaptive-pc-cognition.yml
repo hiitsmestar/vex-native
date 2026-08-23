@@ -1,0 +1,177 @@
+name: Build VexNative v0.10.9 Adaptive PC Cognition
+
+on:
+  push:
+    branches: [ "ci/v109-adaptive-pc-cognition" ]
+  pull_request:
+    branches: [ "ci/v108-art-routing-cognition-stability" ]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+
+      - name: Apply Art Worker and cognition chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+
+      - name: Verify Windows source and setup script
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexArtWorker.py Tools/VexDoctor.py Tools/VexToolbox.py Tools/VexRemoteSupport.py Tools/apply_v109_adaptive_pc_cognition.py Tools/apply_v1091_remote_support_compile_fix.py Tools/apply_v1092_cognition_recursion_hotfix.py Tools/apply_v1093_runtime_identity_grounding.py Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/verify_v107_art_adapter.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern "def _cognition_capacity" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern "model_cap_billions" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern "RUNTIME COGNITION FACTS" -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern '"grounding": "verified-runtime"' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern "def _runtime_fact_question" -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
+          Select-String -Path Tools/VexToolManifest.json -Pattern '"adaptive_model_tiers": true' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge_full.py -Pattern 'VERSION = "0.10.9"' -Quiet | Out-Null
+          python -c "p='Bridge/vex_bridge.py'; t=open(p,encoding='utf-8').read(); s=t.index('def _cognition_capacity()'); e=t.index('\n\ndef ',s+10); block=t[s:e]; assert 'snap = _resource_snapshot()' not in block, 'recursive cognition capacity call survived'"
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path Tools/VexBrainSetup.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Format-List | Out-String | Write-Error; throw "VexBrainSetup.ps1 parse failed" }
+
+      - name: Build VexBridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Build modular workers
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexArtWorker --collect-all requests --collect-all PIL Tools/VexArtWorker.py
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --hidden-import tkinter --hidden-import sqlite3 Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexToolbox --hidden-import tkinter Tools/VexToolbox.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests --hidden-import tkinter Tools/VexRemoteSupport.py
+          foreach ($file in @("VexArtWorker.exe","VexDoctor.exe","VexToolbox.exe","VexRemoteSupport.exe")) {
+            if (!(Test-Path (Join-Path dist $file))) { throw "$file missing" }
+          }
+
+      - name: Package verified runtime facts build
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog.ps1 dist/VexBridgeWatchdog.ps1
+          Copy-Item Tools/START-VEX-SELF-HEAL.cmd dist/START-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/STOP-VEX-SELF-HEAL.cmd dist/STOP-VEX-SELF-HEAL.cmd
+          Copy-Item Tools/VexToolManifest.json dist/VexToolManifest.json
+          Copy-Item Tools/VexBrainSetup.ps1 dist/VexBrainSetup.ps1
+          @'
+          VexBridge v0.10.9 - Verified Runtime Facts
+          ===========================================
+
+          Field fixes:
+          - Prevent adaptive cognition capacity from recursively calling itself through the general resource snapshot.
+          - Correct VexBrainSetup candidate-array handling so model names remain separate.
+          - Ground PC cognition in the actual runtime model/provider/tier.
+          - Answer explicit current brain/model/provider questions directly from verified Bridge runtime state before the local model can hallucinate implementation details.
+          - Preserve Vex personality for ordinary conversation and preserve the proven v0.10.8 art routing/state grounding contract.
+          - No paid API or cloud inference is introduced.
+
+          TEST INSTALL
+          1. Keep the previous folders as rollback.
+          2. Stop self-heal from the currently active Bridge folder.
+          3. Extract this ZIP into a NEW folder.
+          4. Start self-heal from the new folder.
+          5. Existing Ollama models are reused; do not redownload qwen3:1.7b if it is already installed.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.10.9.txt
+
+          Compress-Archive -Path `
+            dist/VexBridge.exe,`
+            dist/VexArtWorker.exe,`
+            dist/VexDoctor.exe,`
+            dist/VexToolbox.exe,`
+            dist/VexRemoteSupport.exe,`
+            dist/VexBrainSetup.ps1,`
+            dist/VexToolManifest.json,`
+            dist/VexBridgeWatchdog.ps1,`
+            dist/START-VEX-SELF-HEAL.cmd,`
+            dist/STOP-VEX-SELF-HEAL.cmd,`
+            dist/README-v0.10.9.txt `
+            -DestinationPath VexBridge-v0.10.9-VerifiedRuntimeFacts.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-v0.10.9-VerifiedRuntimeFacts
+          path: VexBridge-v0.10.9-VerifiedRuntimeFacts.zip
+          retention-days: 7
