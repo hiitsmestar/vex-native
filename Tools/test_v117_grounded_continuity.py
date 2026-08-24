@@ -68,6 +68,7 @@ def test_activity_route(bridge) -> None:
 
 def test_streaming_preemption(bridge) -> None:
     original_requests = sys.modules.get("requests")
+    original_capacity = bridge._cognition_capacity
     requests = types.SimpleNamespace()
     sys.modules["requests"] = requests
 
@@ -85,6 +86,7 @@ def test_streaming_preemption(bridge) -> None:
             return None
 
     try:
+        bridge._cognition_capacity = lambda: {"tier": "balanced", "pressure": "normal"}
         requests.post = lambda *args, **kwargs: FinishedResponse()
         response = bridge._background_ollama_post({"model": "fake", "messages": []}, timeout=20)
         assert response.json()["message"]["content"] == "hello"
@@ -128,6 +130,7 @@ def test_streaming_preemption(bridge) -> None:
         bridge._foreground_cognition_exit()
         assert not bridge._FOREGROUND_COGNITION_ACTIVE.is_set()
     finally:
+        bridge._cognition_capacity = original_capacity
         if original_requests is None:
             sys.modules.pop("requests", None)
         else:
@@ -154,7 +157,7 @@ def test_source_targets() -> None:
 
     remote = REMOTE_PATH.read_text(encoding="utf-8")
     for marker in (
-        'VERSION = "0.11.7.1"',
+        'VERSION = "0.11.7.',
         "def initiative_public(",
         "def adaptive_public(",
         'action == "initiative_status"',
