@@ -10,8 +10,6 @@ old = '''def fetch_comments() -> list[dict]:
 '''
 new = '''def fetch_comments() -> list[dict]:
     # Issue #52 is a long-lived diagnostic relay and can exceed one GitHub API page.
-    # The old implementation permanently stopped seeing new VEXCMD comments after
-    # comment 100 even though the session UI still said active.
     comments: list[dict] = []
     for page in range(1, 21):
         data = gh_api([
@@ -28,8 +26,6 @@ if old not in text:
     raise SystemExit("Remote Support pagination anchor missing")
 text = text.replace(old, new, 1)
 
-# Include local personal-memory health in sanitized snapshots. Counts only; no
-# private memory contents are ever published to the public relay.
 old_collect = '''    maintenance = bridge_get("/maintenance/status", timeout=20)
     snap = {
 '''
@@ -77,10 +73,21 @@ new_action = '''    if action == "memory_status":
 if old_action in text:
     text = text.replace(old_action, new_action, 1)
 
-text = text.replace('VERSION = "0.9.9"', 'VERSION = "0.11.1"', 1)
+text = text.replace('VERSION = "0.9.9"', 'VERSION = "0.11.2"', 1)
+text = text.replace('VERSION = "0.11.1"', 'VERSION = "0.11.2"', 1)
+
+# Some historical patch/build paths can collapse the Windows raw-string root into
+# invalid source (r"C:\"). Normalize that single line before compiling.
+lines = text.splitlines()
+for index, line in enumerate(lines):
+    if "usage = shutil.disk_usage(Path.home().anchor" in line:
+        indent = line[:len(line) - len(line.lstrip())]
+        lines[index] = indent + 'usage = shutil.disk_usage(Path.home().anchor or "C:\\\\")'
+text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
 path.write_text(text, encoding="utf-8")
 compile(text, str(path), "exec")
-for marker in ["page={page}", 'action == "memory_status"', '"memory": {', 'VERSION = "0.11.1"']:
+for marker in ["page={page}", 'action == "memory_status"', '"memory": {', 'VERSION = "0.11.2"']:
     if marker not in text:
-        raise SystemExit(f"missing v0.11.1 relay marker: {marker}")
-print("Applied v0.11.1 Remote Support pagination + memory telemetry hotfix")
+        raise SystemExit(f"missing relay marker: {marker}")
+print("Applied v0.11.2 Remote Support pagination + memory telemetry hotfix")
