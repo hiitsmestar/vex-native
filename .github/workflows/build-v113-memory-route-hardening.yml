@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.5 Remote Relay Pagination Hotfix
+name: Build VexNative v0.11.7.6 Generic Recall Recovery
 
 on:
   push:
@@ -95,14 +95,15 @@ jobs:
           python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
           python Tools/apply_v1174_isolated_lite_learning.py
           python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
 
-      - name: Verify v0.11.7.5 Remote Support hotfix
+      - name: Verify v0.11.7.6 generic recall recovery
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/apply_v1174_isolated_lite_learning.py Tools/apply_v1175_remote_relay_pagination.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py Tools/test_v1174_isolated_lite_learning.py Tools/test_v1175_remote_relay_pagination.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/apply_v1174_isolated_lite_learning.py Tools/apply_v1175_remote_relay_pagination.py Tools/apply_v1176_generic_recall_recovery.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py Tools/test_v1174_isolated_lite_learning.py Tools/test_v1175_remote_relay_pagination.py Tools/test_v1176_generic_recall_recovery.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
-          if (-not $src.Contains('"version": "0.11.7.4"')) { throw "v0.11.7.4 Bridge version marker missing" }
+          if (-not $src.Contains('"version": "0.11.7.6"')) { throw "v0.11.7.6 Bridge version marker missing" }
           if (-not $src.Contains('_FOREGROUND_COGNITION_ACTIVE')) { throw "foreground cognition event missing" }
           if (-not $src.Contains('def _foreground_cognition_enter(')) { throw "foreground arrival lifecycle missing" }
           if (-not $src.Contains('def _background_ollama_post(')) { throw "cancellable background inference missing" }
@@ -113,8 +114,8 @@ jobs:
           if (-not $src.Contains('verified-recent-self-activity-v117')) { throw "self-activity grounding marker missing" }
           if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_events')) { throw "initiative journal missing" }
           if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "idle initiative loop missing" }
-          if (-not $src.Contains('verified-personal-memory-v1174')) { throw "authoritative personal recall marker missing" }
-          if (-not $src.Contains('verified-personal-memory-unavailable-v1174')) { throw "truthful personal recall miss marker missing" }
+          if (-not $src.Contains('verified-personal-memory-v1176')) { throw "authoritative personal recall marker missing" }
+          if (-not $src.Contains('verified-personal-memory-unavailable-v1176')) { throw "truthful personal recall miss marker missing" }
           if (-not $src.Contains('HISTORICAL STAR-SUPPLIED EXCERPTS')) { throw "generated episode filtering missing" }
           if (-not $src.Contains('foreground-reserved-lite')) { throw "lite foreground reservation missing" }
           if (-not $src.Contains('parsed.path == "/cognition/coordination"')) { throw "coordination telemetry route missing" }
@@ -127,6 +128,8 @@ jobs:
           if (-not $src.Contains('def _initiative_scheduler_loop(')) { throw "isolated initiative scheduler missing" }
           if (-not $src.Contains('name="VexAutonomousImprovement"')) { throw "autonomy worker thread missing" }
           if (-not $src.Contains('name="VexInitiativeScheduler"')) { throw "initiative worker thread missing" }
+          if (-not $src.Contains('"ok", "okay", "actually", "really", "honestly"')) { throw "conversational recall normalization missing" }
+          if (-not $src.Contains('{"query": "", "limit": 12}')) { throw "generic authoritative facts query missing" }
           if (-not $remote.Contains('VERSION = "0.11.7.5"')) { throw "Remote Support version missing" }
           if (-not $remote.Contains('def initiative_public(')) { throw "sanitized initiative telemetry missing" }
           if (-not $remote.Contains('def adaptive_public(')) { throw "sanitized adaptive telemetry missing" }
@@ -146,34 +149,43 @@ jobs:
           python Tools/test_v1173_grounded_natural_recall_lite_learning.py
           python Tools/test_v1174_isolated_lite_learning.py
           python Tools/test_v1175_remote_relay_pagination.py
-          Write-Host "verified issue pagination, sanitized Memory Worker telemetry, and v0.11.7.4 Bridge compatibility"
+          python Tools/test_v1176_generic_recall_recovery.py
+          Write-Host "verified generic conversational recall, focused-topic preservation, and authoritative-only rendering"
 
-      - name: Build Remote Support hotfix
+      - name: Build Bridge hotfix
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed `
-            --name VexRemoteSupport `
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
             --hidden-import tkinter `
-            Tools/VexRemoteSupport.py
-          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
 
-      - name: Package v0.11.7.5
+      - name: Package v0.11.7.6
         shell: pwsh
         run: |
           @'
-          VexNative Remote Support v0.11.7.5 - Relay Pagination Hotfix
-          ============================================================
-          - Reads every page of the long-lived GitHub relay so commands remain visible after issue #52 exceeds 100 comments.
-          - Restores sanitized Memory Worker version/count/FTS telemetry without publishing personal memory content.
-          - Retains bounded adaptive_run verification and resilient two-hour support-session retry behavior.
-          - Replaces VexRemoteSupport.exe only. Keep VexBridge v0.11.7.4, Memory Worker v0.11.2/database, and iPhone app v0.11.1 untouched.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.5.txt
-          Compress-Archive -Path dist/VexRemoteSupport.exe,dist/README-v0.11.7.5.txt -DestinationPath VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip -Force
-          Expand-Archive VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
+          VexNative Bridge v0.11.7.6 - Generic Conversational Recall Recovery
+          ===================================================================
+          - Treats ordinary framing such as "okay," "actually," and pet names as conversation, not fake memory topics.
+          - Broad recall requests fetch the highest-ranked authoritative /facts instead of searching for filler words.
+          - Focused questions still preserve their real topic and reject unrelated facts.
+          - Keeps the v0.11.7.4 foreground priority and isolated learning workers unchanged.
+          - Replaces VexBridge.exe only. Keep Remote Support v0.11.7.5, Memory Worker v0.11.2/database, and iPhone app v0.11.1 untouched.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.6.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.7.6.txt -DestinationPath VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip -Force
+          Expand-Archive VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination
-          path: VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip
+          name: VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery
+          path: VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip
           retention-days: 7

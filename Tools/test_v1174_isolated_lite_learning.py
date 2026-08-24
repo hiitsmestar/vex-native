@@ -184,9 +184,9 @@ def test_remote_support_can_force_and_verify_without_private_content() -> None:
 def test_v1174_source_guards() -> None:
     source = BRIDGE_PATH.read_text(encoding="utf-8")
     remote = REMOTE_PATH.read_text(encoding="utf-8")
-    assert '"version": "0.11.7.4"' in source
-    assert "verified-personal-memory-v1174" in source
-    assert "verified-personal-memory-unavailable-v1174" in source
+    assert any(f'"version": "0.11.7.{n}"' in source for n in (4, 6))
+    assert any(f"verified-personal-memory-v117{n}" in source for n in (4, 6))
+    assert any(f"verified-personal-memory-unavailable-v117{n}" in source for n in (4, 6))
     assert any(f'VERSION = "0.11.7.{n}"' in remote for n in (4, 5))
     assert 'result = _adaptive_worker_cycle(force=True)' in source
     assert 'action == "adaptive_run"' in remote

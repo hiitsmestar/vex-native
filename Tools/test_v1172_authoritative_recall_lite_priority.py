@@ -178,8 +178,8 @@ def test_source_routes_cannot_fall_through_to_qwen() -> None:
     personal = personal[:personal.index("if _runtime_fact_question(message):")]
 
     assert handler.index("if _personal_memory_fact_question(message):") < handler.index("result = _ollama_chat(")
-    assert any(f'"grounding": "verified-personal-memory-v117{n}"' in personal for n in (3, 4))
-    assert any(f'"grounding": "verified-personal-memory-unavailable-v117{n}"' in personal for n in (3, 4))
+    assert any(f'"grounding": "verified-personal-memory-v117{n}"' in personal for n in (3, 4, 6))
+    assert any(f'"grounding": "verified-personal-memory-unavailable-v117{n}"' in personal for n in (3, 4, 6))
     assert "self._json(503" not in personal
     assert "not going to fill the gap with a guess" in personal
     assert 'parsed.path == "/cognition/coordination"' in source
