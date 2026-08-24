@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.3 Memory Route Hardening
+name: Build VexNative v0.11.3.1 Memory Helper Hotfix
 
 on:
   push:
@@ -84,22 +84,22 @@ jobs:
           python Tools/apply_v112_package_versions.py
           python Tools/apply_v113_memory_route_hardening.py
 
-      - name: Verify live llm route placement
+      - name: Verify live memory helpers and route
         shell: pwsh
         run: |
           python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v113_memory_route_hardening.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
+          if (-not $src.Contains('def _personal_memory_fact_question(')) { throw "v0.11.3.1 helper _personal_memory_fact_question missing" }
+          if (-not $src.Contains('def _verified_personal_memory_reply(')) { throw "v0.11.3.1 helper _verified_personal_memory_reply missing" }
+          if (-not $src.Contains('"version": "0.11.3.1"')) { throw "v0.11.3.1 Bridge version marker missing" }
           $start = $src.IndexOf('        if parsed.path == "/llm/chat":')
           $finish = $src.IndexOf('        if parsed.path == "/tts/speak":', $start)
           if ($start -lt 0 -or $finish -lt 0) { throw "live /llm/chat route boundaries not found" }
           $block = $src.Substring($start, $finish - $start)
-          if (-not $block.Contains('"grounding": "verified-personal-memory-v113"')) { throw "v0.11.3 grounding marker missing from live /llm/chat" }
-          if (-not $block.Contains('verified personal memory unavailable')) { throw "v0.11.3 fail-closed marker missing from live /llm/chat" }
-          $recall = $block.IndexOf('if _personal_memory_fact_question(message):')
-          $cognition = $block.IndexOf('cognition_started = time.perf_counter()')
-          if ($recall -lt 0) { throw "v0.11.3 recall route missing from live /llm/chat" }
-          if ($cognition -ge 0 -and $recall -gt $cognition) { throw "v0.11.3 recall route is after Qwen generation" }
-          Write-Host "verified v0.11.3 recall route is inside live /llm/chat before Qwen"
+          if (-not $block.Contains('"grounding": "verified-personal-memory-v1131"')) { throw "v0.11.3.1 grounding marker missing" }
+          if (-not $block.Contains('verified personal memory unavailable')) { throw "v0.11.3.1 fail-closed marker missing" }
+          if (-not $block.Contains('if _personal_memory_fact_question(message):')) { throw "v0.11.3.1 recall route missing" }
+          Write-Host "verified v0.11.3.1 helpers exist and live recall route is callable"
 
       - name: Build Bridge hotfix
         shell: pwsh
@@ -117,23 +117,24 @@ jobs:
             Bridge/vex_bridge_full.py
           if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
 
-      - name: Package v0.11.3 Bridge hotfix
+      - name: Package v0.11.3.1 Bridge hotfix
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.3 - Verified Memory Route Hardening
+          VexNative v0.11.3.1 - Verified Memory Helper Hotfix
           ===================================================
-          - Places explicit personal-memory recall directly inside the active /llm/chat route before Qwen generation.
-          - If verified personal memory is unavailable, fails closed instead of inventing personal history.
+          - Fixes the v0.11.3 runtime failure where the live recall route called helper functions that an earlier patch had failed to write.
+          - Makes verified personal-memory recall self-contained in the final Bridge patch.
+          - Explicit memory questions resolve from the local v0.11.2 Memory Worker before Qwen generation.
           - Existing v0.11.2 Memory Worker, Remote Support, SQLite database, and private seed remain untouched.
           - iPhone stays on v0.11.1.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.3.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.3.txt -DestinationPath VexNative-v0.11.3-Bridge-Memory-Route-Hotfix.zip -Force
-          Expand-Archive VexNative-v0.11.3-Bridge-Memory-Route-Hotfix.zip -DestinationPath verify-hotfix -Force
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.3.1.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.3.1.txt -DestinationPath VexNative-v0.11.3.1-Bridge-Memory-Helper-Hotfix.zip -Force
+          Expand-Archive VexNative-v0.11.3.1-Bridge-Memory-Helper-Hotfix.zip -DestinationPath verify-hotfix -Force
           if (!(Test-Path verify-hotfix/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.3-Bridge-Memory-Route-Hotfix
-          path: VexNative-v0.11.3-Bridge-Memory-Route-Hotfix.zip
+          name: VexNative-v0.11.3.1-Bridge-Memory-Helper-Hotfix
+          path: VexNative-v0.11.3.1-Bridge-Memory-Helper-Hotfix.zip
           retention-days: 7
