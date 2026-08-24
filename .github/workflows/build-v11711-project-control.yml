@@ -1,0 +1,172 @@
+name: Build Vex v0.11.7.11 Project Control Layer
+
+on:
+  push:
+    branches: [ "ci/v1177-remote-chat-relay" ]
+  pull_request:
+    branches: [ "ci/v113-memory-route-hardening" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply current VexNative patch chain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_package_versions.py
+          python Tools/apply_v113_memory_route_hardening.py
+          python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
+          python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
+          python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
+          python Tools/apply_v1177_remote_chat_relay.py
+          python Tools/apply_v11710_remote_chat_direct_ollama_fix.py
+          python Tools/apply_v11711_project_control_layer.py
+
+      - name: Verify project control and installer
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11711_project_control_layer.py Tools/test_v11711_project_control_layer.py
+          python Tools/test_v1175_remote_relay_pagination.py
+          python Tools/test_v1177_remote_chat_relay.py
+          python Tools/test_v11710_remote_chat_direct_ollama_fix.py
+          python Tools/test_v11711_project_control_layer.py
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          if (-not $remote.Contains('VERSION = "0.11.7.11"')) { throw "Remote Support v0.11.7.11 marker missing" }
+          if (-not $remote.Contains('action == "safe_update"')) { throw "safe_update action missing" }
+          if (-not $remote.Contains('user-owned-vex-project-only')) { throw "control scope marker missing" }
+          $installer = Get-Content Tools/Install-Vex-v0.11.7.11.ps1 -Raw
+          if (-not $installer.Contains('(Test-Path -LiteralPath (Join-Path $_.FullName')) { throw "installer discovery fix missing" }
+          if ($installer.Contains('Program Files')) { throw "installer must not target Program Files" }
+          Write-Host "verified v0.11.7.11 project control + no-admin installer"
+
+      - name: Build known-good Bridge and controlled Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexBridge `
+            --collect-all requests `
+            --collect-all bs4 `
+            --collect-all pypdf `
+            --collect-all cryptography `
+            Bridge/vex_bridge.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Package v0.11.7.11
+        shell: pwsh
+        run: |
+          Copy-Item Tools/Install-Vex-v0.11.7.11.ps1 dist/Install-Vex-v0.11.7.11.ps1 -Force
+          @'
+          Vex v0.11.7.11 - Project Control Layer
+          =========================================
+
+          WHAT CHANGED
+          - Keeps the known-good Bridge v0.11.7.6 runtime.
+          - Keeps direct local Ollama technical relay chat.
+          - Adds bounded Vex-project remote controls: status, hashes, start/stop/restart, and safe self-update.
+          - safe_update can only touch an allowlist of Vex project files in the existing user-owned Vex folder under Downloads.
+          - No generic shell/exec command is exposed through the public GitHub relay.
+          - The installer automatically stops the Vex watchdog/Bridge/Remote Support, copies and SHA256-verifies the build, then restarts Vex.
+          - No Program Files target and no admin elevation request.
+
+          INSTALL
+          - Extract the artifact under Downloads.
+          - Run Install-Vex-v0.11.7.11.ps1 from normal PowerShell with ExecutionPolicy Bypass if Windows opens it in Notepad.
+          - After this one install, future approved Vex binary updates can be applied through the safe_update relay action during an active support session.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.11.txt
+
+          Compress-Archive `
+            -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/Install-Vex-v0.11.7.11.ps1,dist/README-Vex-v0.11.7.11.txt `
+            -DestinationPath Vex-v0.11.7.11-Project-Control-Layer.zip -Force
+          Expand-Archive Vex-v0.11.7.11-Project-Control-Layer.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
+          if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.11.ps1)) { throw "installer missing" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.11-Project-Control-Layer
+          path: Vex-v0.11.7.11-Project-Control-Layer.zip
+          retention-days: 7
