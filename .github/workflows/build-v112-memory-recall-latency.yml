@@ -3,6 +3,9 @@ name: Build VexNative v0.11.2 Verified Memory Recall
 on:
   push:
     branches: [ "ci/v112-memory-recall-latency" ]
+  pull_request:
+    branches: [ "ci/v111-memory-sync-relay-hotfix" ]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
