@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.6.1 Low-Memory Initiative
+name: Build VexNative v0.11.7 Grounded Continuity Foreground Priority
 
 on:
   push:
@@ -87,35 +87,31 @@ jobs:
           python Tools/apply_v115_autonomous_self_improvement.py
           python Tools/apply_v116_initiative_self_model.py
           python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
 
-      - name: Verify low-memory initiative architecture
+      - name: Verify v0.11.7 architecture
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v114_adaptive_learning_supervisor.py Tools/apply_v115_autonomous_self_improvement.py Tools/apply_v116_initiative_self_model.py Tools/apply_v1161_low_memory_initiative_fix.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
-          if (-not $src.Contains('"version": "0.11.6.1"')) { throw "v0.11.6.1 Bridge version marker missing" }
-          if (-not $src.Contains('INITIATIVE_GOALS')) { throw "persistent initiative goals missing" }
-          if (-not $src.Contains('INITIATIVE_ACTIONS')) { throw "initiative action allowlist missing" }
-          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_goals')) { throw "initiative goal store missing" }
-          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_events')) { throw "initiative event continuity missing" }
-          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS self_state')) { throw "operational self-state store missing" }
-          if (-not $src.Contains('def _initiative_self_snapshot(')) { throw "self inspection missing" }
-          if (-not $src.Contains('def _initiative_choose_action(')) { throw "local initiative planner missing" }
-          if (-not $src.Contains('def _initiative_execute(')) { throw "initiative executor missing" }
-          if (-not $src.Contains('def _initiative_context(')) { throw "initiative continuity context missing" }
-          if (-not $src.Contains('def _initiative_worker_once(')) { throw "initiative worker missing" }
-          if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "initiative not connected to idle loop" }
-          if (-not $src.Contains('initiative_context = _initiative_context(message)')) { throw "self-model not connected to ordinary cognition" }
-          if (-not $src.Contains('IDLE_AUTONOMY_HARD_FLOOR_BYTES')) { throw "low-memory hard floor missing" }
-          if (-not $src.Contains('IDLE_AUTONOMY_PLANNER_FLOOR_BYTES')) { throw "low-memory planner floor missing" }
-          if (-not $src.Contains('low-memory deterministic initiative')) { throw "low-memory deterministic initiative fallback missing" }
-          if (-not $src.Contains('snapshot["scheduler_mode"]')) { throw "initiative scheduler-mode telemetry missing" }
-          if (-not $src.Contains('model-backed upgrade synthesis deferred')) { throw "low-memory upgrade gating missing" }
-          if (-not $src.Contains('parsed.path == "/initiative/status"')) { throw "initiative status route missing" }
-          if (-not $src.Contains('parsed.path == "/initiative/run"')) { throw "initiative run route missing" }
-          Write-Host "verified v0.11.6.1 autonomous progress under low-memory conditions"
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          if (-not $src.Contains('"version": "0.11.7.0"')) { throw "v0.11.7 Bridge version marker missing" }
+          if (-not $src.Contains('_FOREGROUND_COGNITION_ACTIVE')) { throw "foreground cognition event missing" }
+          if (-not $src.Contains('def _ollama_chat_foreground_inner(')) { throw "foreground cognition wrapper missing" }
+          if (-not $src.Contains('foreground cognition has priority')) { throw "background yielding missing" }
+          if (-not $src.Contains('def _recent_self_activity_question(')) { throw "recent-self-activity semantic route missing" }
+          if (-not $src.Contains('def _verified_recent_self_activity_reply(')) { throw "verified self-activity reply missing" }
+          if (-not $src.Contains('verified-recent-self-activity-v117')) { throw "self-activity grounding marker missing" }
+          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_events')) { throw "initiative journal missing" }
+          if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "idle initiative loop missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7"')) { throw "Remote Support version missing" }
+          if (-not $remote.Contains('def initiative_public(')) { throw "sanitized initiative telemetry missing" }
+          if (-not $remote.Contains('def adaptive_public(')) { throw "sanitized adaptive telemetry missing" }
+          if (-not $remote.Contains('action == "initiative_status"')) { throw "initiative support command missing" }
+          if (-not $remote.Contains('action == "adaptive_status"')) { throw "adaptive support command missing" }
+          Write-Host "verified grounded self-continuity, foreground priority, autonomous journal, and sanitized field telemetry"
 
-      - name: Build Bridge
+      - name: Build Bridge and Remote Support
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --console `
@@ -131,26 +127,32 @@ jobs:
             Bridge/vex_bridge_full.py
           if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
 
-      - name: Package v0.11.6.1
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --hidden-import tkinter `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Package v0.11.7
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.6.1 - Low-Memory Autonomous Initiative
-          ======================================================
-          - Keeps the v0.11.6 persistent goals, operational self-model, autonomous action history, and conversational initiative context.
-          - Fixes a field scheduling problem where conservative 1.4-1.6 GB free-RAM gates could postpone all background adaptation/autonomy/initiative indefinitely on the tested 8 GB PC.
-          - Moderate memory pressure now uses a lightweight autonomous path instead of doing nothing: capability probes, skill validation, sanitized technical-gap research, and self-state updates can continue while idle.
-          - Model-backed initiative planning runs when there is enough headroom; otherwise a deterministic low-risk internal action advances the same persistent goals without another LLM inference.
-          - Upgrade-candidate synthesis waits for better headroom instead of competing with foreground cognition.
-          - Art Worker and foreground conversation still have priority; severe memory pressure still pauses background work.
-          - Existing v0.11.2 Memory Worker/database stay intact; iPhone stays on v0.11.1.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.6.1.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.6.1.txt -DestinationPath VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip -Force
-          Expand-Archive VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip -DestinationPath verify-package -Force
+          VexNative v0.11.7.0 - Grounded Continuity + Foreground Priority
+          ================================================================
+          - Treats ordinary foreground conversation as higher priority than idle local-model review/planning so background autonomy does not starve the PC brain when Star messages.
+          - Grounds retrospective questions about VexNative's own recent work in the persistent initiative journal instead of personal-memory facts or Qwen improvisation.
+          - If no autonomous journal event exists, says so directly rather than inventing activity.
+          - Keeps v0.11.6.1 low-memory autonomous capability probes, skills, research-gap handling, persistent goals, and self-state.
+          - Adds sanitized initiative/adaptive telemetry to Remote Support so field tests can verify autonomous work without publishing chat text or private memory.
+          - Existing v0.11.2 Memory Worker/database remain intact; iPhone app remains unchanged for this build.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.0.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/README-v0.11.7.0.txt -DestinationPath VexNative-v0.11.7.0-Bridge-RemoteSupport-Grounded-Continuity.zip -Force
+          Expand-Archive VexNative-v0.11.7.0-Bridge-RemoteSupport-Grounded-Continuity.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
+          if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative
-          path: VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip
+          name: VexNative-v0.11.7.0-Grounded-Continuity-Foreground-Priority
+          path: VexNative-v0.11.7.0-Bridge-RemoteSupport-Grounded-Continuity.zip
           retention-days: 7
