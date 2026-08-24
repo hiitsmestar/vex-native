@@ -214,17 +214,17 @@ def adaptive_public(value: dict) -> dict:
 if "def initiative_public(" not in remote:
     remote = remote.replace(collect_marker, telemetry_helpers + collect_marker, 1)
 
-old_collect = '''    maintenance = bridge_get("/maintenance/status", timeout=20)\n    snap = {\n'''
-new_collect = '''    maintenance = bridge_get("/maintenance/status", timeout=20)\n    initiative = bridge_get("/initiative/status", timeout=12)\n    adaptive = bridge_get("/adaptive/status", timeout=12)\n    snap = {\n'''
-if old_collect not in remote:
+snapshot_marker = '''    snap = {\n'''
+snapshot_insert = '''    initiative = bridge_get("/initiative/status", timeout=12)\n    adaptive = bridge_get("/adaptive/status", timeout=12)\n    snap = {\n'''
+if snapshot_marker not in remote:
     raise SystemExit("v0.11.7: Remote Support snapshot fetch anchor missing")
-remote = remote.replace(old_collect, new_collect, 1)
+remote = remote.replace(snapshot_marker, snapshot_insert, 1)
 
-old_storage = '''        "maintenance": maintenance_public(maintenance),\n        "storage": disk_summary(),\n'''
-new_storage = '''        "maintenance": maintenance_public(maintenance),\n        "initiative": initiative_public(initiative),\n        "adaptive": adaptive_public(adaptive),\n        "storage": disk_summary(),\n'''
-if old_storage not in remote:
+storage_marker = '''        "storage": disk_summary(),\n'''
+storage_insert = '''        "initiative": initiative_public(initiative),\n        "adaptive": adaptive_public(adaptive),\n        "storage": disk_summary(),\n'''
+if storage_marker not in remote:
     raise SystemExit("v0.11.7: Remote Support snapshot body anchor missing")
-remote = remote.replace(old_storage, new_storage, 1)
+remote = remote.replace(storage_marker, storage_insert, 1)
 
 exec_marker = '''    if action == "learning_status":\n        return {"learning": learning_public(bridge_get("/learning/status", timeout=12))}\n'''
 exec_new = exec_marker + '''    if action == "initiative_status":\n        return {"initiative": initiative_public(bridge_get("/initiative/status", timeout=12))}\n    if action == "adaptive_status":\n        return {"adaptive": adaptive_public(bridge_get("/adaptive/status", timeout=12))}\n'''
