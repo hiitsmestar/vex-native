@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.4 Adaptive Learning Supervisor
+name: Build VexNative v0.11.5 Autonomous Self-Improvement
 
 on:
   push:
@@ -84,24 +84,28 @@ jobs:
           python Tools/apply_v112_package_versions.py
           python Tools/apply_v113_memory_route_hardening.py
           python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
 
-      - name: Verify adaptive learning supervisor
+      - name: Verify autonomous self-improvement architecture
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v114_adaptive_learning_supervisor.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v114_adaptive_learning_supervisor.py Tools/apply_v115_autonomous_self_improvement.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
-          if (-not $src.Contains('"version": "0.11.4.0"')) { throw "v0.11.4 Bridge version marker missing" }
-          if (-not $src.Contains('ADAPTIVE_DB')) { throw "adaptive persistent DB missing" }
-          if (-not $src.Contains('def _adaptive_record_exchange(')) { throw "experience recorder missing" }
-          if (-not $src.Contains('def _adaptive_model_review(')) { throw "idle model reviewer missing" }
-          if (-not $src.Contains('def _adaptive_context(')) { throw "adaptive cognition context missing" }
-          if (-not $src.Contains('VexAdaptiveLearning')) { throw "adaptive background worker missing" }
-          if (-not $src.Contains('parsed.path == "/adaptive/status"')) { throw "adaptive status route missing" }
-          if (-not $src.Contains('parsed.path == "/adaptive/run"')) { throw "adaptive run route missing" }
-          if (-not $src.Contains('_adaptive_record_exchange(message, reply)')) { throw "completed turns are not feeding adaptation" }
-          if (-not $src.Contains('adaptive_context = _adaptive_context(message)')) { throw "learned behavior is not feeding cognition" }
-          if (-not $src.Contains('_BACKGROUND_COGNITION_LOCK')) { throw "idle cognition coordination missing" }
-          Write-Host "verified v0.11.4 persistent idle adaptation + capability context"
+          if (-not $src.Contains('"version": "0.11.5.0"')) { throw "v0.11.5 Bridge version marker missing" }
+          if (-not $src.Contains('ADAPTIVE_DB')) { throw "adaptive experience database missing" }
+          if (-not $src.Contains('AUTONOMY_CAPABILITIES')) { throw "feature curriculum missing" }
+          if (-not $src.Contains('def _autonomy_worker_once(')) { throw "autonomy worker missing" }
+          if (-not $src.Contains('def _autonomy_public_research_topic(')) { throw "private/public research boundary missing" }
+          if (-not $src.Contains('def _autonomy_private_memory_guidance(')) { throw "private memory adaptation missing" }
+          if (-not $src.Contains('def _autonomy_stage_upgrade_candidate(')) { throw "upgrade candidate staging missing" }
+          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS capabilities')) { throw "capability familiarity store missing" }
+          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS upgrade_candidates')) { throw "upgrade candidate store missing" }
+          if (-not $src.Contains('parsed.path == "/autonomy/status"')) { throw "autonomy status route missing" }
+          if (-not $src.Contains('parsed.path == "/autonomy/run"')) { throw "autonomy run route missing" }
+          if (-not $src.Contains('_autonomy_worker_once(force=False)')) { throw "idle feature curriculum not connected" }
+          if (-not $src.Contains('private_memory_guidance = _autonomy_private_memory_guidance()')) { throw "private memory not connected to idle adaptation" }
+          if (-not $src.Contains('public_topic = _autonomy_public_research_topic')) { throw "adaptive gaps can still leak raw private text to public research" }
+          Write-Host "verified v0.11.5 autonomous idle learning, capability rehearsal, bounded repair, private-memory adaptation, and staged upgrades"
 
       - name: Build Bridge
         shell: pwsh
@@ -119,27 +123,28 @@ jobs:
             Bridge/vex_bridge_full.py
           if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
 
-      - name: Package v0.11.4
+      - name: Package v0.11.5
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.4.0 - Adaptive Learning Supervisor
-          ===================================================
-          - Adds a persistent local experience/lesson/gap database.
-          - Completed conversations feed an idle adaptive reviewer instead of relying only on hard-coded phrase routes.
-          - After foreground idle time, local PC cognition reviews recent exchanges for evidence-backed routing, naturalness, capability, preference, and repair lessons.
-          - High-confidence lessons become semantic cognition context on later turns.
-          - Capability gaps feed the existing source-grounded Learning Engine for research.
-          - Background adaptation and research share a cognition lock so the low-memory PC does not run both local Qwen jobs at once.
-          - Known memory repair may be retried automatically; arbitrary downloaded code or binary self-rewriting remains disabled.
+          VexNative v0.11.5.0 - Autonomous Self-Improvement
+          ==================================================
+          - Ordinary conversation now uses semantic personal-memory grounding + adaptive cognition rather than an expanding list of natural-memory trigger phrases.
+          - Real exchanges become persistent experience; idle local cognition extracts high-confidence routing/naturalness/capability/repair lessons.
+          - While idle, Vex rotates through an internal feature curriculum and probes the capabilities she already has.
+          - Learned skill recipes are dry-run validated/rehearsed without causing side effects.
+          - Unhealthy known components can invoke the existing bounded self-repair supervisor with circuit breakers.
+          - Capability gaps feed the existing source-grounded public Learning Engine using sanitized generic technical queries only.
+          - Saved personal memory may guide the LOCAL idle reviewer, but private memory text is never sent to public web research.
+          - Improvement gaps can become local staged upgrade candidates with acceptance tests/risk/confidence. Running binaries are not blindly rewritten.
           - Existing v0.11.2 Memory Worker/database stay intact; iPhone stays on v0.11.1.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.4.0.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.4.0.txt -DestinationPath VexNative-v0.11.4.0-Bridge-Adaptive-Learning-Supervisor.zip -Force
-          Expand-Archive VexNative-v0.11.4.0-Bridge-Adaptive-Learning-Supervisor.zip -DestinationPath verify-package -Force
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.5.0.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.5.0.txt -DestinationPath VexNative-v0.11.5.0-Bridge-Autonomous-Self-Improvement.zip -Force
+          Expand-Archive VexNative-v0.11.5.0-Bridge-Autonomous-Self-Improvement.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.4.0-Bridge-Adaptive-Learning-Supervisor
-          path: VexNative-v0.11.4.0-Bridge-Adaptive-Learning-Supervisor.zip
+          name: VexNative-v0.11.5.0-Bridge-Autonomous-Self-Improvement
+          path: VexNative-v0.11.5.0-Bridge-Autonomous-Self-Improvement.zip
           retention-days: 7
