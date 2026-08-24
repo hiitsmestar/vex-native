@@ -87,6 +87,18 @@ def remote_chat_public(command: dict) -> dict:
     }
 
 
+def run_remote_chat_command(command: dict, command_id: str, allow_maintenance: bool) -> None:
+    """Run model-backed chat off the polling thread so a slow model cannot freeze support."""
+    try:
+        result = execute_command(command, allow_maintenance=allow_maintenance)
+    except Exception as exc:
+        result = {"remote_chat": {"ok": False, "error_class": exc.__class__.__name__, "source": "remote-technical-partner"}}
+    try:
+        post_comment("command_result", {"command_id": command_id, "action": "remote_chat", "result": result})
+    except Exception:
+        pass
+
+
 '''
 if execute_anchor not in remote:
     raise SystemExit("v0.11.7.7 execute_command anchor missing")
@@ -102,6 +114,31 @@ if status_anchor not in remote:
     raise SystemExit("v0.11.7.7 status action anchor missing")
 remote = remote.replace(status_anchor, chat_action, 1)
 
+loop_anchor = '''                    self.on_status(f"Running {str(command.get('action') or 'command')}…")
+                    result = execute_command(command, allow_maintenance=bool(self.allow_maintenance()))
+                    post_comment("command_result", {"command_id": command_id, "action": str(command.get("action") or "")[:80], "result": result})
+                    self.on_status("Support session is active")
+'''
+loop_replacement = '''                    action = str(command.get("action") or "").strip().lower()
+                    self.on_status(f"Running {action or 'command'}…")
+                    if action == "remote_chat":
+                        threading.Thread(
+                            target=run_remote_chat_command,
+                            args=(command, command_id, bool(self.allow_maintenance())),
+                            daemon=True,
+                            name=f"VexRemoteChat-{command_id[:24]}",
+                        ).start()
+                        post_comment("command_accepted", {"command_id": command_id, "action": "remote_chat", "status": "running"})
+                        self.on_status("Remote chat running; support session remains active")
+                        continue
+                    result = execute_command(command, allow_maintenance=bool(self.allow_maintenance()))
+                    post_comment("command_result", {"command_id": command_id, "action": action[:80], "result": result})
+                    self.on_status("Support session is active")
+'''
+if loop_anchor not in remote:
+    raise SystemExit("v0.11.7.7 command-loop anchor missing")
+remote = remote.replace(loop_anchor, loop_replacement, 1)
+
 REMOTE_PATH.write_text(remote, encoding="utf-8")
 compile(remote, str(REMOTE_PATH), "exec")
 
@@ -111,12 +148,15 @@ checks = [
     "REMOTE_CHAT_MAX_REPLY = 6000",
     "def remote_chat_topic_ok(",
     "def remote_chat_public(",
+    "def run_remote_chat_command(",
     'action == "remote_chat"',
     'bridge_post(\n        "/llm/chat"',
     '"history": []',
     "REMOTE TECHNICAL PARTNER MESSAGE",
     "not from Star",
     "private or personal chat must not use the public GitHub relay",
+    '"command_accepted"',
+    "Remote chat running; support session remains active",
     "for page in range(1, 101)",
     'action == "memory_status"',
     "session remains active",
@@ -126,4 +166,4 @@ for marker in checks:
     if marker not in final:
         raise SystemExit(f"v0.11.7.7 Remote Support verifier missing: {marker}")
 
-print("Applied v0.11.7.7 bounded remote technical chat relay")
+print("Applied v0.11.7.7 bounded non-blocking remote technical chat relay")
