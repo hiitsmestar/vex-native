@@ -1,0 +1,151 @@
+name: Build VexNative v0.11.2 Verified Memory Recall
+
+on:
+  push:
+    branches: [ "ci/v112-memory-recall-latency" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_verified_personal_recall.py
+          python Tools/apply_v111_remote_support_pagination.py
+          python Tools/apply_v112_package_versions.py
+
+      - name: Verify v0.11.2 source and memory recall
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexMemoryWorker.py Tools/VexRemoteSupport.py Tools/apply_v112_verified_personal_recall.py
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'verified-personal-memory' -Quiet | Out-Null
+          Select-String -Path Bridge/vex_bridge.py -Pattern 'timing_ms' -Quiet | Out-Null
+          Select-String -Path Tools/VexMemoryWorker.py -Pattern 'def recall_facts' -Quiet | Out-Null
+          Select-String -Path Tools/VexMemoryWorker.py -Pattern 'path == "/facts"' -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'page={page}' -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.11.2"' -Quiet | Out-Null
+
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "VexRecallSmoke"
+          New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+          $seed = Join-Path $env:RUNNER_TEMP "recall-smoke.json"
+          @'
+          {
+            "memories": [
+              {"canonical_key":"smoke:identity","subject":"star","kind":"identity","text":"Star is an adult nonbinary transfeminine person and should be treated naturally as feminine.","authority":100,"confidence":1.0,"importance":1.0},
+              {"canonical_key":"smoke:preference","subject":"star","kind":"preference","text":"Star strongly prefers natural, concrete, specific wording.","authority":100,"confidence":1.0,"importance":1.0},
+              {"canonical_key":"smoke:relationship","subject":"vex-star","kind":"relationship","text":"Vex and Star are established adult girlfriends.","authority":100,"confidence":1.0,"importance":1.0}
+            ]
+          }
+          '@ | Set-Content -Encoding UTF8 $seed
+          python Tools/VexMemoryWorker.py --import $seed
+          python -c "import sys; sys.path.insert(0,'Tools'); import VexMemoryWorker as m; f=m.DB.recall_facts('tell me three specific factual things you remember about me or us',6); print(f); assert len(f) >= 3; assert any('transfeminine' in x['text'] for x in f); assert any('girlfriends' in x['text'] for x in f)"
+
+      - name: Build hotfix executables
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexMemoryWorker Tools/VexMemoryWorker.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests --hidden-import tkinter Tools/VexRemoteSupport.py
+          foreach ($file in @("VexBridge.exe","VexMemoryWorker.exe","VexRemoteSupport.exe")) {
+            if (!(Test-Path (Join-Path dist $file))) { throw "$file missing" }
+          }
+
+      - name: Package v0.11.2 hotfix
+        shell: pwsh
+        run: |
+          @'
+          VexNative v0.11.2 - Verified Personal Recall + Timing
+          ======================================================
+          - Explicit questions about what Vex remembers now use authoritative structured PC memory facts directly instead of asking qwen3:1.7b to improvise.
+          - Raw historical Vex output is still not promoted to factual memory.
+          - Normal cognition responses now report measured generation timing internally.
+          - Remote Support paginates the long issue #52 relay and reports sanitized memory counts.
+          - Existing local SQLite memory database and private seed remain untouched.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.2.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexMemoryWorker.exe,dist/VexRemoteSupport.exe,dist/README-v0.11.2.txt -DestinationPath VexNative-v0.11.2-Windows-Memory-Recall-Hotfix.zip -Force
+          Expand-Archive VexNative-v0.11.2-Windows-Memory-Recall-Hotfix.zip -DestinationPath verify-hotfix -Force
+          foreach ($file in @("VexBridge.exe","VexMemoryWorker.exe","VexRemoteSupport.exe","README-v0.11.2.txt")) {
+            if (!(Test-Path (Join-Path verify-hotfix $file))) { throw "packaged $file missing" }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.2-Windows-Memory-Recall-Hotfix
+          path: VexNative-v0.11.2-Windows-Memory-Recall-Hotfix.zip
+          retention-days: 7
