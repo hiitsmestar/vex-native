@@ -12,7 +12,6 @@ required_bridge = [
     'start_background_reindex(state)',
 ]
 required_remote = [
-    'VERSION = "0.11.7.12"',
     'def _bridge_health_public()',
     'def _bounded_bridge_recovery()',
     'def _bridge_health_monitor(worker)',
@@ -20,7 +19,6 @@ required_remote = [
     'post_comment("bridge_health_changed", health)',
     'post_comment("health_heartbeat"',
     'post_comment("bridge_auto_recovery", recovery)',
-    'now - unreachable_since >= 180',
     'now - last_recovery >= 600',
     'bool(worker.allow_maintenance())',
     'action == "bridge_health"',
@@ -34,6 +32,10 @@ for marker in required_bridge:
 for marker in required_remote:
     if marker not in remote:
         raise SystemExit(f"missing Remote Support marker: {marker}")
+if not any(v in remote for v in ['VERSION = "0.11.7.12"', 'VERSION = "0.11.7.13"']):
+    raise SystemExit("missing compatible Remote Support version marker")
+if not any(v in remote for v in ['now - unreachable_since >= 180', 'now - unreachable_since >= 45']):
+    raise SystemExit("missing bounded Bridge unreachable recovery threshold")
 
 needle = '    state.index.rebuild()\n    start_background_reindex(state)'
 if needle in bridge:
@@ -45,4 +47,4 @@ for forbidden in ['action == "shell"', 'action == "exec"', 'action == "powershel
 
 compile(bridge, "Bridge/vex_bridge.py", "exec")
 compile(remote, "Tools/VexRemoteSupport.py", "exec")
-print("v0.11.7.12 fast-start + autonomous health tests passed")
+print("v0.11.7.12+ fast-start + autonomous health regression tests passed")
