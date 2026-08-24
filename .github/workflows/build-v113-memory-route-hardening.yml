@@ -3,6 +3,9 @@ name: Build VexNative v0.11.3 Memory Route Hardening
 on:
   push:
     branches: [ "ci/v113-memory-route-hardening" ]
+  pull_request:
+    branches: [ "ci/v112-memory-recall-latency" ]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -123,5 +126,3 @@ jobs:
           name: VexNative-v0.11.3-Bridge-Memory-Route-Hotfix
           path: VexNative-v0.11.3-Bridge-Memory-Route-Hotfix.zip
           retention-days: 7
-
-# build trigger after workflow creation
