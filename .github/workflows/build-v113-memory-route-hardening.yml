@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.6 Initiative Self-Model Engine
+name: Build VexNative v0.11.6.1 Low-Memory Initiative
 
 on:
   push:
@@ -86,13 +86,14 @@ jobs:
           python Tools/apply_v114_adaptive_learning_supervisor.py
           python Tools/apply_v115_autonomous_self_improvement.py
           python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
 
-      - name: Verify initiative and operational self-model architecture
+      - name: Verify low-memory initiative architecture
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v114_adaptive_learning_supervisor.py Tools/apply_v115_autonomous_self_improvement.py Tools/apply_v116_initiative_self_model.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v114_adaptive_learning_supervisor.py Tools/apply_v115_autonomous_self_improvement.py Tools/apply_v116_initiative_self_model.py Tools/apply_v1161_low_memory_initiative_fix.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
-          if (-not $src.Contains('"version": "0.11.6.0"')) { throw "v0.11.6 Bridge version marker missing" }
+          if (-not $src.Contains('"version": "0.11.6.1"')) { throw "v0.11.6.1 Bridge version marker missing" }
           if (-not $src.Contains('INITIATIVE_GOALS')) { throw "persistent initiative goals missing" }
           if (-not $src.Contains('INITIATIVE_ACTIONS')) { throw "initiative action allowlist missing" }
           if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_goals')) { throw "initiative goal store missing" }
@@ -105,11 +106,14 @@ jobs:
           if (-not $src.Contains('def _initiative_worker_once(')) { throw "initiative worker missing" }
           if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "initiative not connected to idle loop" }
           if (-not $src.Contains('initiative_context = _initiative_context(message)')) { throw "self-model not connected to ordinary cognition" }
+          if (-not $src.Contains('IDLE_AUTONOMY_HARD_FLOOR_BYTES')) { throw "low-memory hard floor missing" }
+          if (-not $src.Contains('IDLE_AUTONOMY_PLANNER_FLOOR_BYTES')) { throw "low-memory planner floor missing" }
+          if (-not $src.Contains('low-memory deterministic initiative')) { throw "low-memory deterministic initiative fallback missing" }
+          if (-not $src.Contains('snapshot["scheduler_mode"]')) { throw "initiative scheduler-mode telemetry missing" }
+          if (-not $src.Contains('model-backed upgrade synthesis deferred')) { throw "low-memory upgrade gating missing" }
           if (-not $src.Contains('parsed.path == "/initiative/status"')) { throw "initiative status route missing" }
           if (-not $src.Contains('parsed.path == "/initiative/run"')) { throw "initiative run route missing" }
-          if (-not $src.Contains('_autonomy_public_research_topic(')) { throw "privacy-sanitized public research boundary missing" }
-          if (-not $src.Contains('_BACKGROUND_COGNITION_LOCK')) { throw "background cognition coordination missing" }
-          Write-Host "verified v0.11.6 persistent goals, self-inspection, autonomous idle decision-making, validated execution, and conversational continuity"
+          Write-Host "verified v0.11.6.1 autonomous progress under low-memory conditions"
 
       - name: Build Bridge
         shell: pwsh
@@ -127,27 +131,26 @@ jobs:
             Bridge/vex_bridge_full.py
           if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
 
-      - name: Package v0.11.6
+      - name: Package v0.11.6.1
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.6.0 - Initiative + Operational Self-Model
-          ==========================================================
-          - Adds persistent long-running VexNative goals instead of requiring a new user command for each useful internal action.
-          - Maintains an operational self-model of installed capabilities, health, resources, memory status, unresolved gaps, confidence, and recent autonomous work.
-          - While idle, local cognition chooses one useful next action from validated internal actions and executes it through existing learning/repair/skill/index/upgrade systems.
-          - Autonomous decisions and outcomes are retained so later conversation knows what Vex did while idle instead of pretending nothing happened.
-          - Ordinary cognition receives current self-model + initiative continuity alongside semantic personal memory and adaptive lessons.
-          - Public research still receives sanitized generic technical topics; private personal memory remains local.
-          - Side-effecting arbitrary shell/code execution is not introduced; executable workflows remain behind the existing validated skill compiler and repair systems.
+          VexNative v0.11.6.1 - Low-Memory Autonomous Initiative
+          ======================================================
+          - Keeps the v0.11.6 persistent goals, operational self-model, autonomous action history, and conversational initiative context.
+          - Fixes a field scheduling problem where conservative 1.4-1.6 GB free-RAM gates could postpone all background adaptation/autonomy/initiative indefinitely on the tested 8 GB PC.
+          - Moderate memory pressure now uses a lightweight autonomous path instead of doing nothing: capability probes, skill validation, sanitized technical-gap research, and self-state updates can continue while idle.
+          - Model-backed initiative planning runs when there is enough headroom; otherwise a deterministic low-risk internal action advances the same persistent goals without another LLM inference.
+          - Upgrade-candidate synthesis waits for better headroom instead of competing with foreground cognition.
+          - Art Worker and foreground conversation still have priority; severe memory pressure still pauses background work.
           - Existing v0.11.2 Memory Worker/database stay intact; iPhone stays on v0.11.1.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.6.0.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.6.0.txt -DestinationPath VexNative-v0.11.6.0-Bridge-Initiative-Self-Model.zip -Force
-          Expand-Archive VexNative-v0.11.6.0-Bridge-Initiative-Self-Model.zip -DestinationPath verify-package -Force
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.6.1.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.6.1.txt -DestinationPath VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip -Force
+          Expand-Archive VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.6.0-Bridge-Initiative-Self-Model
-          path: VexNative-v0.11.6.0-Bridge-Initiative-Self-Model.zip
+          name: VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative
+          path: VexNative-v0.11.6.1-Bridge-Low-Memory-Initiative.zip
           retention-days: 7
