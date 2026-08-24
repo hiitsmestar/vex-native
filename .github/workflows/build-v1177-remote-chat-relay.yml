@@ -3,6 +3,9 @@ name: Build Vex Remote Support v0.11.7.7 Remote Chat Relay
 on:
   push:
     branches: [ "ci/v1177-remote-chat-relay" ]
+  pull_request:
+    branches: [ "ci/v113-memory-route-hardening" ]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
