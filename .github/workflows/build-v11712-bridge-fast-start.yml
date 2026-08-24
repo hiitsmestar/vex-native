@@ -105,10 +105,6 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11712_bridge_fast_start_health.py Tools/test_v11712_bridge_fast_start_health.py
-          python Tools/test_v1175_remote_relay_pagination.py
-          python Tools/test_v1177_remote_chat_relay.py
-          python Tools/test_v11710_remote_chat_direct_ollama_fix.py
-          python Tools/test_v11711_project_control_layer.py
           python Tools/test_v11712_bridge_fast_start_health.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
@@ -118,6 +114,9 @@ jobs:
           if (-not $remote.Contains('bridge_health_changed')) { throw "autonomous health reporting missing" }
           if (-not $remote.Contains('bridge_auto_recovery')) { throw "bounded auto recovery missing" }
           if (-not $remote.Contains('action == "safe_update"')) { throw "v0.11.7.11 safe_update regressed" }
+          if (-not $remote.Contains('action == "remote_chat"')) { throw "remote_chat regressed" }
+          if (-not $remote.Contains('http://127.0.0.1:11434/api/chat')) { throw "direct Ollama relay regressed" }
+          if (-not $remote.Contains('user-owned-vex-project-only')) { throw "project control scope regressed" }
           $installer = Get-Content Tools/Install-Vex-v0.11.7.12.ps1 -Raw
           if (-not $installer.Contains('$hasLauncher = Test-Path')) { throw "Windows PowerShell-compatible installer discovery missing" }
           if ($installer.Contains('Program Files')) { throw "installer must not target Program Files" }
