@@ -187,7 +187,7 @@ def test_v1174_source_guards() -> None:
     assert '"version": "0.11.7.4"' in source
     assert "verified-personal-memory-v1174" in source
     assert "verified-personal-memory-unavailable-v1174" in source
-    assert 'VERSION = "0.11.7.4"' in remote
+    assert any(f'VERSION = "0.11.7.{n}"' in remote for n in (4, 5))
     assert 'result = _adaptive_worker_cycle(force=True)' in source
     assert 'action == "adaptive_run"' in remote
     assert '"worker_alive": yes(value.get("worker_alive"))' in remote

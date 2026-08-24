@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.4 Isolated Lite Learning Live Verification
+name: Build VexNative v0.11.7.5 Remote Relay Pagination Hotfix
 
 on:
   push:
@@ -94,11 +94,12 @@ jobs:
           python Tools/apply_v1172_authoritative_recall_lite_priority.py
           python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
           python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
 
-      - name: Verify v0.11.7.4 architecture
+      - name: Verify v0.11.7.5 Remote Support hotfix
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/apply_v1174_isolated_lite_learning.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py Tools/test_v1174_isolated_lite_learning.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/apply_v1174_isolated_lite_learning.py Tools/apply_v1175_remote_relay_pagination.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py Tools/test_v1174_isolated_lite_learning.py Tools/test_v1175_remote_relay_pagination.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
           if (-not $src.Contains('"version": "0.11.7.4"')) { throw "v0.11.7.4 Bridge version marker missing" }
@@ -126,7 +127,7 @@ jobs:
           if (-not $src.Contains('def _initiative_scheduler_loop(')) { throw "isolated initiative scheduler missing" }
           if (-not $src.Contains('name="VexAutonomousImprovement"')) { throw "autonomy worker thread missing" }
           if (-not $src.Contains('name="VexInitiativeScheduler"')) { throw "initiative worker thread missing" }
-          if (-not $remote.Contains('VERSION = "0.11.7.4"')) { throw "Remote Support version missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7.5"')) { throw "Remote Support version missing" }
           if (-not $remote.Contains('def initiative_public(')) { throw "sanitized initiative telemetry missing" }
           if (-not $remote.Contains('def adaptive_public(')) { throw "sanitized adaptive telemetry missing" }
           if (-not $remote.Contains('def coordination_public(')) { throw "sanitized coordination telemetry missing" }
@@ -138,59 +139,41 @@ jobs:
           if (-not $remote.Contains('"staged_upgrades": integer(value.get("staged_upgrades"))')) { throw "sanitized staged-upgrade telemetry missing" }
           if (-not $remote.Contains('"review_mode": str(value.get("review_mode")')) { throw "sanitized lite-review telemetry missing" }
           if (-not $remote.Contains('session remains active')) { throw "transient relay retry missing" }
+          if (-not $remote.Contains('for page in range(1, 101)')) { throw "multi-page relay polling missing" }
+          if (-not $remote.Contains('action == "memory_status"')) { throw "Memory Worker status command missing" }
           python Tools/test_v117_grounded_continuity.py
           python Tools/test_v1172_authoritative_recall_lite_priority.py
           python Tools/test_v1173_grounded_natural_recall_lite_learning.py
           python Tools/test_v1174_isolated_lite_learning.py
-          Write-Host "verified isolated adaptive/autonomy/initiative workers, live drain control, and sanitized liveness telemetry"
+          python Tools/test_v1175_remote_relay_pagination.py
+          Write-Host "verified issue pagination, sanitized Memory Worker telemetry, and v0.11.7.4 Bridge compatibility"
 
-      - name: Build Bridge and Remote Support
+      - name: Build Remote Support hotfix
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --console `
-            --name VexBridge `
-            --paths Bridge `
-            --collect-all cryptography `
-            --collect-all edge_tts `
-            --collect-all yt_dlp `
-            --hidden-import tkinter `
-            --hidden-import sqlite3 `
-            --hidden-import vex_bridge `
-            --hidden-import winrt.windows.media.control `
-            Bridge/vex_bridge_full.py
-          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
-
           pyinstaller --noconfirm --clean --onefile --windowed `
             --name VexRemoteSupport `
             --hidden-import tkinter `
             Tools/VexRemoteSupport.py
           if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
 
-      - name: Package v0.11.7.4
+      - name: Package v0.11.7.5
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.7.4 - Isolated Lite Learning + Live Verification
-          =================================================================
-          - Keeps personal recall locked to authoritative Memory Worker /facts; Qwen never paraphrases or supplies personal facts.
-          - Speaks verified facts naturally in second person instead of copying a numbered database dump.
-          - Rotates framing and verified fact windows across repeated cleared-chat tests without inventing new content.
-          - Adds a deterministic low-memory reviewer that drains queued real exchanges and learns repeated-output/naturalness corrections without using background Ollama.
-          - Converts repeated grounded failures into local lessons, a privacy-safe generic research topic, and a testable staged upgrade request.
-          - Stages planning data only; it does not rewrite or replace the running executable.
-          - Publishes sanitized review-mode and staged-upgrade counts through the visible two-hour Remote Support session.
-          - Runs adaptive review, autonomy, and initiative on independent bounded scheduler threads so one subsystem cannot stall the others.
-          - Publishes a sanitized adaptive-worker heartbeat and supports an explicit bounded adaptive review check during the visible support session.
-          - Retains v0.11.7.3 natural authoritative recall, foreground reservation, generated-text exclusion, and resilient relay behavior.
-          - Preserves the existing v0.11.2 Memory Worker/database and v0.11.1 iPhone app.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.4.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/README-v0.11.7.4.txt -DestinationPath VexNative-v0.11.7.4-Bridge-RemoteSupport-Isolated-Lite-Learning.zip -Force
-          Expand-Archive VexNative-v0.11.7.4-Bridge-RemoteSupport-Isolated-Lite-Learning.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
+          VexNative Remote Support v0.11.7.5 - Relay Pagination Hotfix
+          ============================================================
+          - Reads every page of the long-lived GitHub relay so commands remain visible after issue #52 exceeds 100 comments.
+          - Restores sanitized Memory Worker version/count/FTS telemetry without publishing personal memory content.
+          - Retains bounded adaptive_run verification and resilient two-hour support-session retry behavior.
+          - Replaces VexRemoteSupport.exe only. Keep VexBridge v0.11.7.4, Memory Worker v0.11.2/database, and iPhone app v0.11.1 untouched.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.5.txt
+          Compress-Archive -Path dist/VexRemoteSupport.exe,dist/README-v0.11.7.5.txt -DestinationPath VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip -Force
+          Expand-Archive VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.4-Isolated-Lite-Learning-Live-Verification
-          path: VexNative-v0.11.7.4-Bridge-RemoteSupport-Isolated-Lite-Learning.zip
+          name: VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination
+          path: VexNative-v0.11.7.5-RemoteSupport-Relay-Pagination.zip
           retention-days: 7
