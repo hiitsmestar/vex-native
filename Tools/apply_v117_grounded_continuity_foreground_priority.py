@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import textwrap
 
 bridge_path = Path("Bridge/vex_bridge.py")
 text = bridge_path.read_text(encoding="utf-8")
@@ -37,24 +38,142 @@ if expected_sig not in original:
 inner = original.replace("def _ollama_chat(", "def _ollama_chat_foreground_inner(", 1)
 wrapper = r'''
 
+class _ForegroundCognitionPreempted(RuntimeError):
+    pass
+
+
+class _BufferedOllamaResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = int(status_code)
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"Ollama HTTP {self.status_code}")
+
+    def json(self) -> dict:
+        return self._payload
+
+
 _FOREGROUND_COGNITION_ACTIVE = threading.Event()
+_FOREGROUND_COGNITION_STATE_LOCK = threading.RLock()
+_FOREGROUND_COGNITION_COUNT = 0
+_FOREGROUND_COGNITION_LAST_ARRIVAL = 0.0
+_BACKGROUND_OLLAMA_RESPONSE_LOCK = threading.Lock()
+_BACKGROUND_OLLAMA_RESPONSE = None
+
+
+def _cancel_active_background_ollama() -> None:
+    with _BACKGROUND_OLLAMA_RESPONSE_LOCK:
+        response = _BACKGROUND_OLLAMA_RESPONSE
+    if response is not None:
+        try:
+            response.close()
+        except Exception:
+            pass
+
+
+def _foreground_cognition_enter() -> None:
+    global _ADAPTIVE_LAST_FOREGROUND, _FOREGROUND_COGNITION_COUNT, _FOREGROUND_COGNITION_LAST_ARRIVAL
+    now = time.time()
+    with _FOREGROUND_COGNITION_STATE_LOCK:
+        _FOREGROUND_COGNITION_COUNT += 1
+        _FOREGROUND_COGNITION_LAST_ARRIVAL = now
+        _FOREGROUND_COGNITION_ACTIVE.set()
+    try:
+        _ADAPTIVE_LAST_FOREGROUND = now
+    except Exception:
+        pass
+    _cancel_active_background_ollama()
+
+
+def _foreground_cognition_exit() -> None:
+    global _ADAPTIVE_LAST_FOREGROUND, _FOREGROUND_COGNITION_COUNT, _FOREGROUND_COGNITION_LAST_ARRIVAL
+    now = time.time()
+    with _FOREGROUND_COGNITION_STATE_LOCK:
+        _FOREGROUND_COGNITION_COUNT = max(0, _FOREGROUND_COGNITION_COUNT - 1)
+        _FOREGROUND_COGNITION_LAST_ARRIVAL = now
+        if _FOREGROUND_COGNITION_COUNT == 0:
+            _FOREGROUND_COGNITION_ACTIVE.clear()
+    try:
+        _ADAPTIVE_LAST_FOREGROUND = now
+    except Exception:
+        pass
+
+
+def _background_ollama_post(payload: dict, timeout: int = 150) -> _BufferedOllamaResponse:
+    """Run optional idle inference as a cancellable stream.
+
+    Foreground arrival closes the active response. Ollama can then abandon the
+    idle generation instead of making Star's conversation wait behind it.
+    """
+    global _BACKGROUND_OLLAMA_RESPONSE
+    if _FOREGROUND_COGNITION_ACTIVE.is_set():
+        raise _ForegroundCognitionPreempted("foreground cognition has priority")
+    import requests
+    request_payload = dict(payload or {})
+    request_payload["stream"] = True
+    response = None
+    chunks = []
+    final_payload = {}
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE}/api/chat",
+            json=request_payload,
+            stream=True,
+            timeout=(10, max(20, int(timeout))),
+        )
+        response.raise_for_status()
+        with _BACKGROUND_OLLAMA_RESPONSE_LOCK:
+            if _FOREGROUND_COGNITION_ACTIVE.is_set():
+                response.close()
+                raise _ForegroundCognitionPreempted("foreground cognition arrived before idle generation")
+            _BACKGROUND_OLLAMA_RESPONSE = response
+        for raw in response.iter_lines():
+            if _FOREGROUND_COGNITION_ACTIVE.is_set():
+                raise _ForegroundCognitionPreempted("foreground cognition interrupted idle generation")
+            if not raw:
+                continue
+            value = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else str(raw))
+            if not isinstance(value, dict):
+                continue
+            if value.get("error"):
+                raise RuntimeError(str(value.get("error"))[:240])
+            final_payload = value
+            message = value.get("message") if isinstance(value.get("message"), dict) else {}
+            content = str(message.get("content") or value.get("response") or "")
+            if content:
+                chunks.append(content)
+            if value.get("done") is True:
+                break
+    except _ForegroundCognitionPreempted:
+        raise
+    except Exception as exc:
+        if _FOREGROUND_COGNITION_ACTIVE.is_set():
+            raise _ForegroundCognitionPreempted("foreground cognition closed idle generation") from exc
+        raise
+    finally:
+        with _BACKGROUND_OLLAMA_RESPONSE_LOCK:
+            if _BACKGROUND_OLLAMA_RESPONSE is response:
+                _BACKGROUND_OLLAMA_RESPONSE = None
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
+    payload_out = dict(final_payload)
+    message_out = dict(payload_out.get("message") or {})
+    message_out["content"] = "".join(chunks)
+    payload_out["message"] = message_out
+    return _BufferedOllamaResponse(200, payload_out)
 
 
 def _ollama_chat(history: list[dict], message: str, context: dict | None = None) -> tuple[str, str] | None:
-    global _ADAPTIVE_LAST_FOREGROUND
-    try:
-        _ADAPTIVE_LAST_FOREGROUND = time.time()
-    except Exception:
-        pass
-    _FOREGROUND_COGNITION_ACTIVE.set()
+    _foreground_cognition_enter()
     try:
         return _ollama_chat_foreground_inner(history, message, context)
     finally:
-        try:
-            _ADAPTIVE_LAST_FOREGROUND = time.time()
-        except Exception:
-            pass
-        _FOREGROUND_COGNITION_ACTIVE.clear()
+        _foreground_cognition_exit()
 '''
 text = text[:start] + inner + wrapper + text[end:]
 
@@ -72,13 +191,58 @@ learning_new = '''    if _FOREGROUND_COGNITION_ACTIVE.is_set():\n        ok, det
 if learning_old in text:
     text = text.replace(learning_old, learning_new, 1)
 
-# Initiative's model-backed planner is optional. If conversation is active, choose
-# no model-backed work and let the next idle cycle try again.
-planner_old = '''        import requests\n        with _BACKGROUND_COGNITION_LOCK:\n            response = requests.post(\n'''
-planner_new = '''        import requests\n        if _FOREGROUND_COGNITION_ACTIVE.is_set():\n            return {"action": "nothing", "goal_key": "grounded_independence", "reason": "foreground cognition has priority", "confidence": 1.0}\n        with _BACKGROUND_COGNITION_LOCK:\n            if _FOREGROUND_COGNITION_ACTIVE.is_set():\n                return {"action": "nothing", "goal_key": "grounded_independence", "reason": "foreground cognition arrived; initiative planner yielded", "confidence": 1.0}\n            response = requests.post(\n'''
-if planner_old not in text:
-    raise SystemExit("v0.11.7: initiative planner priority anchor missing")
-text = text.replace(planner_old, planner_new, 1)
+# Initiative's model-backed planner is optional. Target the actual planner
+# function, not the earlier upgrade-candidate synthesizer with a similar request.
+planner_start = text.find("def _initiative_choose_action(")
+planner_end = text.find("\n\ndef ", planner_start + 20)
+if planner_start < 0 or planner_end < 0:
+    raise SystemExit("v0.11.7: initiative planner function missing")
+planner = text[planner_start:planner_end]
+planner_old = '''    try:\n        import requests\n        with _BACKGROUND_COGNITION_LOCK:\n            response = requests.post(\n'''
+planner_new = '''    try:\n        import requests\n        if _FOREGROUND_COGNITION_ACTIVE.is_set():\n            return {"action": "nothing", "goal_key": "grounded_independence", "reason": "foreground cognition has priority", "confidence": 1.0}\n        with _BACKGROUND_COGNITION_LOCK:\n            if _FOREGROUND_COGNITION_ACTIVE.is_set():\n                return {"action": "nothing", "goal_key": "grounded_independence", "reason": "foreground cognition arrived; initiative planner yielded", "confidence": 1.0}\n            response = requests.post(\n'''
+if planner_old not in planner:
+    raise SystemExit("v0.11.7: actual initiative planner priority anchor missing")
+planner = planner.replace(planner_old, planner_new, 1)
+planner_except = '''    except Exception as exc:\n        return {"action": "probe_capability", "goal_key": "system_health", "reason": f"planner deferred: {exc.__class__.__name__}", "confidence": 0.50}\n'''
+planner_except_new = '''    except _ForegroundCognitionPreempted:\n        return {"action": "nothing", "goal_key": "grounded_independence", "reason": "foreground cognition preempted idle planner", "confidence": 1.0}\n    except Exception as exc:\n        return {"action": "probe_capability", "goal_key": "system_health", "reason": f"planner deferred: {exc.__class__.__name__}", "confidence": 0.50}\n'''
+if planner_except not in planner:
+    raise SystemExit("v0.11.7: initiative planner exception anchor missing")
+planner = planner.replace(planner_except, planner_except_new, 1)
+text = text[:planner_start] + planner + text[planner_end:]
+
+# Optional model-backed idle work uses streaming responses that foreground
+# arrival can close. This avoids a conversation waiting behind a non-streaming
+# 120-150 second background request on the four-thread field PC.
+def replace_background_post(function_name: str) -> None:
+    global text
+    function_start = text.find(f"def {function_name}(")
+    function_end = text.find("\n\ndef ", function_start + 20)
+    if function_start < 0 or function_end < 0:
+        raise SystemExit(f"v0.11.7: background function missing: {function_name}")
+    function_text = text[function_start:function_end]
+    pattern = re.compile(
+        r'response = requests\.post\(\n'
+        r'(?P<indent>[ \t]*)f"\{OLLAMA_BASE\}/api/chat",\n'
+        r'(?P=indent)json=\{'
+    )
+    function_text, count = pattern.subn(
+        lambda match: "response = _background_ollama_post(\n" + match.group("indent") + "{",
+        function_text,
+        count=1,
+    )
+    if count != 1:
+        raise SystemExit(f"v0.11.7: cancellable background post anchor missing: {function_name}")
+    text = text[:function_start] + function_text + text[function_end:]
+
+
+for background_function in (
+    "_learning_synthesize",
+    "_adaptive_model_review",
+    "_autonomy_stage_upgrade_candidate",
+    "_initiative_choose_action",
+    "_vex_background_services",
+):
+    replace_background_post(background_function)
 
 # Verified recent-self-activity reporting. This is an operational-state query, not
 # a personal-biography query. It reads only the initiative journal and therefore
@@ -88,18 +252,28 @@ if helper_marker not in text:
     raise SystemExit("v0.11.7: personal-memory helper marker missing")
 self_helpers = r'''def _recent_self_activity_question(message: str) -> bool:
     lower = " " + re.sub(r"\s+", " ", str(message or "").lower().replace("’", "'").strip()) + " "
+    normalized = str(message or "").lower().replace("’", "'")
+    lower = " " + re.sub(r"[^a-z0-9']+", " ", normalized).strip() + " "
     if not lower.strip():
         return False
-    self_anchor = any(x in lower for x in (" you ", " you've ", " you have ", " your "))
+    explicit_self = any(x in lower for x in (" you ", " you've ", " you have ", " your "))
+    implicit_update = any(x in lower for x in (
+        " catch me up ", " anything new ", " what happened ", " give me an update ", " any progress "
+    ))
+    self_anchor = explicit_self or implicit_update
     activity = any(x in lower for x in (
         " been doing ", " been up to ", " did you do ", " have you done ", " worked on ",
+        " did you work ", " you did ", " what did you ", " what have you been ", " catch me up ",
+        " anything new ", " what happened ", " give me an update ",
         " been working ", " learned ", " been learning ", " researched ", " been researching ",
         " fixed ", " repaired ", " improved ", " changed ", " accomplished ", " progress "
     ))
     retrospective = any(x in lower for x in (
         " while i was away ", " while i've been away ", " while i have been away ", " while i was gone ",
-        " since i left ", " since we talked ", " while i was out ", " recently ", " earlier ", " today ",
-        " been doing ", " been up to ", " did you do ", " have you done "
+        " since i've been gone ", " since i have been gone ", " in my absence ", " since i left ",
+        " since we talked ", " since my last message ", " since then ", " while i was out ",
+        " recently ", " earlier ", " today ", " catch me up ", " give me an update ",
+        " been doing ", " been up to ", " did you do ", " did you work ", " have you done "
     ))
     return self_anchor and activity and retrospective
 
@@ -161,7 +335,30 @@ route_insert = r'''                # v0.11.7: retrospective questions about VexN
 '''
 text = text.replace(route_marker, route_insert + route_marker, 1)
 
-text = text.replace('"version": "0.11.6.1"', '"version": "0.11.7.0"')
+# Mark foreground as soon as an authenticated /llm/chat request arrives, before
+# memory routing or model selection. A finally block keeps the signal correct for
+# every early return and error path.
+llm_start_marker = '        if parsed.path == "/llm/chat":\n'
+llm_end_marker = '        if parsed.path == "/tts/speak":\n'
+llm_start = text.find(llm_start_marker)
+llm_end = text.find(llm_end_marker, llm_start + len(llm_start_marker))
+if llm_start < 0 or llm_end < 0:
+    raise SystemExit("v0.11.7: llm handler block missing")
+llm_block = text[llm_start:llm_end]
+if "_foreground_cognition_enter()" in llm_block:
+    raise SystemExit("v0.11.7: llm handler already wrapped")
+llm_body = llm_block[len(llm_start_marker):].rstrip() + "\n"
+llm_wrapped = (
+    llm_start_marker
+    + "            _foreground_cognition_enter()\n"
+    + "            try:\n"
+    + textwrap.indent(llm_body, "    ")
+    + "            finally:\n"
+    + "                _foreground_cognition_exit()\n\n"
+)
+text = text[:llm_start] + llm_wrapped + text[llm_end:]
+
+text = text.replace('"version": "0.11.6.1"', '"version": "0.11.7.1"')
 bridge_path.write_text(text, encoding="utf-8")
 compile(text, str(bridge_path), "exec")
 
@@ -170,7 +367,7 @@ compile(text, str(bridge_path), "exec")
 # ---------------------------------------------------------------------------
 remote_path = Path("Tools/VexRemoteSupport.py")
 remote = remote_path.read_text(encoding="utf-8")
-remote = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.11.7"', remote, count=1, flags=re.M)
+remote = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.11.7.1"', remote, count=1, flags=re.M)
 
 collect_marker = "def collect_snapshot(include_doctor: bool = False, deep: bool = False) -> dict:\n"
 if collect_marker not in remote:
@@ -235,8 +432,10 @@ remote_path.write_text(remote, encoding="utf-8")
 compile(remote, str(remote_path), "exec")
 
 checks = [
-    '"version": "0.11.7.0"',
+    '"version": "0.11.7.1"',
     "_FOREGROUND_COGNITION_ACTIVE",
+    "def _foreground_cognition_enter(",
+    "def _background_ollama_post(",
     "def _ollama_chat_foreground_inner(",
     "foreground cognition has priority",
     "def _recent_self_activity_question(",
@@ -249,8 +448,15 @@ for marker in checks:
         raise SystemExit(f"v0.11.7 Bridge verifier missing: {marker}")
 
 remote_final = remote_path.read_text(encoding="utf-8")
-for marker in ['VERSION = "0.11.7"', "def initiative_public(", "def adaptive_public(", 'action == "initiative_status"', 'action == "adaptive_status"']:
+for marker in ['VERSION = "0.11.7.1"', "def initiative_public(", "def adaptive_public(", 'action == "initiative_status"', 'action == "adaptive_status"']:
     if marker not in remote_final:
         raise SystemExit(f"v0.11.7 Remote Support verifier missing: {marker}")
+
+planner_final_start = final.find("def _initiative_choose_action(")
+planner_final_end = final.find("\n\ndef ", planner_final_start + 20)
+planner_final = final[planner_final_start:planner_final_end]
+for marker in ("foreground cognition arrived; initiative planner yielded", "_background_ollama_post(", "except _ForegroundCognitionPreempted:"):
+    if marker not in planner_final:
+        raise SystemExit(f"v0.11.7 actual initiative planner verifier missing: {marker}")
 
 print("Applied v0.11.7 grounded self-continuity + foreground cognition priority")
