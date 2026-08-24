@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "version": "0.9.8",
-  "philosophy": "Vex keeps cognition, memory, routing, time grounding, and the Bridge lightweight. Heavy or specialized capabilities are separate on-demand tools that may be launched, used, inspected, repaired, and closed independently.",
+  "version": "0.11.4.0",
+  "philosophy": "Vex keeps cognition, memory, routing, time grounding, and the Bridge lightweight. Heavy or specialized capabilities are separate on-demand tools. Persistent learning is evidence-grounded data and validated procedures, not arbitrary binary self-rewriting.",
   "tools": [
     {
       "id": "doctor",
@@ -35,22 +35,46 @@
       "name": "Ollama Cognition",
       "external": true,
       "mode": "local-service",
-      "capabilities": ["reasoning", "conversation"],
+      "capabilities": ["reasoning", "conversation", "structured-intent-analysis"],
       "always_running": true
+    },
+    {
+      "id": "personal_memory",
+      "name": "Vex Personal Memory",
+      "executable": "VexMemoryWorker.exe",
+      "mode": "loopback-service",
+      "capabilities": ["persistent-memory", "verified-facts", "episodes", "semantic-retrieval"],
+      "always_running": true
+    },
+    {
+      "id": "research_learning",
+      "name": "Vex Learning Engine",
+      "mode": "idle-background-worker",
+      "capabilities": ["source-grounded-research", "stale-knowledge-refresh", "capability-gap-research"],
+      "always_running": true,
+      "foreground_priority": false
+    },
+    {
+      "id": "adaptive_learning",
+      "name": "Vex Adaptive Learning Supervisor",
+      "mode": "idle-background-worker",
+      "capabilities": ["experience-review", "behavior-learning", "naturalness-adaptation", "capability-awareness", "repair-gap-detection"],
+      "always_running": true,
+      "foreground_priority": false,
+      "persistent_store": "%APPDATA%\\VexBridge\\adaptive\\vex-adaptive.sqlite3"
     },
     {
       "id": "bridge",
       "name": "Vex Bridge",
       "executable": "VexBridge.exe",
       "mode": "core-service",
-      "capabilities": ["routing", "authentication", "pc-tools", "tool-broker", "clock", "knowledge-access"],
+      "capabilities": ["routing", "authentication", "pc-tools", "tool-broker", "clock", "knowledge-access", "validated-skill-compiler", "adaptive-context-broker"],
       "always_running": true
     }
   ],
   "planned_extractions": [
     "VexMaintenance",
     "VexResearchWorker",
-    "VexMediaWorker",
-    "VexArtWorker adapter"
+    "VexMediaWorker"
   ]
 }

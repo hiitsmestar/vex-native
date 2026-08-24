@@ -1,0 +1,191 @@
+name: Build VexNative v0.11.7.6 Generic Recall Recovery
+
+on:
+  push:
+    branches: [ "ci/v113-memory-route-hardening" ]
+  pull_request:
+    branches: [ "ci/v112-memory-recall-latency" ]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply Bridge patch chain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_package_versions.py
+          python Tools/apply_v113_memory_route_hardening.py
+          python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
+          python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
+          python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
+
+      - name: Verify v0.11.7.6 generic recall recovery
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/apply_v1174_isolated_lite_learning.py Tools/apply_v1175_remote_relay_pagination.py Tools/apply_v1176_generic_recall_recovery.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py Tools/test_v1174_isolated_lite_learning.py Tools/test_v1175_remote_relay_pagination.py Tools/test_v1176_generic_recall_recovery.py
+          $src = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          if (-not $src.Contains('"version": "0.11.7.6"')) { throw "v0.11.7.6 Bridge version marker missing" }
+          if (-not $src.Contains('_FOREGROUND_COGNITION_ACTIVE')) { throw "foreground cognition event missing" }
+          if (-not $src.Contains('def _foreground_cognition_enter(')) { throw "foreground arrival lifecycle missing" }
+          if (-not $src.Contains('def _background_ollama_post(')) { throw "cancellable background inference missing" }
+          if (-not $src.Contains('def _ollama_chat_foreground_inner(')) { throw "foreground cognition wrapper missing" }
+          if (-not $src.Contains('foreground cognition has priority')) { throw "background yielding missing" }
+          if (-not $src.Contains('def _recent_self_activity_question(')) { throw "recent-self-activity semantic route missing" }
+          if (-not $src.Contains('def _verified_recent_self_activity_reply(')) { throw "verified self-activity reply missing" }
+          if (-not $src.Contains('verified-recent-self-activity-v117')) { throw "self-activity grounding marker missing" }
+          if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_events')) { throw "initiative journal missing" }
+          if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "idle initiative loop missing" }
+          if (-not $src.Contains('verified-personal-memory-v1176')) { throw "authoritative personal recall marker missing" }
+          if (-not $src.Contains('verified-personal-memory-unavailable-v1176')) { throw "truthful personal recall miss marker missing" }
+          if (-not $src.Contains('HISTORICAL STAR-SUPPLIED EXCERPTS')) { throw "generated episode filtering missing" }
+          if (-not $src.Contains('foreground-reserved-lite')) { throw "lite foreground reservation missing" }
+          if (-not $src.Contains('parsed.path == "/cognition/coordination"')) { throw "coordination telemetry route missing" }
+          if (-not $src.Contains('def _memory_compose_verified_reply(')) { throw "fact-locked natural recall renderer missing" }
+          if (-not $src.Contains('def _adaptive_deterministic_review(')) { throw "deterministic lite reviewer missing" }
+          if (-not $src.Contains('def _autonomy_stage_deterministic_upgrade_candidate(')) { throw "deterministic upgrade staging missing" }
+          if (-not $src.Contains('fact preserving conversational response variation')) { throw "privacy-safe naturalness research topic missing" }
+          if (-not $src.Contains('def _adaptive_worker_cycle(')) { throw "bounded adaptive worker cycle missing" }
+          if (-not $src.Contains('def _autonomy_worker_loop(')) { throw "isolated autonomy worker missing" }
+          if (-not $src.Contains('def _initiative_scheduler_loop(')) { throw "isolated initiative scheduler missing" }
+          if (-not $src.Contains('name="VexAutonomousImprovement"')) { throw "autonomy worker thread missing" }
+          if (-not $src.Contains('name="VexInitiativeScheduler"')) { throw "initiative worker thread missing" }
+          if (-not $src.Contains('"ok", "okay", "actually", "really", "honestly"')) { throw "conversational recall normalization missing" }
+          if (-not $src.Contains('{"query": "", "limit": 12}')) { throw "generic authoritative facts query missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7.5"')) { throw "Remote Support version missing" }
+          if (-not $remote.Contains('def initiative_public(')) { throw "sanitized initiative telemetry missing" }
+          if (-not $remote.Contains('def adaptive_public(')) { throw "sanitized adaptive telemetry missing" }
+          if (-not $remote.Contains('def coordination_public(')) { throw "sanitized coordination telemetry missing" }
+          if (-not $remote.Contains('action == "initiative_status"')) { throw "initiative support command missing" }
+          if (-not $remote.Contains('action == "adaptive_status"')) { throw "adaptive support command missing" }
+          if (-not $remote.Contains('action == "coordination_status"')) { throw "coordination support command missing" }
+          if (-not $remote.Contains('action == "adaptive_run"')) { throw "adaptive live-run support command missing" }
+          if (-not $remote.Contains('"worker_alive": yes(value.get("worker_alive"))')) { throw "adaptive worker liveness telemetry missing" }
+          if (-not $remote.Contains('"staged_upgrades": integer(value.get("staged_upgrades"))')) { throw "sanitized staged-upgrade telemetry missing" }
+          if (-not $remote.Contains('"review_mode": str(value.get("review_mode")')) { throw "sanitized lite-review telemetry missing" }
+          if (-not $remote.Contains('session remains active')) { throw "transient relay retry missing" }
+          if (-not $remote.Contains('for page in range(1, 101)')) { throw "multi-page relay polling missing" }
+          if (-not $remote.Contains('action == "memory_status"')) { throw "Memory Worker status command missing" }
+          python Tools/test_v117_grounded_continuity.py
+          python Tools/test_v1172_authoritative_recall_lite_priority.py
+          python Tools/test_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/test_v1174_isolated_lite_learning.py
+          python Tools/test_v1175_remote_relay_pagination.py
+          python Tools/test_v1176_generic_recall_recovery.py
+          Write-Host "verified generic conversational recall, focused-topic preservation, and authoritative-only rendering"
+
+      - name: Build Bridge hotfix
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexBridge `
+            --paths Bridge `
+            --collect-all cryptography `
+            --collect-all edge_tts `
+            --collect-all yt_dlp `
+            --hidden-import tkinter `
+            --hidden-import sqlite3 `
+            --hidden-import vex_bridge `
+            --hidden-import winrt.windows.media.control `
+            Bridge/vex_bridge_full.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+
+      - name: Package v0.11.7.6
+        shell: pwsh
+        run: |
+          @'
+          VexNative Bridge v0.11.7.6 - Generic Conversational Recall Recovery
+          ===================================================================
+          - Treats ordinary framing such as "okay," "actually," and pet names as conversation, not fake memory topics.
+          - Broad recall requests fetch the highest-ranked authoritative /facts instead of searching for filler words.
+          - Focused questions still preserve their real topic and reject unrelated facts.
+          - Keeps the v0.11.7.4 foreground priority and isolated learning workers unchanged.
+          - Replaces VexBridge.exe only. Keep Remote Support v0.11.7.5, Memory Worker v0.11.2/database, and iPhone app v0.11.1 untouched.
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.6.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/README-v0.11.7.6.txt -DestinationPath VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip -Force
+          Expand-Archive VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery
+          path: VexNative-v0.11.7.6-Bridge-Generic-Recall-Recovery.zip
+          retention-days: 7

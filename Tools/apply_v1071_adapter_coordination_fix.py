@@ -48,6 +48,7 @@ text = text.replace(old, new, 1)
 # This patch is reused by the v0.10.8 build chain, so report the actual bundle
 # version that the subsequent verifier expects instead of leaving a stale 0.10.7.
 text = text.replace('"version": "0.10.2"', '"version": "0.10.8"')
+text = text.replace('"version": "0.10.3"', '"version": "0.10.8"')
 text = text.replace('"version": "0.10.7"', '"version": "0.10.8"')
 
 for required in ["def _adapter_release_cognition_memory", "_ART_COGNITION_WAS_RELEASED = True", '"version": "0.10.8"']:
