@@ -1,4 +1,4 @@
-name: Build Vex v0.11.7.9 Remote Chat Return Fix
+name: Build Vex v0.11.7.10 Portable Remote Chat Fix
 
 on:
   push:
@@ -97,24 +97,24 @@ jobs:
           python Tools/apply_v1175_remote_relay_pagination.py
           python Tools/apply_v1176_generic_recall_recovery.py
           python Tools/apply_v1177_remote_chat_relay.py
-          python Tools/apply_v1179_remote_chat_return_fix.py
+          python Tools/apply_v11710_remote_chat_direct_ollama_fix.py
 
-      - name: Verify dedicated remote chat return path
+      - name: Verify direct local Ollama remote chat
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v1179_remote_chat_return_fix.py Tools/test_v1179_remote_chat_return_fix.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11710_remote_chat_direct_ollama_fix.py Tools/test_v11710_remote_chat_direct_ollama_fix.py
           python Tools/test_v1175_remote_relay_pagination.py
           python Tools/test_v1177_remote_chat_relay.py
-          python Tools/test_v1179_remote_chat_return_fix.py
+          python Tools/test_v11710_remote_chat_direct_ollama_fix.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
-          if (-not $bridge.Contains('parsed.path == "/llm/remote-chat"')) { throw "dedicated Bridge remote-chat route missing" }
-          if (-not $bridge.Contains('remote-technical-direct-v1179')) { throw "remote-chat grounding marker missing" }
-          if (-not $remote.Contains('bridge_post("/llm/remote-chat"')) { throw "Remote Support not routed to dedicated endpoint" }
-          if (-not $remote.Contains('VERSION = "0.11.7.9"')) { throw "Remote Support v0.11.7.9 marker missing" }
-          Write-Host "verified bounded direct remote-chat path"
+          if (-not $bridge.Contains('"version": "0.11.7.6"')) { throw "known-good Bridge v0.11.7.6 marker missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7.10"')) { throw "Remote Support v0.11.7.10 marker missing" }
+          if (-not $remote.Contains('http://127.0.0.1:11434/api/chat')) { throw "direct Ollama route missing" }
+          if ($remote.Contains('bridge_post("/llm/remote-chat"')) { throw "stale Bridge remote-chat route present" }
+          Write-Host "verified known-good Bridge + direct local Ollama remote chat"
 
-      - name: Build VexBridge and Remote Support
+      - name: Build known-good Bridge and Remote Support
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed `
@@ -131,39 +131,40 @@ jobs:
             Tools/VexRemoteSupport.py
           if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
 
-      - name: Package v0.11.7.9
+      - name: Package user-level portable installer
         shell: pwsh
         run: |
+          Copy-Item Tools/Install-Vex-v0.11.7.10.ps1 dist/Install-Vex-v0.11.7.10.ps1 -Force
           @'
-          Vex v0.11.7.9 - Remote Chat Return Fix
-          ========================================
+          Vex v0.11.7.10 - Portable Remote Chat Fix
+          ==========================================
 
-          PURPOSE
-          - Adds a dedicated /llm/remote-chat Bridge route for Remote Support technical conversation.
-          - Bypasses the normal foreground memory/research path so a stalled retrieval pipeline cannot trap remote chat.
-          - Uses a bounded direct Ollama call with a short context/output cap and explicit timeout.
-          - Keeps the normal /llm/chat path unchanged for the iPhone app.
+          WHAT CHANGED
+          - Restores the known-good VexBridge v0.11.7.6 runtime.
+          - Remote Support v0.11.7.10 talks directly to local Ollama for bounded technical relay chat.
+          - The broken v0.11.7.9 Bridge /llm/remote-chat path is not used.
 
-          INSTALL
-          1. Close VexRemoteSupport.
-          2. Stop the self-heal watchdog briefly so it does not relaunch VexBridge during replacement.
-          3. Close VexBridge if still running.
-          4. Replace VexBridge.exe and VexRemoteSupport.exe with the two files from this package.
-          5. Start START-VEX-SELF-HEAL.cmd again.
-          6. Start VexRemoteSupport and begin a fresh two-hour support session.
+          INSTALL WITHOUT ADMIN
+          - Keep this package under your normal user Downloads folder.
+          - Close the black self-heal watchdog window first.
+          - Right-click Install-Vex-v0.11.7.10.ps1 and run with PowerShell, or run it from a normal PowerShell window.
+          - The installer only targets the existing user-owned Vex folder under Downloads. It never writes to Program Files and never requests elevation.
+          - It verifies SHA256 after copying both EXEs.
+          - Then run START-VEX-SELF-HEAL.cmd once, open VexRemoteSupport.exe, and start a fresh two-hour session.
 
-          Keep the Memory Worker/database and iPhone app unchanged.
-          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.9.txt
+          Memory Worker/database and iPhone app remain unchanged.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.10.txt
 
           Compress-Archive `
-            -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/README-Vex-v0.11.7.9.txt `
-            -DestinationPath Vex-v0.11.7.9-Remote-Chat-Return-Fix.zip -Force
-          Expand-Archive Vex-v0.11.7.9-Remote-Chat-Return-Fix.zip -DestinationPath verify-package -Force
+            -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/Install-Vex-v0.11.7.10.ps1,dist/README-Vex-v0.11.7.10.txt `
+            -DestinationPath Vex-v0.11.7.10-Portable-Remote-Chat-Fix.zip -Force
+          Expand-Archive Vex-v0.11.7.10-Portable-Remote-Chat-Fix.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
           if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.10.ps1)) { throw "portable installer missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.9-Remote-Chat-Return-Fix
-          path: Vex-v0.11.7.9-Remote-Chat-Return-Fix.zip
+          name: Vex-v0.11.7.10-Portable-Remote-Chat-Fix
+          path: Vex-v0.11.7.10-Portable-Remote-Chat-Fix.zip
           retention-days: 7
