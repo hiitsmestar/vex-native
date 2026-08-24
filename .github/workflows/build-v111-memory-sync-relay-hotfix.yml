@@ -1,0 +1,147 @@
+name: Build VexNative v0.11.1 Memory Sync + Relay Hotfix
+
+on:
+  pull_request:
+    branches: [ "ci/v110-personal-memory-worker" ]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-remote-support:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install pyinstaller requests
+      - name: Apply Remote Support hotfix
+        shell: pwsh
+        run: |
+          python Tools/apply_v111_remote_support_pagination.py
+          python -m py_compile Tools/VexRemoteSupport.py Tools/apply_v111_remote_support_pagination.py
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'page={page}' -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'action == "memory_status"' -Quiet | Out-Null
+          Select-String -Path Tools/VexRemoteSupport.py -Pattern 'VERSION = "0.11.1"' -Quiet | Out-Null
+      - name: Build Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests --hidden-import tkinter Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+          Compress-Archive -Path dist/VexRemoteSupport.exe -DestinationPath VexRemoteSupport-v0.11.1-Pagination-Hotfix.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexRemoteSupport-v0.11.1-Pagination-Hotfix
+          path: VexRemoteSupport-v0.11.1-Pagination-Hotfix.zip
+          retention-days: 7
+
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply iOS patch chain
+        run: |
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
+          python3 Tools/apply_v098_ios_time_grounding_patch.py
+          python3 Tools/apply_v107_art_ios_adapter_patch.py
+          python3 Tools/apply_v108_ios_art_followup_grounding.py
+          python3 Tools/apply_v110_ios_memory_sync.py
+          python3 Tools/apply_v111_ios_memory_sync_hotfix.py
+          grep -q 'Task { await syncPersonalMemory(endpoint: primary' VexNative/ContentView.swift
+          grep -q '750_000_000' VexNative/ContentView.swift
+          if grep -q '^[[:space:]]*await syncPersonalMemory(endpoint: primary' VexNative/ContentView.swift; then exit 1; fi
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build unsigned app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=111 \
+            MARKETING_VERSION=0.11.1 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Add permissions and verify
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local memory, and local tools." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your commands and conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become private chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "111"
+      - name: Package IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.1-memory-sync-hotfix.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.1-memory-sync-hotfix.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.1-Memory-Sync-Hotfix
+          path: VexNative-v0.11.1-memory-sync-hotfix.ipa
+          retention-days: 7
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.1-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
