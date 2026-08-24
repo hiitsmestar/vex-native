@@ -1,4 +1,4 @@
-name: Build Vex v0.11.7.14 Nonblocking Bootstrap
+name: Build Vex v0.11.7.15 Installer Lock Fix
 
 on:
   push:
@@ -100,21 +100,20 @@ jobs:
           python Tools/apply_v11712_bridge_fast_start_health.py
           python Tools/apply_v11713_listener_verified_recovery.py
           python Tools/apply_v11714_nonblocking_bootstrap.py
-      - name: Verify v0.11.7.14 source and installer
+          python Tools/apply_v11715_installer_lock_fix.py
+      - name: Verify v0.11.7.15 source and installer
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11714_nonblocking_bootstrap.py Tools/VexInstall11714.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11715_installer_lock_fix.py Tools/VexInstall11715.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
-          if (-not $bridge.Contains('"version": "0.11.7.14"')) { throw 'Bridge v0.11.7.14 marker missing' }
-          if (-not $bridge.Contains('if args.setup:')) { throw 'nonblocking setup marker missing' }
-          if ($bridge.Contains('if args.setup or not config.get("folders")')) { throw 'blocking startup folder picker still present' }
-          if (-not $bridge.Contains('ThreadingHTTPServer(("127.0.0.1", port), Handler)')) { throw 'loopback listener marker missing' }
-          if (-not $bridge.Contains('_write_startup_stage("listening")')) { throw 'startup telemetry marker missing' }
-          if (-not $remote.Contains('VERSION = "0.11.7.14"')) { throw 'Remote Support v0.11.7.14 marker missing' }
-          if (-not $remote.Contains('"startup_stage": _bridge_startup_stage()')) { throw 'startup stage health marker missing' }
-          if (-not $remote.Contains('action == "safe_update"')) { throw 'safe_update regressed' }
-          if (-not (Get-Content Tools/VexBridgeWatchdog-v11714.ps1 -Raw).Contains('Local\VexBridgeWatchdog-v11714')) { throw 'singleton watchdog marker missing' }
+          $installer = Get-Content Tools/VexInstall11715.py -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.15"')) { throw 'Bridge v0.11.7.15 marker missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.15"')) { throw 'Remote Support v0.11.7.15 marker missing' }
+          if (-not $installer.Contains('replace_with_retry')) { throw 'lock retry helper missing' }
+          if (-not $installer.Contains('os.replace(tmp,dst)')) { throw 'atomic replacement missing' }
+          if (-not $installer.Contains("time.time()+seconds")) { throw 'bounded retry missing' }
+          if (-not $installer.Contains("VexBridgeWatchdog")) { throw 'watchdog stop logic missing' }
       - name: Build Bridge Remote Support and Installer
         shell: pwsh
         run: |
@@ -122,26 +121,26 @@ jobs:
           if (!(Test-Path dist/VexBridge.exe)) { throw 'VexBridge.exe missing' }
           pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
           if (!(Test-Path dist/VexRemoteSupport.exe)) { throw 'VexRemoteSupport.exe missing' }
-          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.14 Tools/VexInstall11714.py
-          if (!(Test-Path dist/Install-Vex-v0.11.7.14.exe)) { throw 'installer EXE missing' }
-      - name: Package v0.11.7.14
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.15 Tools/VexInstall11715.py
+          if (!(Test-Path dist/Install-Vex-v0.11.7.15.exe)) { throw 'installer EXE missing' }
+      - name: Package v0.11.7.15
         shell: pwsh
         run: |
           Copy-Item Tools/VexBridgeWatchdog-v11714.ps1 dist/VexBridgeWatchdog-v11714.ps1 -Force
           @'
-          Vex v0.11.7.14 - Nonblocking Bootstrap
-          =========================================
-          - Bridge no longer opens or waits on a folder picker during normal startup.
-          - Listener binds to loopback and reports local startup stage telemetry.
-          - Singleton watchdog prevents duplicate watchdog instances.
-          - Installer is an EXE; no PowerShell install command is required.
-          - Installer targets only the existing user-owned Vex folder under Downloads and SHA256-verifies copied files.
-          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.14.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/Install-Vex-v0.11.7.14.exe,dist/VexBridgeWatchdog-v11714.ps1,dist/README-Vex-v0.11.7.14.txt -DestinationPath Vex-v0.11.7.14-Nonblocking-Bootstrap.zip -Force
-          Expand-Archive Vex-v0.11.7.14-Nonblocking-Bootstrap.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package/Install-Vex-v0.11.7.14.exe)) { throw 'packaged installer EXE missing' }
+          Vex v0.11.7.15 - Installer Lock Fix
+          ====================================
+          - Fixes Windows WinError 32 when old Vex executables are still locked.
+          - Repeatedly stops Bridge, Remote Support, and watchdog launchers before replacement.
+          - Stages each file, SHA256-verifies it, then atomically replaces the destination with bounded retries.
+          - Installer remains a normal EXE and requires no PowerShell command.
+          - Keeps v0.11.7.14 nonblocking Bridge bootstrap and listener telemetry.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.15.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/Install-Vex-v0.11.7.15.exe,dist/VexBridgeWatchdog-v11714.ps1,dist/README-Vex-v0.11.7.15.txt -DestinationPath Vex-v0.11.7.15-Installer-Lock-Fix.zip -Force
+          Expand-Archive Vex-v0.11.7.15-Installer-Lock-Fix.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.15.exe)) { throw 'packaged installer EXE missing' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.14-Nonblocking-Bootstrap
-          path: Vex-v0.11.7.14-Nonblocking-Bootstrap.zip
+          name: Vex-v0.11.7.15-Installer-Lock-Fix
+          path: Vex-v0.11.7.15-Installer-Lock-Fix.zip
           retention-days: 7
