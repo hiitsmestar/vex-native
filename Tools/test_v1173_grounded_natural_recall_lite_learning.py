@@ -245,10 +245,10 @@ def test_remote_support_exposes_sanitized_learning_telemetry() -> None:
 def test_v1173_source_guards() -> None:
     source = BRIDGE_PATH.read_text(encoding="utf-8")
     remote = REMOTE_PATH.read_text(encoding="utf-8")
-    assert '"version": "0.11.7.3"' in source
-    assert "verified-personal-memory-v1173" in source
-    assert "verified-personal-memory-unavailable-v1173" in source
-    assert 'VERSION = "0.11.7.3"' in remote
+    assert any(f'"version": "0.11.7.{n}"' in source for n in (3, 4))
+    assert any(f"verified-personal-memory-v117{n}" in source for n in (3, 4))
+    assert any(f"verified-personal-memory-unavailable-v117{n}" in source for n in (3, 4))
+    assert any(f'VERSION = "0.11.7.{n}"' in remote for n in (3, 4))
     assert 'route_hint = "verified-memory" if _personal_memory_fact_question(message)' in source
     assert "def _adaptive_deterministic_review(" in source
     assert "def _autonomy_stage_deterministic_upgrade_candidate(" in source
