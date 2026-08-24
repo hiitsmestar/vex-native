@@ -88,7 +88,18 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/apply_v113_memory_route_hardening.py
-          python -c "from pathlib import Path; t=Path('Bridge/vex_bridge.py').read_text(); s=t.index('        if parsed.path == \"/llm/chat\":'); e=t.index('        if parsed.path == \"/tts/speak\":',s); b=t[s:e]; assert '\"grounding\": \"verified-personal-memory-v113\"' in b; assert 'verified personal memory unavailable' in b; assert b.index('if _personal_memory_fact_question(message):') < b.index('cognition_started = time.perf_counter()'); print('verified v0.11.3 recall route is inside live /llm/chat before Qwen')"
+          $src = Get-Content Bridge/vex_bridge.py -Raw
+          $start = $src.IndexOf('        if parsed.path == "/llm/chat":')
+          $finish = $src.IndexOf('        if parsed.path == "/tts/speak":', $start)
+          if ($start -lt 0 -or $finish -lt 0) { throw "live /llm/chat route boundaries not found" }
+          $block = $src.Substring($start, $finish - $start)
+          if (-not $block.Contains('"grounding": "verified-personal-memory-v113"')) { throw "v0.11.3 grounding marker missing from live /llm/chat" }
+          if (-not $block.Contains('verified personal memory unavailable')) { throw "v0.11.3 fail-closed marker missing from live /llm/chat" }
+          $recall = $block.IndexOf('if _personal_memory_fact_question(message):')
+          $cognition = $block.IndexOf('cognition_started = time.perf_counter()')
+          if ($recall -lt 0) { throw "v0.11.3 recall route missing from live /llm/chat" }
+          if ($cognition -ge 0 -and $recall -gt $cognition) { throw "v0.11.3 recall route is after Qwen generation" }
+          Write-Host "verified v0.11.3 recall route is inside live /llm/chat before Qwen"
 
       - name: Build Bridge hotfix
         shell: pwsh
