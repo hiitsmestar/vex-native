@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.2 Authoritative Recall Foreground Reservation
+name: Build VexNative v0.11.7.3 Grounded Natural Recall Lite Learning
 
 on:
   push:
@@ -89,14 +89,15 @@ jobs:
           python Tools/apply_v1161_low_memory_initiative_fix.py
           python Tools/apply_v117_grounded_continuity_foreground_priority.py
           python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
 
-      - name: Verify v0.11.7.2 architecture
+      - name: Verify v0.11.7.3 architecture
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py
+          python -m py_compile Bridge/vex_bridge.py Bridge/vex_bridge_full.py Tools/VexRemoteSupport.py Tools/apply_v117_grounded_continuity_foreground_priority.py Tools/apply_v1172_authoritative_recall_lite_priority.py Tools/apply_v1173_grounded_natural_recall_lite_learning.py Tools/test_v117_grounded_continuity.py Tools/test_v1172_authoritative_recall_lite_priority.py Tools/test_v1173_grounded_natural_recall_lite_learning.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
-          if (-not $src.Contains('"version": "0.11.7.2"')) { throw "v0.11.7.2 Bridge version marker missing" }
+          if (-not $src.Contains('"version": "0.11.7.3"')) { throw "v0.11.7.3 Bridge version marker missing" }
           if (-not $src.Contains('_FOREGROUND_COGNITION_ACTIVE')) { throw "foreground cognition event missing" }
           if (-not $src.Contains('def _foreground_cognition_enter(')) { throw "foreground arrival lifecycle missing" }
           if (-not $src.Contains('def _background_ollama_post(')) { throw "cancellable background inference missing" }
@@ -107,22 +108,29 @@ jobs:
           if (-not $src.Contains('verified-recent-self-activity-v117')) { throw "self-activity grounding marker missing" }
           if (-not $src.Contains('CREATE TABLE IF NOT EXISTS initiative_events')) { throw "initiative journal missing" }
           if (-not $src.Contains('_initiative_worker_once(force=False)')) { throw "idle initiative loop missing" }
-          if (-not $src.Contains('verified-personal-memory-v1172')) { throw "authoritative personal recall marker missing" }
-          if (-not $src.Contains('verified-personal-memory-unavailable-v1172')) { throw "truthful personal recall miss marker missing" }
+          if (-not $src.Contains('verified-personal-memory-v1173')) { throw "authoritative personal recall marker missing" }
+          if (-not $src.Contains('verified-personal-memory-unavailable-v1173')) { throw "truthful personal recall miss marker missing" }
           if (-not $src.Contains('HISTORICAL STAR-SUPPLIED EXCERPTS')) { throw "generated episode filtering missing" }
           if (-not $src.Contains('foreground-reserved-lite')) { throw "lite foreground reservation missing" }
           if (-not $src.Contains('parsed.path == "/cognition/coordination"')) { throw "coordination telemetry route missing" }
-          if (-not $remote.Contains('VERSION = "0.11.7.2"')) { throw "Remote Support version missing" }
+          if (-not $src.Contains('def _memory_compose_verified_reply(')) { throw "fact-locked natural recall renderer missing" }
+          if (-not $src.Contains('def _adaptive_deterministic_review(')) { throw "deterministic lite reviewer missing" }
+          if (-not $src.Contains('def _autonomy_stage_deterministic_upgrade_candidate(')) { throw "deterministic upgrade staging missing" }
+          if (-not $src.Contains('fact preserving conversational response variation')) { throw "privacy-safe naturalness research topic missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7.3"')) { throw "Remote Support version missing" }
           if (-not $remote.Contains('def initiative_public(')) { throw "sanitized initiative telemetry missing" }
           if (-not $remote.Contains('def adaptive_public(')) { throw "sanitized adaptive telemetry missing" }
           if (-not $remote.Contains('def coordination_public(')) { throw "sanitized coordination telemetry missing" }
           if (-not $remote.Contains('action == "initiative_status"')) { throw "initiative support command missing" }
           if (-not $remote.Contains('action == "adaptive_status"')) { throw "adaptive support command missing" }
           if (-not $remote.Contains('action == "coordination_status"')) { throw "coordination support command missing" }
+          if (-not $remote.Contains('"staged_upgrades": integer(value.get("staged_upgrades"))')) { throw "sanitized staged-upgrade telemetry missing" }
+          if (-not $remote.Contains('"review_mode": str(value.get("review_mode")')) { throw "sanitized lite-review telemetry missing" }
           if (-not $remote.Contains('session remains active')) { throw "transient relay retry missing" }
           python Tools/test_v117_grounded_continuity.py
           python Tools/test_v1172_authoritative_recall_lite_priority.py
-          Write-Host "verified authoritative recall, generated-text exclusion, lite foreground reservation, and resilient sanitized relay"
+          python Tools/test_v1173_grounded_natural_recall_lite_learning.py
+          Write-Host "verified fact-locked natural recall, deterministic lite review, staged improvements, and resilient sanitized relay"
 
       - name: Build Bridge and Remote Support
         shell: pwsh
@@ -146,28 +154,29 @@ jobs:
             Tools/VexRemoteSupport.py
           if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
 
-      - name: Package v0.11.7.2
+      - name: Package v0.11.7.3
         shell: pwsh
         run: |
           @'
-          VexNative v0.11.7.2 - Authoritative Recall + Foreground Reservation
+          VexNative v0.11.7.3 - Grounded Natural Recall + Lite Adaptive Review
           ====================================================================
-          - Routes natural questions about Star/Vex personal memory through verified /facts data even when punctuation follows "me" or "us".
-          - Returns a truthful no-trusted-fact reply instead of allowing personal recall to fall through to Qwen or the iPhone fallback model.
-          - Keeps raw historical episodes for audit, but excludes generated Vex/model prose from future factual cognition grounding.
-          - Reserves Ollama for foreground conversation on lite or memory-pressure PCs; deterministic initiative probes/research still run while optional model synthesis is deferred.
-          - Keeps tiny cancellable warmups and independent Art Worker rendering without giving background prompt enhancement priority over conversation.
-          - Adds sanitized foreground/background coordination telemetry to Remote Support.
-          - Keeps a visible two-hour support session alive across transient GitHub relay errors and retries automatically.
+          - Keeps personal recall locked to authoritative Memory Worker /facts; Qwen never paraphrases or supplies personal facts.
+          - Speaks verified facts naturally in second person instead of copying a numbered database dump.
+          - Rotates framing and verified fact windows across repeated cleared-chat tests without inventing new content.
+          - Adds a deterministic low-memory reviewer that drains queued real exchanges and learns repeated-output/naturalness corrections without using background Ollama.
+          - Converts repeated grounded failures into local lessons, a privacy-safe generic research topic, and a testable staged upgrade request.
+          - Stages planning data only; it does not rewrite or replace the running executable.
+          - Publishes sanitized review-mode and staged-upgrade counts through the visible two-hour Remote Support session.
+          - Retains v0.11.7.2 foreground reservation, authoritative misses, generated-text exclusion, and resilient relay behavior.
           - Preserves the existing v0.11.2 Memory Worker/database and v0.11.1 iPhone app.
-          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.2.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/README-v0.11.7.2.txt -DestinationPath VexNative-v0.11.7.2-Bridge-RemoteSupport-Authoritative-Recall.zip -Force
-          Expand-Archive VexNative-v0.11.7.2-Bridge-RemoteSupport-Authoritative-Recall.zip -DestinationPath verify-package -Force
+          '@ | Set-Content -Encoding UTF8 dist/README-v0.11.7.3.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/README-v0.11.7.3.txt -DestinationPath VexNative-v0.11.7.3-Bridge-RemoteSupport-Grounded-Natural-Learning.zip -Force
+          Expand-Archive VexNative-v0.11.7.3-Bridge-RemoteSupport-Grounded-Natural-Learning.zip -DestinationPath verify-package -Force
           if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
           if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.2-Authoritative-Recall-Foreground-Reservation
-          path: VexNative-v0.11.7.2-Bridge-RemoteSupport-Authoritative-Recall.zip
+          name: VexNative-v0.11.7.3-Grounded-Natural-Recall-Lite-Learning
+          path: VexNative-v0.11.7.3-Bridge-RemoteSupport-Grounded-Natural-Learning.zip
           retention-days: 7

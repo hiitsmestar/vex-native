@@ -72,7 +72,9 @@ def test_verified_facts_are_authoritative(bridge) -> None:
         assert result is not None
         reply, model = result
         assert model == "pc-memory"
-        assert "Star's favorite color is purple." in reply
+        assert "your favorite color is purple" in reply
+        assert "Star's" not in reply
+        assert "pulling the specific bits" not in reply.lower()
         assert calls and set(calls) == {"/facts"}
     finally:
         bridge._memory_post = original_post
@@ -176,8 +178,8 @@ def test_source_routes_cannot_fall_through_to_qwen() -> None:
     personal = personal[:personal.index("if _runtime_fact_question(message):")]
 
     assert handler.index("if _personal_memory_fact_question(message):") < handler.index("result = _ollama_chat(")
-    assert '"grounding": "verified-personal-memory-v1172"' in personal
-    assert '"grounding": "verified-personal-memory-unavailable-v1172"' in personal
+    assert '"grounding": "verified-personal-memory-v1173"' in personal
+    assert '"grounding": "verified-personal-memory-unavailable-v1173"' in personal
     assert "self._json(503" not in personal
     assert "not going to fill the gap with a guess" in personal
     assert 'parsed.path == "/cognition/coordination"' in source
