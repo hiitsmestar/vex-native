@@ -15,12 +15,14 @@ required_remote = [
     'VERSION = "0.11.7.12"',
     'def _bridge_health_public()',
     'def _bounded_bridge_recovery()',
+    'def _bridge_health_monitor(worker)',
+    'name="VexBridgeHealthMonitor"',
     'post_comment("bridge_health_changed", health)',
     'post_comment("health_heartbeat"',
     'post_comment("bridge_auto_recovery", recovery)',
-    'now - bridge_unreachable_since >= 180',
-    'now - last_bridge_recovery >= 600',
-    'bool(self.allow_maintenance())',
+    'now - unreachable_since >= 180',
+    'now - last_recovery >= 600',
+    'bool(worker.allow_maintenance())',
     'action == "bridge_health"',
     'action == "safe_update"',
     'http://127.0.0.1:11434/api/chat',
@@ -33,12 +35,10 @@ for marker in required_remote:
     if marker not in remote:
         raise SystemExit(f"missing Remote Support marker: {marker}")
 
-# The blocking initial rebuild must no longer occur directly in main before server creation.
 needle = '    state.index.rebuild()\n    start_background_reindex(state)'
 if needle in bridge:
     raise SystemExit("blocking initial Bridge rebuild still present")
 
-# Recovery must stay bounded; v0.11.7.12 intentionally does not add arbitrary shell/exec relay actions.
 for forbidden in ['action == "shell"', 'action == "exec"', 'action == "powershell"']:
     if forbidden in remote:
         raise SystemExit(f"unsafe generic remote action unexpectedly present: {forbidden}")
