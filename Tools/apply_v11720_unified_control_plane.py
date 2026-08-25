@@ -6,8 +6,10 @@ from pathlib import Path
 
 BRIDGE = Path('Bridge/vex_bridge.py')
 REMOTE = Path('Tools/VexRemoteSupport.py')
+DOCTOR = Path('Tools/VexDoctor.py')
 bridge = BRIDGE.read_text(encoding='utf-8')
 remote = REMOTE.read_text(encoding='utf-8')
+doctor = DOCTOR.read_text(encoding='utf-8')
 
 if '"version": "0.11.7.19"' not in bridge:
     raise SystemExit('v0.11.7.20 expected Bridge v0.11.7.19 source')
@@ -63,10 +65,23 @@ if old_probe not in remote:
 remote = remote.replace(old_probe, new_probe, 1)
 remote = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.11.7.20"', remote, count=1, flags=re.M)
 
+# Doctor reports whether diagnostics executed separately from whether the host
+# is healthy. CI runs on an intentionally empty runner, so a broken/degraded
+# health result is valid smoke output and must not be confused with execution
+# failure. Keep both values in the JSON contract and align Doctor identity.
+doctor = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.11.7.20"', doctor, count=1, flags=re.M)
+doctor_anchor = '''    report = collect(deep=args.deep)\n    json_path, txt_path = write_report(report, args.json_out)\n'''
+doctor_replacement = '''    report = collect(deep=args.deep)\n    report["ok"] = True\n    report["overall"] = report["summary"]["overall"]\n    json_path, txt_path = write_report(report, args.json_out)\n'''
+if doctor_anchor not in doctor:
+    raise SystemExit('v0.11.7.20 Doctor headless anchor missing')
+doctor = doctor.replace(doctor_anchor, doctor_replacement, 1)
+
 BRIDGE.write_text(bridge, encoding='utf-8')
 REMOTE.write_text(remote, encoding='utf-8')
+DOCTOR.write_text(doctor, encoding='utf-8')
 compile(bridge, str(BRIDGE), 'exec')
 compile(remote, str(REMOTE), 'exec')
+compile(doctor, str(DOCTOR), 'exec')
 
 for marker in [
     '"version": "0.11.7.20"',
@@ -86,5 +101,12 @@ for marker in [
 ]:
     if marker not in remote:
         raise SystemExit(f'v0.11.7.20 Remote verifier missing: {marker}')
+for marker in [
+    'VERSION = "0.11.7.20"',
+    'report["ok"] = True',
+    'report["overall"] = report["summary"]["overall"]',
+]:
+    if marker not in doctor:
+        raise SystemExit(f'v0.11.7.20 Doctor verifier missing: {marker}')
 
 print('Applied v0.11.7.20 unified local control plane')
