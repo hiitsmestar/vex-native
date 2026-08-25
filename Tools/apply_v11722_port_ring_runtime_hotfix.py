@@ -25,13 +25,12 @@ if old_bridge not in bridge:
     raise SystemExit('Bridge local-control candidate loop anchor missing')
 bridge = bridge.replace(old_bridge, new_bridge, 1)
 
-# The local control plane is the critical runtime path. A collision or TLS error
-# on the optional LAN listener must never tear down the already-live loopback
-# listener. Keep Bridge alive in local-only mode and surface the sanitized stage.
-old_external = '''    _write_startup_stage("binding")\n    server = ReusableThreadingHTTPServer(("0.0.0.0", port), Handler)\n    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)\n    _write_startup_stage("tls")\n    context.load_cert_chain(certfile=str(CERT_PATH), keyfile=str(KEY_PATH))\n    server.socket = context.wrap_socket(server.socket, server_side=True)\n    _write_startup_stage("listening")\n    try:\n        server.serve_forever(poll_interval=0.5)\n    except KeyboardInterrupt:\n        print("\\nVex Bridge stopped.")\n    finally:\n        server.server_close()\n        try:\n            local_control_server.shutdown()\n            local_control_server.server_close()\n        except Exception:\n            pass\n'''
-new_external = '''    server = None\n    try:\n        _write_startup_stage("binding")\n        server = ReusableThreadingHTTPServer(("0.0.0.0", port), Handler)\n        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)\n        _write_startup_stage("tls")\n        context.load_cert_chain(certfile=str(CERT_PATH), keyfile=str(KEY_PATH))\n        server.socket = context.wrap_socket(server.socket, server_side=True)\n        _write_startup_stage("listening")\n        server.serve_forever(poll_interval=0.5)\n    except KeyboardInterrupt:\n        print("\\nVex Bridge stopped.")\n    except Exception as exc:\n        _write_startup_stage("local_only", exc.__class__.__name__)\n        try:\n            while True:\n                time.sleep(60)\n        except KeyboardInterrupt:\n            pass\n    finally:\n        if server is not None:\n            try:\n                server.server_close()\n            except Exception:\n                pass\n        try:\n            local_control_server.shutdown()\n            local_control_server.server_close()\n        except Exception:\n            pass\n'''
+# Keep the local control plane alive even when the optional LAN/TLS listener
+# cannot bind. Match the current post-v0.11.7.17 TLS server shape exactly.
+old_external = '''    _write_startup_stage("tls")\n    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)\n    context.minimum_version = ssl.TLSVersion.TLSv1_2\n    context.load_cert_chain(certfile=str(CERT_PATH), keyfile=str(KEY_PATH))\n    _write_startup_stage("binding")\n    server = TLSThreadingHTTPServer(("0.0.0.0", port), Handler, context)\n    _write_startup_stage("listening")\n    try:\n        server.serve_forever(poll_interval=0.5)\n    except KeyboardInterrupt:\n        print("\\nVex Bridge stopped.")\n    finally:\n        server.server_close()\n        try:\n            local_control_server.shutdown()\n            local_control_server.server_close()\n        except Exception:\n            pass\n'''
+new_external = '''    server = None\n    try:\n        _write_startup_stage("tls")\n        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)\n        context.minimum_version = ssl.TLSVersion.TLSv1_2\n        context.load_cert_chain(certfile=str(CERT_PATH), keyfile=str(KEY_PATH))\n        _write_startup_stage("binding")\n        server = TLSThreadingHTTPServer(("0.0.0.0", port), Handler, context)\n        _write_startup_stage("listening")\n        server.serve_forever(poll_interval=0.5)\n    except KeyboardInterrupt:\n        print("\\nVex Bridge stopped.")\n    except Exception as exc:\n        _write_startup_stage("local_only", exc.__class__.__name__)\n        try:\n            while True:\n                time.sleep(60)\n        except KeyboardInterrupt:\n            pass\n    finally:\n        if server is not None:\n            try:\n                server.server_close()\n            except Exception:\n                pass\n        try:\n            local_control_server.shutdown()\n            local_control_server.server_close()\n        except Exception:\n            pass\n'''
 if old_external not in bridge:
-    raise SystemExit('Bridge external-listener block anchor missing')
+    raise SystemExit('Bridge current TLS external-listener block anchor missing')
 bridge = bridge.replace(old_external, new_external, 1)
 
 remote = re.sub(
@@ -66,6 +65,7 @@ for marker in [
     'reserved = list(range(external_port + 1, external_port + 33))',
     'for candidate in candidates:',
     '_write_startup_stage("local_only", exc.__class__.__name__)',
+    'TLSThreadingHTTPServer(("0.0.0.0", port), Handler, context)',
     'while True:\n                time.sleep(60)',
 ]:
     if marker not in bridge:
