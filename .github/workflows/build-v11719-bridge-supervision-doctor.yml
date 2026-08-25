@@ -135,9 +135,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force doctor-smoke | Out-Null
+          $global:LASTEXITCODE = 0
           & .\dist\VexDoctor.exe --headless --json-out doctor-smoke\latest.json
+          $doctorExit = $LASTEXITCODE
           if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor headless report missing' }
-        continue-on-error: false
+          $report = Get-Content doctor-smoke/latest.json -Raw | ConvertFrom-Json
+          if (-not $report.ok) { throw 'VexDoctor executable did not complete its diagnostic run' }
+          if ($doctorExit -ne 0 -and $report.overall -ne 'broken') { throw "Unexpected VexDoctor exit code $doctorExit for overall=$($report.overall)" }
+          Write-Host "VexDoctor executable smoke passed; clean CI runner diagnostic overall=$($report.overall), exit=$doctorExit"
+          $global:LASTEXITCODE = 0
       - name: Package v0.11.7.19
         shell: pwsh
         run: |
