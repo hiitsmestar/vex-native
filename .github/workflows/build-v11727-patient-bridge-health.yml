@@ -1,4 +1,4 @@
-name: Build Vex v0.11.7.27 Patient Bridge Health
+name: Build Vex v0.11.7.28 Single Supervisor Cutover
 
 on:
   push:
@@ -21,35 +21,33 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
-      - name: Apply VexNative v0.11.7.27 build chain
+      - name: Apply VexNative v0.11.7.28 build chain
         shell: pwsh
-        run: python Tools/build_v11727_chain.py
-      - name: Verify v0.11.7.27 runtime
+        run: python Tools/build_v11728_chain.py
+      - name: Verify v0.11.7.28 runtime and supervisor cutover
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11727_patient_bridge_health.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11728_single_supervisor_cutover.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
           $installer = Get-Content Tools/VexInstall11722.py -Raw
-          $watchdog = Get-Content Tools/VexBridgeWatchdog-v11722.ps1 -Raw
-          if (-not $bridge.Contains('"version": "0.11.7.27"')) { throw 'Bridge v0.11.7.27 marker missing' }
+          if (-not $bridge.Contains('"version": "0.11.7.28"')) { throw 'Bridge v0.11.7.28 marker missing' }
           if (-not $bridge.Contains('VexBridge-v11726-single-instance')) { throw 'Bridge mutex missing' }
-          if (-not $remote.Contains('VERSION = "0.11.7.27"')) { throw 'Remote v0.11.7.27 marker missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.28"')) { throw 'Remote v0.11.7.28 marker missing' }
           if (-not $remote.Contains('VexRemoteSupport-v11727-single-instance')) { throw 'Remote single-instance mutex missing' }
-          if (-not $remote.Contains('timeout=min(max(float(timeout), 2.0), 4.0)')) { throw 'Patient Bridge HTTP timeout missing' }
-          if (-not $remote.Contains('recovery_delay = 300 if listener_grace else 45')) { throw 'Live-listener startup grace missing' }
-          if (-not $installer.Contains("VERSION='0.11.7.27'")) { throw 'Installer v0.11.7.27 marker missing' }
-          if (-not $watchdog.Contains('0.11.7.27')) { throw 'Watchdog v0.11.7.27 marker missing' }
-          if (-not $watchdog.Contains('-TimeoutSec 6')) { throw 'Patient watchdog timeout missing' }
-          if (-not $watchdog.Contains('AddSeconds(300)')) { throw 'Watchdog startup grace missing' }
-          if (-not $watchdog.Contains('-WindowStyle Hidden')) { throw 'Hidden watchdog Bridge launch missing' }
+          if (-not $remote.Contains('recovery_delay = 300 if listener_grace else 45')) { throw 'Patient recovery grace missing' }
+          if (-not $installer.Contains("VERSION='0.11.7.28'")) { throw 'Installer v0.11.7.28 marker missing' }
+          if (-not $installer.Contains("FILES=['VexBridge.exe','VexRemoteSupport.exe','VexDoctor.exe']")) { throw 'Watchdog still packaged by installer' }
+          if (-not $installer.Contains('retire_legacy_supervisors(home)')) { throw 'Legacy supervisor retirement missing' }
+          if (-not $installer.Contains('Disable-ScheduledTask')) { throw 'Legacy scheduled-task retirement missing' }
+          if ($installer.Contains("watchdog=home/'VexBridgeWatchdog.ps1'")) { throw 'Legacy watchdog launch still present' }
       - name: Build coordinated Windows binaries
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
           pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
           pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.27 Tools/VexInstall11722.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.28 Tools/VexInstall11722.py
       - name: Smoke test Remote Support single instance
         shell: pwsh
         run: |
@@ -58,40 +56,47 @@ jobs:
           $a.Refresh()
           if ($a.HasExited) { throw "First VexRemoteSupport exited during GUI startup with code $($a.ExitCode)" }
           $b = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 7
           $b.Refresh()
           if (-not $b.HasExited) { throw 'Second VexRemoteSupport instance remained alive' }
           Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-      - name: Smoke test Bridge single instance
+      - name: Smoke test Bridge single runtime after PyInstaller settle
         shell: pwsh
         run: |
-          $a = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
-          Start-Sleep -Seconds 3
-          $b = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
-          Start-Sleep -Seconds 3
-          $b.Refresh()
-          if (-not $b.HasExited) { throw 'Second VexBridge instance remained alive' }
-          Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-      - name: Package v0.11.7.27 control plane
+          $a = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          Start-Sleep -Seconds 10
+          $baseline = @(Get-Process VexBridge -ErrorAction SilentlyContinue).Count
+          if ($baseline -lt 1) { throw 'First VexBridge did not remain alive' }
+          $b = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          $deadline = (Get-Date).AddSeconds(25)
+          do {
+            Start-Sleep -Seconds 1
+            $after = @(Get-Process VexBridge -ErrorAction SilentlyContinue).Count
+          } while ($after -gt $baseline -and (Get-Date) -lt $deadline)
+          if ($after -gt $baseline) { throw "Second Bridge launch left a sustained extra process set: baseline=$baseline after=$after" }
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Verify package excludes legacy watchdog
         shell: pwsh
         run: |
-          Copy-Item Tools/VexBridgeWatchdog-v11722.ps1 dist/VexBridgeWatchdog-v11722.ps1 -Force
+          if (Test-Path dist/VexBridgeWatchdog-v11722.ps1) { Remove-Item dist/VexBridgeWatchdog-v11722.ps1 -Force }
           @'
-          Vex v0.11.7.27 - Patient Bridge Health
-          =====================================
-          - Local Bridge GET probes allow up to four seconds on slow startup hardware.
-          - A live TCP/listening Bridge gets a five-minute recovery grace instead of being restart-looped.
-          - The PowerShell watchdog uses the same patient startup window.
-          - Vex Remote Support is single-instance so duplicate health monitors cannot race recovery.
-          - Existing Bridge mutex, bounded port probes, and nonblocking session activation remain intact.
-          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.27.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.27.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.27.txt -DestinationPath Vex-v0.11.7.27-Patient-Bridge-Health.zip -Force
-          Expand-Archive Vex-v0.11.7.27-Patient-Bridge-Health.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package/Install-Vex-v0.11.7.27.exe)) { throw 'packaged installer missing' }
+          Vex v0.11.7.28 - Single Supervisor Cutover
+          ==========================================
+          - Retires the legacy external PowerShell watchdog and START-VEX-SELF-HEAL launcher during install.
+          - Disables only scheduled tasks whose actions explicitly reference those Vex legacy supervisor names.
+          - Preserves retired files with .disabled-v11728 suffixes for rollback.
+          - Remote Support is the single Bridge recovery owner during stabilization.
+          - Keeps patient Bridge health timing, Bridge mutex, and Remote Support single-instance protection.
+          - Bridge smoke test allows the normal PyInstaller one-file parent/child process pair to settle before judging duplicates.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.28.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.28.exe,dist/README-Vex-v0.11.7.28.txt -DestinationPath Vex-v0.11.7.28-Single-Supervisor-Cutover.zip -Force
+          Expand-Archive Vex-v0.11.7.28-Single-Supervisor-Cutover.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.28.exe)) { throw 'packaged installer missing' }
+          if (Get-ChildItem verify-package -Filter '*Watchdog*' -Recurse) { throw 'legacy watchdog leaked into package' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.27-Patient-Bridge-Health
-          path: Vex-v0.11.7.27-Patient-Bridge-Health.zip
+          name: Vex-v0.11.7.28-Single-Supervisor-Cutover
+          path: Vex-v0.11.7.28-Single-Supervisor-Cutover.zip
           retention-days: 7
