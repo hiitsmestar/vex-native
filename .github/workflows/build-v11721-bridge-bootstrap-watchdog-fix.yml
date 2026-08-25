@@ -116,7 +116,7 @@ jobs:
           $installer = Get-Content Tools/VexInstall11721.py -Raw
           $watchdog = Get-Content Tools/VexBridgeWatchdog-v11721.ps1 -Raw
           if (-not $bridge.Contains('"version": "0.11.7.21"')) { throw 'Bridge v0.11.7.21 marker missing' }
-          if (-not $bridge.Contains("STATE = state`n    local_control_server = start_local_control_server(config)")) { throw 'Early local listener bootstrap missing' }
+          if ($bridge -notmatch 'STATE\s*=\s*state\s*\r?\n\s*local_control_server\s*=\s*start_local_control_server\(config\)') { throw 'Early local listener bootstrap missing' }
           if (($bridge.Split('local_control_server = start_local_control_server(config)').Count - 1) -ne 1) { throw 'Local control listener must start exactly once' }
           if (-not $remote.Contains('VERSION = "0.11.7.21"')) { throw 'Remote Support v0.11.7.21 marker missing' }
           if (-not $installer.Contains("VERSION='0.11.7.21'")) { throw 'Installer v0.11.7.21 marker missing' }
