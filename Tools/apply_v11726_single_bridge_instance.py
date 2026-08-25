@@ -67,14 +67,16 @@ def acquire_bridge_single_instance() -> bool:
 '''
 bridge = bridge.replace(state_anchor, state_anchor + instance_helper, 1)
 
-main_anchor = 'def main() -> None:\n    parser = argparse.ArgumentParser('
-if main_anchor not in bridge:
-    raise SystemExit('v0.11.7.26 Bridge main anchor missing')
-bridge = bridge.replace(
-    main_anchor,
-    'def main() -> None:\n    if not acquire_bridge_single_instance():\n        return\n    parser = argparse.ArgumentParser(',
-    1,
-)
+# Attach the single-instance gate to the function declaration itself. Earlier
+# build-chain patches may alter the parser/setup lines immediately below main(),
+# so matching those neighboring lines made the v0.11.7.26 patch unnecessarily
+# brittle.
+main_pattern = re.compile(r'(?m)^def main\(\) -> None:\s*$')
+main_match = main_pattern.search(bridge)
+if not main_match:
+    raise SystemExit('v0.11.7.26 Bridge main declaration missing')
+main_guard = 'def main() -> None:\n    if not acquire_bridge_single_instance():\n        return'
+bridge = bridge[:main_match.start()] + main_guard + bridge[main_match.end():]
 
 # Recheck after acquiring Remote Support's in-process recovery lock. This closes
 # the small race where another supervisor launches Bridge between the initial
