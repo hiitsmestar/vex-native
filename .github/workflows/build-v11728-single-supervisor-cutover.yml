@@ -1,9 +1,17 @@
-# v0.11.7.28 single-supervisor build workflow - trigger refresh 2026-08-25
+# v0.11.7.28 single-supervisor build workflow - explicit trigger repair 2026-08-25
 name: Build Vex v0.11.7.28 Single Supervisor Cutover
 
 on:
   push:
-    branches: [ "ci/v1177-remote-chat-relay" ]
+    branches:
+      - ci/v1177-remote-chat-relay
+    paths:
+      - '.github/workflows/build-v11728-single-supervisor-cutover.yml'
+      - 'Tools/build_v11728_chain.py'
+      - 'Tools/apply_v11728_single_supervisor_cutover.py'
+      - 'Tools/VexRemoteSupport.py'
+      - 'Tools/VexInstall11722.py'
+      - 'Bridge/vex_bridge.py'
   workflow_dispatch:
 
 permissions:
