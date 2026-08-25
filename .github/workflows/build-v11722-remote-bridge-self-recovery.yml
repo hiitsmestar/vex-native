@@ -108,10 +108,11 @@ jobs:
           python Tools/apply_v11720_unified_control_plane.py
           python Tools/apply_v11721_bridge_bootstrap_watchdog_fix.py
           python Tools/apply_v11722_remote_bridge_self_recovery.py
+          python Tools/apply_v11722_port_ring_runtime_hotfix.py
       - name: Verify in-process Bridge recovery
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11722_remote_bridge_self_recovery.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11722_remote_bridge_self_recovery.py Tools/apply_v11722_port_ring_runtime_hotfix.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
           $installer = Get-Content Tools/VexInstall11722.py -Raw
@@ -121,6 +122,9 @@ jobs:
           if (-not $remote.Contains('def ensure_bridge_process(force: bool = False)')) { throw 'Remote Bridge self-recovery missing' }
           if (-not $remote.Contains('tasklist.exe')) { throw 'Bridge process detector missing' }
           if (-not $remote.Contains('def bridge_candidate_ports(config: dict)')) { throw 'Remote candidate-port discovery missing' }
+          if (-not $bridge.Contains('external_port + 33')) { throw 'Bridge fixed port ring missing' }
+          if (-not $remote.Contains('external + 33')) { throw 'Remote fixed port ring missing' }
+          if (-not $installer.Contains('external+33')) { throw 'Installer fixed port ring missing' }
           if (-not $installer.Contains("VERSION='0.11.7.22'")) { throw 'Installer v0.11.7.22 marker missing' }
           if (-not $watchdog.Contains('0.11.7.22')) { throw 'Watchdog v0.11.7.22 marker missing' }
       - name: Build coordinated Windows binaries
@@ -148,9 +152,9 @@ jobs:
           @'
           Vex v0.11.7.22 - Remote Bridge Self Recovery
           ==============================================
-          - Remote Support now detects a missing VexBridge.exe process and relaunches it itself.
-          - Remote Support scans the reserved loopback control-port range instead of trusting one stale port.
-          - External watchdog remains as a second recovery layer.
+          - Remote Support detects a missing VexBridge.exe process and relaunches it itself.
+          - Bridge, Remote Support, installer, and watchdog now share one fixed 32-port loopback ring.
+          - Stale local_control_port values can no longer send Bridge outside the ports the other components scan.
           - Installer verifies Bridge v0.11.7.22 before reporting success.
           '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.22.txt
           Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.22.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.22.txt -DestinationPath Vex-v0.11.7.22-Remote-Bridge-Self-Recovery.zip -Force
