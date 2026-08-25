@@ -31,8 +31,8 @@ installer = installer.replace("VERSION='0.11.7.28'", "VERSION='0.11.7.29'", 1)
 # Field evidence from the first v0.11.7.28 install showed two remaining defects:
 # 1) an already-running legacy PowerShell watchdog survived the installer cutover;
 # 2) Remote Support still retained the old watchdog fallback and old-folder discovery.
-# Make the installed Remote Support executable's own directory authoritative and
-# make recovery direct-only. No code path may launch the retired watchdog again.
+# The active Remote Support executable's own directory is authoritative. There is
+# deliberately no Downloads/extracted-folder fallback in an installed runtime.
 
 project_home_pattern = re.compile(
     r'def _vex_project_home\(\) -> Path \| None:\n.*?\n\ndef _project_process_count\(image_name: str\) -> int:',
@@ -42,29 +42,14 @@ project_home_match = project_home_pattern.search(remote)
 if not project_home_match:
     raise SystemExit('v0.11.7.29 project-home function anchor missing')
 project_home_replacement = '''def _vex_project_home() -> Path | None:
-    # Installed Remote Support and Bridge are coordinated siblings. Prefer the
-    # running relay's own directory so stale extracted builds under Downloads
-    # can never become the recovery target.
-    candidates: list[Path] = []
+    # Installed Remote Support and Bridge are coordinated siblings. Never fall
+    # back to stale extracted builds under Downloads.
     if getattr(sys, "frozen", False):
-        candidates.append(Path(sys.executable).resolve().parent)
+        candidate = Path(sys.executable).resolve().parent
     else:
-        candidates.append(Path(__file__).resolve().parent.parent)
-    downloads = Path.home() / "Downloads"
-    try:
-        for child in downloads.iterdir():
-            if child.is_dir() and (child / "VexBridge.exe").exists() and (child / "VexRemoteSupport.exe").exists():
-                candidates.append(child)
-    except Exception:
-        pass
-    seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate).lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        if (candidate / "VexBridge.exe").exists():
-            return candidate
+        candidate = Path(__file__).resolve().parent.parent
+    if (candidate / "VexBridge.exe").exists():
+        return candidate
     return None
 
 
@@ -79,16 +64,8 @@ runtime_dir_match = runtime_dir_pattern.search(remote)
 if not runtime_dir_match:
     raise SystemExit('v0.11.7.29 bridge_runtime_dir anchor missing')
 runtime_dir_replacement = '''def bridge_runtime_dir() -> Path | None:
-    # Never search legacy self-heal folders first. The active Remote Support
-    # binary's sibling Bridge is the single recovery target.
-    candidates: list[Path] = []
-    if getattr(sys, "frozen", False):
-        candidates.append(Path(sys.executable).resolve().parent)
-    else:
-        candidates.append(Path(__file__).resolve().parent.parent)
-    for candidate in candidates:
-        if (candidate / "VexBridge.exe").exists():
-            return candidate
+    # The active Remote Support binary's sibling Bridge is the single recovery
+    # target. No legacy self-heal or Downloads discovery is allowed here.
     return _vex_project_home()
 
 
@@ -96,7 +73,8 @@ def bridge_process_count() -> int:'''
 remote = remote[:runtime_dir_match.start()] + runtime_dir_replacement + remote[runtime_dir_match.end():]
 
 # Harden watchdog termination to catch versioned watchdog scripts and launcher
-# shells, not only the historical exact VexBridgeWatchdog.ps1 filename.
+# shells. Exclude the helper PowerShell itself: its command line necessarily
+# contains these marker strings, so a broad matcher without selfPid is suicidal.
 watch_stop_pattern = re.compile(
     r'def _stop_bridge_watchdogs\(\) -> int:\n.*?\n\ndef _wait_bridge_listener\(seconds: float\) -> dict:',
     re.S,
@@ -106,8 +84,9 @@ if not watch_stop_match:
     raise SystemExit('v0.11.7.29 watchdog-stop helper anchor missing')
 watch_stop_replacement = r'''def _stop_bridge_watchdogs() -> int:
     script = (
+        "$selfPid=$PID;"
         "$items=Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | "
-        "Where-Object {$_.CommandLine -and ("
+        "Where-Object {$_.ProcessId -ne $selfPid -and $_.CommandLine -and ("
         "$_.CommandLine -like '*VexBridgeWatchdog*' -or "
         "$_.CommandLine -like '*START-VEX-SELF-HEAL*')};"
         "$n=0; foreach($p in $items){try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop;$n++}catch{}};"
@@ -182,10 +161,11 @@ if safe_update_old not in remote:
     raise SystemExit('v0.11.7.29 safe-update watchdog restart anchor missing')
 remote = remote.replace(safe_update_old, safe_update_new, 1)
 
-# Installer cutover must terminate an already-running legacy watchdog process,
-# not merely rename its script and disable future scheduled launches.
+# Installer cutover must terminate already-running legacy watchdog processes,
+# including versioned watchdog scripts. Exclude this helper PowerShell from the
+# broad command-line match before disabling legacy scheduled tasks.
 retire_anchor = "    script=r'''$ErrorActionPreference='SilentlyContinue'\nGet-ScheduledTask | ForEach-Object {\n"
-retire_replacement = "    script=r'''$ErrorActionPreference='SilentlyContinue'\nGet-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*VexBridgeWatchdog*' -or $_.CommandLine -like '*START-VEX-SELF-HEAL*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\nStart-Sleep -Milliseconds 500\nGet-ScheduledTask | ForEach-Object {\n"
+retire_replacement = "    script=r'''$ErrorActionPreference='SilentlyContinue'\n$selfPid=$PID\nGet-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $selfPid -and $_.CommandLine -and ($_.CommandLine -like '*VexBridgeWatchdog*' -or $_.CommandLine -like '*START-VEX-SELF-HEAL*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\nStart-Sleep -Milliseconds 500\nGet-ScheduledTask | ForEach-Object {\n"
 if retire_anchor not in installer:
     raise SystemExit('v0.11.7.29 installer retire process anchor missing')
 installer = installer.replace(retire_anchor, retire_replacement, 1)
@@ -222,7 +202,8 @@ for marker in [
     '"scope": "single-remote-support-owner"',
     'legacy watchdog retired in v0.11.7.29',
     'return _vex_project_home()',
-    "Path(sys.executable).resolve().parent",
+    'Path(sys.executable).resolve().parent',
+    '$_.ProcessId -ne $selfPid',
 ]:
     if marker not in remote:
         raise SystemExit(f'v0.11.7.29 Remote verifier missing: {marker}')
@@ -230,9 +211,10 @@ for forbidden in [
     '"mode": "watchdog_fallback"',
     '_project_start("watchdog")',
     "START-VEX-SELF-HEAL.cmd' -WorkingDirectory",
+    'downloads = Path.home() / "Downloads"',
 ]:
     if forbidden in remote:
-        raise SystemExit(f'v0.11.7.29 retired watchdog path still present in Remote Support: {forbidden}')
+        raise SystemExit(f'v0.11.7.29 retired/stale recovery path still present in Remote Support: {forbidden}')
 for marker in [
     "VERSION='0.11.7.29'",
     "FILES=['VexBridge.exe','VexRemoteSupport.exe','VexDoctor.exe']",
@@ -242,5 +224,7 @@ for marker in [
 ]:
     if marker not in installer:
         raise SystemExit(f'v0.11.7.29 Installer verifier missing: {marker}')
+if installer.count('$selfPid=$PID') < 2:
+    raise SystemExit('v0.11.7.29 installer watchdog retirement helper can still self-match')
 
-print('Applied v0.11.7.29 true single-supervisor runtime + live watchdog retirement')
+print('Applied v0.11.7.29 true single-supervisor runtime + self-safe live watchdog retirement')
