@@ -1,3 +1,4 @@
+# v0.11.7.28 single-supervisor build workflow - trigger refresh 2026-08-25
 name: Build Vex v0.11.7.28 Single Supervisor Cutover
 
 on:
