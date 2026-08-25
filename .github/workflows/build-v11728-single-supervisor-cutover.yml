@@ -1,4 +1,4 @@
-# v0.11.7.28 single-supervisor build workflow - explicit trigger repair 2026-08-25
+# v0.11.7.28 single-supervisor build workflow - PyInstaller-safe single-instance smoke 2026-08-25
 name: Build Vex v0.11.7.28 Single Supervisor Cutover
 
 on:
@@ -57,18 +57,21 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
           pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
           pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.28 Tools/VexInstall11722.py
-      - name: Smoke test Remote Support single instance
+      - name: Smoke test Remote Support single runtime after PyInstaller settle
         shell: pwsh
         run: |
+          Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           $a = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
-          Start-Sleep -Seconds 8
-          $a.Refresh()
-          if ($a.HasExited) { throw "First VexRemoteSupport exited during GUI startup with code $($a.ExitCode)" }
+          Start-Sleep -Seconds 10
+          $baseline = @(Get-Process VexRemoteSupport -ErrorAction SilentlyContinue).Count
+          if ($baseline -lt 1) { throw 'First VexRemoteSupport did not remain alive' }
           $b = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
-          Start-Sleep -Seconds 7
-          $b.Refresh()
-          if (-not $b.HasExited) { throw 'Second VexRemoteSupport instance remained alive' }
-          Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
+          $deadline = (Get-Date).AddSeconds(25)
+          do {
+            Start-Sleep -Seconds 1
+            $after = @(Get-Process VexRemoteSupport -ErrorAction SilentlyContinue).Count
+          } while ($after -gt $baseline -and (Get-Date) -lt $deadline)
+          if ($after -gt $baseline) { throw "Second Remote Support launch left a sustained extra process set: baseline=$baseline after=$after" }
           Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
       - name: Smoke test Bridge single runtime after PyInstaller settle
         shell: pwsh
@@ -98,7 +101,7 @@ jobs:
           - Preserves retired files with .disabled-v11728 suffixes for rollback.
           - Remote Support is the single Bridge recovery owner during stabilization.
           - Keeps patient Bridge health timing, Bridge mutex, and Remote Support single-instance protection.
-          - Bridge smoke test allows the normal PyInstaller one-file parent/child process pair to settle before judging duplicates.
+          - Bridge and Remote Support smoke tests allow the normal PyInstaller one-file parent/child process pair to settle before judging duplicates.
           '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.28.txt
           Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.28.exe,dist/README-Vex-v0.11.7.28.txt -DestinationPath Vex-v0.11.7.28-Single-Supervisor-Cutover.zip -Force
           Expand-Archive Vex-v0.11.7.28-Single-Supervisor-Cutover.zip -DestinationPath verify-package -Force
