@@ -22,10 +22,12 @@ if anchor not in remote:
     raise SystemExit('v0.11.7.18 runtime identity anchor missing')
 remote = remote.replace(anchor, helper + anchor, 1)
 
-main_anchor = 'def main() -> int:\n    import tkinter as tk\n'
+# Earlier patches may insert extra imports or comments immediately after main,
+# so anchor only on the function declaration itself.
+main_anchor = 'def main() -> int:\n'
 if main_anchor not in remote:
     raise SystemExit('v0.11.7.18 main anchor missing')
-remote = remote.replace(main_anchor, 'def main() -> int:\n    _write_runtime_identity()\n    import tkinter as tk\n', 1)
+remote = remote.replace(main_anchor, 'def main() -> int:\n    _write_runtime_identity()\n', 1)
 
 # Surface only version freshness, never paths/process command lines.
 snap_anchor = '        "protocol": "vex-support-v1",\n        "agent_version": VERSION,\n'
