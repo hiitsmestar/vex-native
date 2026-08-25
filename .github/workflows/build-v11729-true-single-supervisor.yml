@@ -49,6 +49,8 @@ jobs:
           if (-not $remote.Contains('"mode": "remote_support_direct_only"')) { throw 'Direct-only recovery marker missing' }
           if (-not $remote.Contains('"scope": "single-remote-support-owner"')) { throw 'Single-owner scope missing' }
           if (-not $remote.Contains('Path(sys.executable).resolve().parent')) { throw 'Active-runtime home resolution missing' }
+          if (-not $remote.Contains('$_.ProcessId -ne $selfPid')) { throw 'Remote watchdog retirement can self-match its helper PowerShell' }
+          if ($remote.Contains('downloads = Path.home() / "Downloads"')) { throw 'Remote Support can still recover from stale Downloads runtime' }
           if ($remote.Contains('"mode": "watchdog_fallback"')) { throw 'Legacy watchdog fallback still present' }
           if ($remote.Contains('_project_start("watchdog")')) { throw 'Remote Support can still launch watchdog' }
           if ($remote.Contains("START-VEX-SELF-HEAL.cmd' -WorkingDirectory")) { throw 'Safe update can still resurrect legacy launcher' }
@@ -57,6 +59,7 @@ jobs:
           if (-not $installer.Contains('Get-CimInstance Win32_Process')) { throw 'Live watchdog process retirement missing' }
           if (-not $installer.Contains("'*VexBridgeWatchdog*'")) { throw 'Live watchdog match missing' }
           if (-not $installer.Contains('Disable-ScheduledTask')) { throw 'Legacy scheduled-task retirement missing' }
+          if (([regex]::Matches($installer, [regex]::Escape('$selfPid=$PID'))).Count -lt 2) { throw 'Installer legacy retirement helper can self-match its PowerShell process' }
           if ($installer.Contains("watchdog=home/'VexBridgeWatchdog.ps1'")) { throw 'Installer watchdog launch still present' }
       - name: Build coordinated Windows binaries
         shell: pwsh
@@ -105,8 +108,8 @@ jobs:
           =========================================
           - Remote Support is the only Bridge recovery owner.
           - Removes Remote Support's historical watchdog fallback.
-          - Uses the running Remote Support binary's own folder as the authoritative Bridge runtime.
-          - Terminates already-running legacy watchdog/self-heal processes during install.
+          - Uses the running Remote Support binary's own folder as the authoritative Bridge runtime; no stale Downloads fallback.
+          - Terminates already-running legacy watchdog/self-heal processes during install without matching its own helper PowerShell.
           - Disables scheduled legacy supervisor launches and preserves retired files for rollback.
           - Safe self-update restarts Bridge directly and cannot resurrect START-VEX-SELF-HEAL.
           - Keeps Bridge and Remote Support single-instance mutexes and patient startup timing.
