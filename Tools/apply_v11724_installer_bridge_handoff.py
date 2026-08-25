@@ -31,13 +31,13 @@ doctor = re.sub(r'^VERSION = "[^"]+"', 'VERSION = "0.11.7.24"', doctor, count=1,
 installer = installer.replace("VERSION='0.11.7.23'", "VERSION='0.11.7.24'", 1)
 watchdog = watchdog.replace('0.11.7.23', '0.11.7.24')
 
-# A normal Bridge launch must never block on an interactive folder picker before
-# the local control listener can bind. Folder selection is explicit --setup only.
-old_setup = '''    if args.setup or not config.get("folders"):\n        config["folders"] = choose_folders(config.get("folders", []))\n        save_config(config)\n'''
-new_setup = '''    if args.setup:\n        config["folders"] = choose_folders(config.get("folders", []))\n        save_config(config)\n    elif not isinstance(config.get("folders"), list):\n        config["folders"] = []\n        save_config(config)\n'''
-if old_setup not in bridge:
-    raise SystemExit('v0.11.7.24 interactive startup-folder anchor missing')
-bridge = bridge.replace(old_setup, new_setup, 1)
+# v0.11.7.14 already removed the automatic folder picker from normal startup.
+# Preserve that behavior and only normalize a malformed persisted folders value.
+current_setup = '''    if args.setup:\n        config["folders"] = choose_folders(config.get("folders", []))\n        save_config(config)\n'''
+normalized_setup = '''    if args.setup:\n        config["folders"] = choose_folders(config.get("folders", []))\n        save_config(config)\n    elif not isinstance(config.get("folders"), list):\n        config["folders"] = []\n        save_config(config)\n'''
+if current_setup not in bridge:
+    raise SystemExit('v0.11.7.24 current nonblocking startup-folder anchor missing')
+bridge = bridge.replace(current_setup, normalized_setup, 1)
 
 # Installation should hand control to Remote Support + watchdog even if the first
 # Bridge health probe is still red. Remote Support is now an independent Bridge
