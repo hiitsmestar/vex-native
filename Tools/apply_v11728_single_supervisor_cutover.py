@@ -86,11 +86,25 @@ if watchdog_launch not in installer:
     raise SystemExit('v0.11.7.28 watchdog launch anchor missing')
 installer = installer.replace(watchdog_launch, '', 1)
 
-old_message = "        messagebox.showinfo('Vex Install',f'Vex {VERSION} installed and Bridge verified. Remote Support now self-recovers a missing Bridge process in addition to the external watchdog.\\n\\nStart a fresh 2-hour support session.')"
-new_message = "        messagebox.showinfo('Vex Install',f'Vex {VERSION} installed and Bridge verified. Legacy watchdog/self-heal launchers were retired so Remote Support is the single Bridge recovery owner during stabilization.\\n\\nStart a fresh 2-hour support session.')"
-if old_message not in installer:
-    raise SystemExit('v0.11.7.28 installer message anchor missing')
-installer = installer.replace(old_message, new_message, 1)
+# v0.11.7.24 split the installer success notice into warning and verified
+# branches. Match the stable message phrases rather than one historical full
+# sentence so later wording changes do not break the build chain again.
+warning_phrase = 'Remote Support is live and Bridge recovery has been handed to Remote Support + watchdog.'
+verified_phrase = 'installed and Bridge verified.'
+if installer.count(warning_phrase) != 1:
+    raise SystemExit('v0.11.7.28 installer warning-message anchor missing or ambiguous')
+if installer.count(verified_phrase) != 1:
+    raise SystemExit('v0.11.7.28 installer verified-message anchor missing or ambiguous')
+installer = installer.replace(
+    warning_phrase,
+    'Remote Support is live and is the single Bridge recovery owner during stabilization; legacy watchdog/self-heal launchers were retired.',
+    1,
+)
+installer = installer.replace(
+    verified_phrase,
+    'installed and Bridge verified. Legacy watchdog/self-heal launchers were retired so Remote Support is the single Bridge recovery owner during stabilization.',
+    1,
+)
 
 BRIDGE.write_text(bridge, encoding='utf-8')
 REMOTE.write_text(remote, encoding='utf-8')
@@ -118,6 +132,10 @@ for marker in [
 ]:
     if marker not in installer:
         raise SystemExit(f'v0.11.7.28 installer verifier missing: {marker}')
+if installer.count('single Bridge recovery owner during stabilization') != 2:
+    raise SystemExit('v0.11.7.28 installer success-message rewrite incomplete')
+if 'Bridge recovery has been handed to Remote Support + watchdog' in installer:
+    raise SystemExit('v0.11.7.28 legacy dual-supervisor installer wording still present')
 if "watchdog=home/'VexBridgeWatchdog.ps1'" in installer:
     raise SystemExit('v0.11.7.28 legacy watchdog launch still present')
 
