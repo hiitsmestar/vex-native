@@ -1,4 +1,4 @@
-name: Build Vex v0.11.7.22 Remote Bridge Self Recovery
+name: Build Vex v0.11.7.23 Remote UI Fast Start
 
 on:
   push:
@@ -109,35 +109,44 @@ jobs:
           python Tools/apply_v11721_bridge_bootstrap_watchdog_fix.py
           python Tools/apply_v11722_remote_bridge_self_recovery.py
           python Tools/apply_v11722_port_ring_runtime_hotfix.py
-      - name: Verify in-process Bridge recovery
+          python Tools/apply_v11723_remote_ui_fast_start.py
+      - name: Verify v0.11.7.23 runtime
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11722_remote_bridge_self_recovery.py Tools/apply_v11722_port_ring_runtime_hotfix.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11723_remote_ui_fast_start.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
           $installer = Get-Content Tools/VexInstall11722.py -Raw
           $watchdog = Get-Content Tools/VexBridgeWatchdog-v11722.ps1 -Raw
-          if (-not $bridge.Contains('"version": "0.11.7.22"')) { throw 'Bridge v0.11.7.22 marker missing' }
-          if (-not $remote.Contains('VERSION = "0.11.7.22"')) { throw 'Remote Support v0.11.7.22 marker missing' }
-          if (-not $remote.Contains('def ensure_bridge_process(force: bool = False)')) { throw 'Remote Bridge self-recovery missing' }
-          if (-not $remote.Contains('tasklist.exe')) { throw 'Bridge process detector missing' }
-          if (-not $remote.Contains('def bridge_candidate_ports(config: dict)')) { throw 'Remote candidate-port discovery missing' }
+          if (-not $bridge.Contains('"version": "0.11.7.23"')) { throw 'Bridge v0.11.7.23 marker missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.23"')) { throw 'Remote Support v0.11.7.23 marker missing' }
+          if (-not $remote.Contains('root.after(250, refresh_local)')) { throw 'Nonblocking UI startup missing' }
+          if (-not $remote.Contains('VexRemoteStartupHealth')) { throw 'Background startup health worker missing' }
+          if (-not $remote.Contains('startup-crash.log')) { throw 'Startup crash telemetry missing' }
+          if (-not $remote.Contains('def ensure_bridge_process(force: bool = False)')) { throw 'Bridge self-recovery missing' }
           if (-not $bridge.Contains('external_port + 33')) { throw 'Bridge fixed port ring missing' }
-          if (-not $remote.Contains('external + 33')) { throw 'Remote fixed port ring missing' }
           if (-not $installer.Contains('external+33')) { throw 'Installer fixed port ring missing' }
-          if (-not $installer.Contains("VERSION='0.11.7.22'")) { throw 'Installer v0.11.7.22 marker missing' }
-          if (-not $watchdog.Contains('0.11.7.22')) { throw 'Watchdog v0.11.7.22 marker missing' }
+          if (-not $installer.Contains("VERSION='0.11.7.23'")) { throw 'Installer v0.11.7.23 marker missing' }
+          if (-not $watchdog.Contains('0.11.7.23')) { throw 'Watchdog v0.11.7.23 marker missing' }
       - name: Build coordinated Windows binaries
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
           pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
           pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
-          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.22 Tools/VexInstall11722.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.23 Tools/VexInstall11722.py
           if (!(Test-Path dist/VexBridge.exe)) { throw 'VexBridge.exe missing' }
           if (!(Test-Path dist/VexRemoteSupport.exe)) { throw 'VexRemoteSupport.exe missing' }
           if (!(Test-Path dist/VexDoctor.exe)) { throw 'VexDoctor.exe missing' }
-          if (!(Test-Path dist/Install-Vex-v0.11.7.22.exe)) { throw 'installer missing' }
+          if (!(Test-Path dist/Install-Vex-v0.11.7.23.exe)) { throw 'installer missing' }
+      - name: Smoke test Remote Support GUI startup
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) { throw "VexRemoteSupport exited during GUI startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
       - name: Smoke test VexDoctor executable
         shell: pwsh
         run: |
@@ -145,23 +154,23 @@ jobs:
           $proc = Start-Process -FilePath .\dist\VexDoctor.exe -ArgumentList @('--headless','--json-out','doctor-smoke\latest.json') -Wait -PassThru -NoNewWindow
           if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor report missing' }
           if ($proc.ExitCode -notin @(0,1)) { throw "VexDoctor unexpected exit code: $($proc.ExitCode)" }
-      - name: Package self-recovering control plane
+      - name: Package v0.11.7.23 control plane
         shell: pwsh
         run: |
           Copy-Item Tools/VexBridgeWatchdog-v11722.ps1 dist/VexBridgeWatchdog-v11722.ps1 -Force
           @'
-          Vex v0.11.7.22 - Remote Bridge Self Recovery
-          ==============================================
-          - Remote Support detects a missing VexBridge.exe process and relaunches it itself.
-          - Bridge, Remote Support, installer, and watchdog now share one fixed 32-port loopback ring.
-          - Stale local_control_port values can no longer send Bridge outside the ports the other components scan.
-          - Installer verifies Bridge v0.11.7.22 before reporting success.
-          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.22.txt
-          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.22.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.22.txt -DestinationPath Vex-v0.11.7.22-Remote-Bridge-Self-Recovery.zip -Force
-          Expand-Archive Vex-v0.11.7.22-Remote-Bridge-Self-Recovery.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package/Install-Vex-v0.11.7.22.exe)) { throw 'packaged installer missing' }
+          Vex v0.11.7.23 - Remote UI Fast Start
+          ======================================
+          - Remote Support renders its window before any Bridge or GitHub health work.
+          - Initial local snapshot runs on a background thread instead of blocking Tk startup.
+          - Windowed startup crashes are logged locally and surfaced with a small error dialog.
+          - Bridge self-recovery, fixed 32-port loopback ring, installer cleanup, and local-only survival remain intact.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.23.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.23.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.23.txt -DestinationPath Vex-v0.11.7.23-Remote-UI-Fast-Start.zip -Force
+          Expand-Archive Vex-v0.11.7.23-Remote-UI-Fast-Start.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.23.exe)) { throw 'packaged installer missing' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.22-Remote-Bridge-Self-Recovery
-          path: Vex-v0.11.7.22-Remote-Bridge-Self-Recovery.zip
+          name: Vex-v0.11.7.23-Remote-UI-Fast-Start
+          path: Vex-v0.11.7.23-Remote-UI-Fast-Start.zip
           retention-days: 7
