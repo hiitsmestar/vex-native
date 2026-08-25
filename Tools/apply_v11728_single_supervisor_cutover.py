@@ -47,7 +47,7 @@ installer = installer.replace(old_find, new_find, 1)
 insert_anchor = "def replace_with_retry(src:Path,dst:Path,seconds:int=35)->None:\n"
 if insert_anchor not in installer:
     raise SystemExit('v0.11.7.28 replace helper anchor missing')
-retire_code = r'''def retire_legacy_supervisors(home:Path)->None:
+retire_code = r"""def retire_legacy_supervisors(home:Path)->None:
     # Disable only VexNative's known legacy supervisor entry points. Preserve
     # the files under explicit disabled names so this cutover is reversible.
     for name in ('VexBridgeWatchdog.ps1','VexBridgeWatchdog-v11722.ps1','START-VEX-SELF-HEAL.cmd'):
@@ -72,7 +72,7 @@ Get-ScheduledTask | ForEach-Object {
 '''
     run_ps(script,timeout=30)
 
-'''
+"""
 installer = installer.replace(insert_anchor, retire_code + insert_anchor, 1)
 
 main_anchor = "        stop_all_vex(home)\n        for name in FILES:\n"
