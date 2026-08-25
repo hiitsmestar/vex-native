@@ -139,17 +139,16 @@ jobs:
       - name: Smoke test VexDoctor executable
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force doctor-smoke | Out-Null
-          $oldNative = $PSNativeCommandUseErrorActionPreference
-          $PSNativeCommandUseErrorActionPreference = $false
-          & .\dist\VexDoctor.exe --headless --json-out doctor-smoke\latest.json
-          $doctorExit = $LASTEXITCODE
-          $PSNativeCommandUseErrorActionPreference = $oldNative
+          $proc = Start-Process -FilePath .\dist\VexDoctor.exe -ArgumentList @('--headless','--json-out','doctor-smoke\latest.json') -Wait -PassThru -NoNewWindow
+          $doctorExit = $proc.ExitCode
           if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor headless report missing' }
           $report = Get-Content doctor-smoke/latest.json -Raw | ConvertFrom-Json
-          if ($report.ok -ne $true) { throw 'VexDoctor headless execution did not complete successfully' }
           if ($doctorExit -notin @(0,1)) { throw "VexDoctor unexpected exit code: $doctorExit" }
-          Write-Host "VexDoctor executable smoke passed; diagnostic exit=$doctorExit overall=$($report.overall)"
+          if ($doctorExit -eq 0 -and $report.summary.overall -ne 'healthy') { throw "Doctor returned healthy exit with overall=$($report.summary.overall)" }
+          if ($doctorExit -eq 1 -and $report.summary.overall -eq 'healthy') { throw 'Doctor returned diagnostic-failure exit for healthy report' }
+          Write-Host "VexDoctor executable smoke passed; diagnostic exit=$doctorExit overall=$($report.summary.overall)"
       - name: Package unified control plane
         shell: pwsh
         run: |
