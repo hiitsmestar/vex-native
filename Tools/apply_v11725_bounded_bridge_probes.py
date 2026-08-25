@@ -172,33 +172,30 @@ if old_snapshot not in remote:
     raise SystemExit('v0.11.7.25 collect_snapshot anchor missing')
 remote = remote.replace(old_snapshot, new_snapshot, 1)
 
-# Session activation must not wait on the initial Bridge snapshot or GitHub post.
-# Match only the stable prefix so earlier/later health-monitor edits do not make
-# this patch brittle.
-old_session = '''            state = load_state()
-            last_id = integer(state.get("last_comment_id"))
-            post_comment("session_started", collect_snapshot(include_doctor=False))
-            self.on_status("Support session is active")
-'''
-new_session = '''            state = load_state()
-            last_id = integer(state.get("last_comment_id"))
-            self.on_status("Support session is active")
-
-            def announce_session_start() -> None:
-                try:
-                    post_comment("session_started", collect_snapshot(include_doctor=False))
-                except Exception:
-                    pass
-
-            threading.Thread(
-                target=announce_session_start,
-                daemon=True,
-                name="VexSessionAnnounce",
-            ).start()
-'''
-if old_session not in remote:
-    raise SystemExit('v0.11.7.25 support-session startup prefix missing')
-remote = remote.replace(old_session, new_session, 1)
+# Session activation must not block on the initial Bridge snapshot or GitHub
+# post. Patch only the session_started operation; surrounding state/health-loop
+# code has changed repeatedly across this branch and is intentionally untouched.
+session_pattern = re.compile(
+    r'(?m)^(?P<indent>[ \t]*)post_comment\("session_started",\s*collect_snapshot\(include_doctor=False\)\)\s*$'
+)
+session_match = session_pattern.search(remote)
+if not session_match:
+    raise SystemExit('v0.11.7.25 session_started operation missing')
+indent = session_match.group('indent')
+new_session_announce = (
+    f'{indent}def announce_session_start() -> None:\n'
+    f'{indent}    try:\n'
+    f'{indent}        post_comment("session_started", collect_snapshot(include_doctor=False))\n'
+    f'{indent}    except Exception:\n'
+    f'{indent}        pass\n'
+    f'\n'
+    f'{indent}threading.Thread(\n'
+    f'{indent}    target=announce_session_start,\n'
+    f'{indent}    daemon=True,\n'
+    f'{indent}    name="VexSessionAnnounce",\n'
+    f'{indent}).start()'
+)
+remote = remote[:session_match.start()] + new_session_announce + remote[session_match.end():]
 
 BRIDGE.write_text(bridge, encoding='utf-8')
 REMOTE.write_text(remote, encoding='utf-8')
