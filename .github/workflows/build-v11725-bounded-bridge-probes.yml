@@ -1,0 +1,171 @@
+name: Build Vex v0.11.7.25 Bounded Bridge Probes
+
+on:
+  push:
+    branches: [ "ci/v1177-remote-chat-relay" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Apply current VexNative patch chain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_package_versions.py
+          python Tools/apply_v113_memory_route_hardening.py
+          python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
+          python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
+          python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
+          python Tools/apply_v1177_remote_chat_relay.py
+          python Tools/apply_v11710_remote_chat_direct_ollama_fix.py
+          python Tools/apply_v11711_project_control_layer.py
+          python Tools/apply_v11712_bridge_fast_start_health.py
+          python Tools/apply_v11713_listener_verified_recovery.py
+          python Tools/apply_v11714_nonblocking_bootstrap.py
+          python Tools/apply_v11715_installer_lock_fix.py
+          python Tools/apply_v11716_bridge_bind_diagnostics.py
+          python Tools/apply_v11717_tls_local_transport_fix.py
+          python Tools/apply_v11718_runtime_cutover_fix.py
+          python Tools/apply_v11719_bridge_supervision_doctor.py
+          python Tools/apply_v11720_unified_control_plane.py
+          python Tools/apply_v11721_bridge_bootstrap_watchdog_fix.py
+          python Tools/apply_v11722_remote_bridge_self_recovery.py
+          python Tools/apply_v11722_port_ring_runtime_hotfix.py
+          python Tools/apply_v11723_remote_ui_fast_start.py
+          python Tools/apply_v11724_installer_bridge_handoff.py
+          python Tools/apply_v11725_bounded_bridge_probes.py
+      - name: Verify v0.11.7.25 runtime
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11725_bounded_bridge_probes.py
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          $installer = Get-Content Tools/VexInstall11722.py -Raw
+          $watchdog = Get-Content Tools/VexBridgeWatchdog-v11722.ps1 -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.25"')) { throw 'Bridge v0.11.7.25 marker missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.25"')) { throw 'Remote Support v0.11.7.25 marker missing' }
+          if (-not $remote.Contains('def bridge_open_ports(config: dict, connect_timeout: float = 0.035)')) { throw 'Bounded TCP preflight missing' }
+          if (-not $remote.Contains('name="VexSessionAnnounce"')) { throw 'Nonblocking session announcement missing' }
+          if (-not $remote.Contains('if reachable:')) { throw 'Snapshot short-circuit missing' }
+          if (-not $remote.Contains('root.after(250, refresh_local)')) { throw 'Nonblocking Remote UI missing' }
+          if (-not $remote.Contains('def ensure_bridge_process(force: bool = False)')) { throw 'Remote Bridge self-recovery missing' }
+          if (-not $bridge.Contains('external_port + 33')) { throw 'Bridge fixed port ring missing' }
+          if (-not $installer.Contains("VERSION='0.11.7.25'")) { throw 'Installer v0.11.7.25 marker missing' }
+          if (-not $watchdog.Contains('0.11.7.25')) { throw 'Watchdog v0.11.7.25 marker missing' }
+      - name: Build coordinated Windows binaries
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.25 Tools/VexInstall11722.py
+      - name: Smoke test Remote Support GUI startup
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) { throw "VexRemoteSupport exited during GUI startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Smoke test VexDoctor executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force doctor-smoke | Out-Null
+          $proc = Start-Process -FilePath .\dist\VexDoctor.exe -ArgumentList @('--headless','--json-out','doctor-smoke\latest.json') -Wait -PassThru -NoNewWindow
+          if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor report missing' }
+          if ($proc.ExitCode -notin @(0,1)) { throw "VexDoctor unexpected exit code: $($proc.ExitCode)" }
+      - name: Package v0.11.7.25 control plane
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog-v11722.ps1 dist/VexBridgeWatchdog-v11722.ps1 -Force
+          @'
+          Vex v0.11.7.25 - Bounded Bridge Probes
+          ======================================
+          - Dead Bridge port scans are bounded by a fast local TCP preflight.
+          - Startup snapshot stops after /status when Bridge is unreachable.
+          - Support session becomes active before the initial snapshot is published.
+          - Prior installer handoff, Remote UI fast-start, and Bridge self-recovery remain intact.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.25.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.25.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.25.txt -DestinationPath Vex-v0.11.7.25-Bounded-Bridge-Probes.zip -Force
+          Expand-Archive Vex-v0.11.7.25-Bounded-Bridge-Probes.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.25.exe)) { throw 'packaged installer missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.25-Bounded-Bridge-Probes
+          path: Vex-v0.11.7.25-Bounded-Bridge-Probes.zip
+          retention-days: 7
