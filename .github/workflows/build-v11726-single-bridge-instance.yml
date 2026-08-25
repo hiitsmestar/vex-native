@@ -1,0 +1,88 @@
+name: Build Vex v0.11.7.26 Single Bridge Instance
+
+on:
+  push:
+    branches: [ "ci/v1177-remote-chat-relay" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Apply VexNative v0.11.7.26 build chain
+        shell: pwsh
+        run: python Tools/build_v11726_chain.py
+      - name: Verify v0.11.7.26 runtime
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11726_single_bridge_instance.py
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          $installer = Get-Content Tools/VexInstall11722.py -Raw
+          $watchdog = Get-Content Tools/VexBridgeWatchdog-v11722.ps1 -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.26"')) { throw 'Bridge v0.11.7.26 marker missing' }
+          if (-not $bridge.Contains('acquire_bridge_single_instance')) { throw 'Bridge single-instance mutex missing' }
+          if (-not $bridge.Contains('VexBridge-v11726-single-instance')) { throw 'Bridge mutex name missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.26"')) { throw 'Remote v0.11.7.26 marker missing' }
+          if (-not $remote.Contains('already_running_after_lock')) { throw 'Remote recovery race recheck missing' }
+          if (-not $remote.Contains('def bridge_open_ports(config: dict, connect_timeout: float = 0.035)')) { throw 'Bounded Bridge probes missing' }
+          if (-not $installer.Contains("VERSION='0.11.7.26'")) { throw 'Installer v0.11.7.26 marker missing' }
+          if (-not $watchdog.Contains('0.11.7.26')) { throw 'Watchdog v0.11.7.26 marker missing' }
+          if (-not $watchdog.Contains('-WindowStyle Hidden')) { throw 'Hidden watchdog Bridge launch missing' }
+      - name: Build coordinated Windows binaries
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.26 Tools/VexInstall11722.py
+      - name: Smoke test Remote Support GUI startup
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\VexRemoteSupport.exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) { throw "VexRemoteSupport exited during GUI startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Smoke test Bridge single instance
+        shell: pwsh
+        run: |
+          $a = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          Start-Sleep -Seconds 3
+          $b = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          Start-Sleep -Seconds 3
+          $b.Refresh()
+          if (-not $b.HasExited) { throw 'Second VexBridge instance remained alive' }
+          Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
+      - name: Package v0.11.7.26 control plane
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog-v11722.ps1 dist/VexBridgeWatchdog-v11722.ps1 -Force
+          @'
+          Vex v0.11.7.26 - Single Bridge Instance
+          ======================================
+          - VexBridge enforces a Windows named-mutex single-instance lock.
+          - Remote Support rechecks process state inside its recovery lock.
+          - Watchdog Bridge launches are hidden and get a post-launch settle window.
+          - Bounded probes and nonblocking session activation remain intact.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.26.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.26.exe,dist/VexBridgeWatchdog-v11722.ps1,dist/README-Vex-v0.11.7.26.txt -DestinationPath Vex-v0.11.7.26-Single-Bridge-Instance.zip -Force
+          Expand-Archive Vex-v0.11.7.26-Single-Bridge-Instance.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.26.exe)) { throw 'packaged installer missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.26-Single-Bridge-Instance
+          path: Vex-v0.11.7.26-Single-Bridge-Instance.zip
+          retention-days: 7
