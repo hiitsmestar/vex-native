@@ -1,0 +1,169 @@
+name: Build Vex v0.11.7.20 Unified Control Plane
+
+on:
+  push:
+    branches: [ "ci/v1177-remote-chat-relay" ]
+  pull_request:
+    branches: [ "ci/v113-memory-route-hardening" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Apply current VexNative patch chain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_package_versions.py
+          python Tools/apply_v113_memory_route_hardening.py
+          python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
+          python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
+          python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
+          python Tools/apply_v1177_remote_chat_relay.py
+          python Tools/apply_v11710_remote_chat_direct_ollama_fix.py
+          python Tools/apply_v11711_project_control_layer.py
+          python Tools/apply_v11712_bridge_fast_start_health.py
+          python Tools/apply_v11713_listener_verified_recovery.py
+          python Tools/apply_v11714_nonblocking_bootstrap.py
+          python Tools/apply_v11715_installer_lock_fix.py
+          python Tools/apply_v11716_bridge_bind_diagnostics.py
+          python Tools/apply_v11717_tls_local_transport_fix.py
+          python Tools/apply_v11718_runtime_cutover_fix.py
+          python Tools/apply_v11719_bridge_supervision_doctor.py
+          python Tools/apply_v11720_unified_control_plane.py
+      - name: Verify coordinated control plane
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11720.py Tools/apply_v11720_unified_control_plane.py
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          $installer = Get-Content Tools/VexInstall11720.py -Raw
+          $watchdog = Get-Content Tools/VexBridgeWatchdog-v11720.ps1 -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.20"')) { throw 'Bridge v0.11.7.20 marker missing' }
+          if (-not $bridge.Contains('start_local_control_server(config)')) { throw 'Bridge local control listener missing' }
+          if (-not $bridge.Contains('"local_control_protocol": "vex-local-v1"')) { throw 'Bridge local contract marker missing' }
+          if (-not $bridge.Contains('("127.0.0.1", candidate)')) { throw 'Bridge local-only bind missing' }
+          if (-not $bridge.Contains('TLSThreadingHTTPServer(("0.0.0.0", port), Handler, context)')) { throw 'LAN TLS listener missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.20"')) { throw 'Remote Support version marker missing' }
+          if (-not $remote.Contains('return f"http://127.0.0.1:{port}{path}"')) { throw 'Remote Support local HTTP route missing' }
+          if (-not $installer.Contains("'VexDoctor.exe'")) { throw 'Doctor installer payload missing' }
+          if (-not $installer.Contains("protocol=='vex-local-v1'")) { throw 'Installer control-plane verification missing' }
+          if (-not $watchdog.Contains('Test-LocalControl')) { throw 'Watchdog local control probe missing' }
+          if (-not $watchdog.Contains('vex-local-v1')) { throw 'Watchdog contract validation missing' }
+      - name: Build coordinated Windows binaries
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw 'VexBridge.exe missing' }
+          pyinstaller --noconfirm --clean --onefile --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw 'VexRemoteSupport.exe missing' }
+          pyinstaller --noconfirm --clean --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
+          if (!(Test-Path dist/VexDoctor.exe)) { throw 'VexDoctor.exe missing' }
+          pyinstaller --noconfirm --clean --onefile --windowed --name Install-Vex-v0.11.7.20 Tools/VexInstall11720.py
+          if (!(Test-Path dist/Install-Vex-v0.11.7.20.exe)) { throw 'installer EXE missing' }
+      - name: Smoke test VexDoctor executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force doctor-smoke | Out-Null
+          & .\dist\VexDoctor.exe --headless --json-out doctor-smoke\latest.json
+          if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor headless report missing' }
+      - name: Package unified control plane
+        shell: pwsh
+        run: |
+          Copy-Item Tools/VexBridgeWatchdog-v11720.ps1 dist/VexBridgeWatchdog-v11720.ps1 -Force
+          @'
+          Vex v0.11.7.20 - Unified Control Plane
+          ======================================
+          - Bridge and Remote Support now share one coordinated local control contract.
+          - Local Vex components use loopback-only HTTP with the existing token, avoiding local TLS/proxy failures.
+          - LAN/iPhone clients retain the existing authenticated TLS listener unchanged.
+          - Installer verifies the exact v0.11.7.20 local-control protocol before declaring success.
+          - Watchdog checks the same endpoint Remote Support uses and restarts a wedged Bridge.
+          - VexDoctor is bundled and smoke-tested.
+          - Preserves runtime identity, stale-process cutover, memory, learning, cognition, art, and project-control patch chain.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.20.txt
+          Compress-Archive -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.20.exe,dist/VexBridgeWatchdog-v11720.ps1,dist/README-Vex-v0.11.7.20.txt -DestinationPath Vex-v0.11.7.20-Unified-Control-Plane.zip -Force
+          Expand-Archive Vex-v0.11.7.20-Unified-Control-Plane.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.20.exe)) { throw 'packaged installer missing' }
+          if (!(Test-Path verify-package/VexDoctor.exe)) { throw 'packaged Doctor missing' }
+          if (!(Test-Path verify-package/VexBridgeWatchdog-v11720.ps1)) { throw 'packaged watchdog missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.20-Unified-Control-Plane
+          path: Vex-v0.11.7.20-Unified-Control-Plane.zip
+          retention-days: 7
