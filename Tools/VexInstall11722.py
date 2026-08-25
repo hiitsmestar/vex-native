@@ -27,15 +27,29 @@ def run_ps(script:str, timeout:int=45):
     return subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-Command',script],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),timeout=timeout,capture_output=True,text=True)
 
 def stop_all_vex(home:Path)->None:
+    # Only stop known Vex runtime processes. The previous broad CommandLine matcher
+    # could match the helper PowerShell process itself because the helper command
+    # contains watchdog/startup marker text, causing a false "stale process" failure.
     script=r'''$ErrorActionPreference='SilentlyContinue'
+$selfPid=$PID
 $deadline=(Get-Date).AddSeconds(35)
+function Get-VexTargets {
+  Get-CimInstance Win32_Process | Where-Object {
+    $_.ProcessId -ne $selfPid -and (
+      $_.Name -in @('VexBridge.exe','VexRemoteSupport.exe','VexDoctor.exe') -or
+      (($_.Name -eq 'powershell.exe' -or $_.Name -eq 'pwsh.exe' -or $_.Name -eq 'cmd.exe') -and
+       $_.CommandLine -and
+       ($_.CommandLine -like '*VexBridgeWatchdog.ps1*' -or $_.CommandLine -like '*START-VEX-SELF-HEAL.cmd*'))
+    )
+  }
+}
 do {
-  $targets = Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'Vex*.exe') -or ($_.CommandLine -and ($_.CommandLine -like '*VexBridgeWatchdog*' -or $_.CommandLine -like '*START-VEX-SELF-HEAL*')) }
+  $targets = @(Get-VexTargets)
   $targets | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   Start-Sleep -Milliseconds 650
-  $left = Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'Vex*.exe') -or ($_.CommandLine -and ($_.CommandLine -like '*VexBridgeWatchdog*' -or $_.CommandLine -like '*START-VEX-SELF-HEAL*')) }
-} while ($left -and (Get-Date) -lt $deadline)
-if ($left) { exit 9 }
+  $left = @(Get-VexTargets)
+} while ($left.Count -gt 0 -and (Get-Date) -lt $deadline)
+if ($left.Count -gt 0) { exit 9 }
 '''
     r=run_ps(script,timeout=40)
     if r.returncode!=0: raise RuntimeError('Could not stop all stale Vex processes before install.')
