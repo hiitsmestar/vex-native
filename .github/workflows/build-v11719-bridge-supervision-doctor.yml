@@ -134,16 +134,16 @@ jobs:
       - name: Smoke test VexDoctor executable
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force doctor-smoke | Out-Null
-          $global:LASTEXITCODE = 0
-          & .\dist\VexDoctor.exe --headless --json-out doctor-smoke\latest.json
-          $doctorExit = $LASTEXITCODE
+          $proc = Start-Process -FilePath .\dist\VexDoctor.exe -ArgumentList @('--headless','--json-out','doctor-smoke\latest.json') -Wait -PassThru -NoNewWindow
+          $doctorExit = $proc.ExitCode
           if (!(Test-Path doctor-smoke/latest.json)) { throw 'VexDoctor headless report missing' }
           $report = Get-Content doctor-smoke/latest.json -Raw | ConvertFrom-Json
-          if (-not $report.ok) { throw 'VexDoctor executable did not complete its diagnostic run' }
-          if ($doctorExit -ne 0 -and $report.overall -ne 'broken') { throw "Unexpected VexDoctor exit code $doctorExit for overall=$($report.overall)" }
-          Write-Host "VexDoctor executable smoke passed; clean CI runner diagnostic overall=$($report.overall), exit=$doctorExit"
-          $global:LASTEXITCODE = 0
+          if ($doctorExit -notin @(0,1)) { throw "VexDoctor unexpected exit code: $doctorExit" }
+          if ($doctorExit -eq 0 -and $report.summary.overall -ne 'healthy') { throw "Doctor returned healthy exit with overall=$($report.summary.overall)" }
+          if ($doctorExit -eq 1 -and $report.summary.overall -eq 'healthy') { throw 'Doctor returned diagnostic-failure exit for healthy report' }
+          Write-Host "VexDoctor executable smoke passed; diagnostic exit=$doctorExit overall=$($report.summary.overall)"
       - name: Package v0.11.7.19
         shell: pwsh
         run: |
