@@ -1,0 +1,140 @@
+name: Diagnose v11729 Patch Fingerprint
+
+on:
+  push:
+    branches: [ "ci/v11729-natural-continuity" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply proven iOS feature chain
+        run: |
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
+          python3 Tools/apply_v098_ios_time_grounding_patch.py
+          python3 Tools/apply_v107_art_ios_adapter_patch.py
+          python3 Tools/apply_v108_ios_art_followup_grounding.py
+          python3 Tools/apply_v110_ios_memory_sync.py
+          python3 Tools/apply_v111_ios_memory_sync_hotfix.py
+      - id: detect
+        name: Capture patch result
+        shell: bash
+        run: |
+          set +e
+          python3 Tools/apply_v11729_ios_natural_continuity.py > "$RUNNER_TEMP/v11729-patch.log" 2>&1
+          rc=$?
+          set -e
+          code=unknown
+          if [ "$rc" -eq 0 ]; then code=success
+          elif grep -Fq 'first PromptComposer call' "$RUNNER_TEMP/v11729-patch.log"; then code=first_prompt
+          elif grep -Fq 'retry PromptComposer call' "$RUNNER_TEMP/v11729-patch.log"; then code=retry_prompt
+          elif grep -Fq 'web token budget' "$RUNNER_TEMP/v11729-patch.log"; then code=web_tokens
+          elif grep -Fq 'web temperature' "$RUNNER_TEMP/v11729-patch.log"; then code=web_temp
+          elif grep -Fq 'web top-p' "$RUNNER_TEMP/v11729-patch.log"; then code=web_topp
+          elif grep -Fq 'web top-k' "$RUNNER_TEMP/v11729-patch.log"; then code=web_topk
+          elif grep -Fq 'PromptComposer groundedDirective parameter' "$RUNNER_TEMP/v11729-patch.log"; then code=signature
+          elif grep -Eq 'relevant memory|memory block' "$RUNNER_TEMP/v11729-patch.log"; then code=memory
+          elif grep -Fq 'modelUserText/system boundary' "$RUNNER_TEMP/v11729-patch.log"; then code=model_boundary
+          elif grep -Fq 'closed-world insertion point' "$RUNNER_TEMP/v11729-patch.log"; then code=closed_world
+          elif grep -Fq 'fresh phrasing rule' "$RUNNER_TEMP/v11729-patch.log"; then code=fresh_rule
+          elif grep -Fq 'grounded newest user text' "$RUNNER_TEMP/v11729-patch.log"; then code=compact
+          elif grep -Fq 'conversational Qwen token marker' "$RUNNER_TEMP/v11729-patch.log"; then code=final_sampling
+          elif grep -Fq 'AppModel marker' "$RUNNER_TEMP/v11729-patch.log"; then code=final_app
+          elif grep -Fq 'PromptComposer marker' "$RUNNER_TEMP/v11729-patch.log"; then code=final_prompt
+          elif grep -Fq 'Traceback (most recent call last)' "$RUNNER_TEMP/v11729-patch.log"; then code=traceback
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+      - name: PATCH SUCCEEDED
+        if: steps.detect.outputs.code == 'success'
+        run: true
+      - name: FAIL first PromptComposer
+        if: steps.detect.outputs.code == 'first_prompt'
+        run: true
+      - name: FAIL retry PromptComposer
+        if: steps.detect.outputs.code == 'retry_prompt'
+        run: true
+      - name: FAIL web token budget
+        if: steps.detect.outputs.code == 'web_tokens'
+        run: true
+      - name: FAIL web temperature
+        if: steps.detect.outputs.code == 'web_temp'
+        run: true
+      - name: FAIL web top-p
+        if: steps.detect.outputs.code == 'web_topp'
+        run: true
+      - name: FAIL web top-k
+        if: steps.detect.outputs.code == 'web_topk'
+        run: true
+      - name: FAIL PromptComposer signature
+        if: steps.detect.outputs.code == 'signature'
+        run: true
+      - name: FAIL memory transform
+        if: steps.detect.outputs.code == 'memory'
+        run: true
+      - name: FAIL model boundary
+        if: steps.detect.outputs.code == 'model_boundary'
+        run: true
+      - name: FAIL closed-world insertion
+        if: steps.detect.outputs.code == 'closed_world'
+        run: true
+      - name: FAIL fresh phrasing rule
+        if: steps.detect.outputs.code == 'fresh_rule'
+        run: true
+      - name: FAIL compact user prompt
+        if: steps.detect.outputs.code == 'compact'
+        run: true
+      - name: FAIL final sampling marker
+        if: steps.detect.outputs.code == 'final_sampling'
+        run: true
+      - name: FAIL final AppModel marker
+        if: steps.detect.outputs.code == 'final_app'
+        run: true
+      - name: FAIL final PromptComposer marker
+        if: steps.detect.outputs.code == 'final_prompt'
+        run: true
+      - name: FAIL Python traceback
+        if: steps.detect.outputs.code == 'traceback'
+        run: true
+      - name: FAIL unknown
+        if: steps.detect.outputs.code == 'unknown'
+        run: true
