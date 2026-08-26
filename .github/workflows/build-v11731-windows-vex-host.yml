@@ -1,4 +1,4 @@
-name: Build Vex v0.11.7.31 Windows Host
+name: Build Vex v0.11.7.33 Unified Windows Host
 
 on:
   push:
@@ -24,54 +24,53 @@ jobs:
       - name: Verify source
         shell: pwsh
         run: |
-          python -m py_compile Tools/VexWindowsHost.py
-          $src = Get-Content Tools/VexWindowsHost.py -Raw
-          if (-not $src.Contains('VERSION = "0.11.7.31"')) { throw 'version marker missing' }
-          if (-not $src.Contains('HOST_PORT = 8768')) { throw 'relay port marker missing' }
-          if (-not $src.Contains('/message')) { throw 'message relay missing' }
-          if (-not $src.Contains('/ping')) { throw 'ping relay missing' }
-      - name: Build Windows host
+          python -m py_compile Tools/VexWindowsHost.py Tools/VexNodeAgent.py
+          $host = Get-Content Tools/VexWindowsHost.py -Raw
+          $node = Get-Content Tools/VexNodeAgent.py -Raw
+          if (-not $host.Contains('VERSION = "0.11.7.33"')) { throw 'host version marker missing' }
+          if (-not $host.Contains('HOST_PORT = 8768')) { throw 'relay port marker missing' }
+          if (-not $host.Contains('/node/register')) { throw 'node registration missing' }
+          if (-not $host.Contains('/node/ping')) { throw 'node ping missing' }
+          if (-not $host.Contains('local_control_port')) { throw 'local Bridge control route missing' }
+          if (-not $node.Contains('VERSION = "0.11.7.33"')) { throw 'node version marker missing' }
+          if (-not $node.Contains('X-Vex-Node-Token')) { throw 'node auth missing' }
+      - name: Build Windows host and node agent
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexWindowsHost --collect-all requests Tools/VexWindowsHost.py
-      - name: Smoke test GUI process
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexNodeAgent Tools/VexNodeAgent.py
+      - name: Smoke test host and node processes
         shell: pwsh
         run: |
-          $exe = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
-          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexWindowsHost -PassThru
-          Start-Sleep -Seconds 8
-          $p.Refresh()
-          if ($p.HasExited) { throw "VexWindowsHost exited during startup with code $($p.ExitCode)" }
-          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          $host = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
+          $hp = Start-Process -FilePath $host -WorkingDirectory .\dist\VexWindowsHost -PassThru
+          Start-Sleep -Seconds 6
+          $hp.Refresh()
+          if ($hp.HasExited) { throw "VexWindowsHost exited during startup with code $($hp.ExitCode)" }
+          Stop-Process -Id $hp.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexWindowsHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $node = Resolve-Path .\dist\VexNodeAgent\VexNodeAgent.exe
+          $np = Start-Process -FilePath $node -WorkingDirectory .\dist\VexNodeAgent -PassThru
+          Start-Sleep -Seconds 4
+          $np.Refresh()
+          if ($np.HasExited) { throw "VexNodeAgent exited during startup with code $($np.ExitCode)" }
+          Stop-Process -Id $np.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexNodeAgent -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
       - name: Stage package
         shell: pwsh
         run: |
-          $pkg='Vex-v0.11.7.31-Windows-Host'
+          $pkg='Vex-v0.11.7.33-Unified-Windows-Host'
           New-Item -ItemType Directory -Path $pkg -Force | Out-Null
           Copy-Item dist\VexWindowsHost "$pkg\VexWindowsHost" -Recurse
-          @'
-          Vex v0.11.7.31 Windows Host
-          ===========================
-          First PC-native Vex host layer.
-
-          Included now:
-          - Native Windows chat surface
-          - Shared phone/PC relay service on TCP 8768
-          - Authenticated /message, /ping, /events, and /status endpoints
-          - Live VexBridge status display
-          - Persistent relay token under %APPDATA%\VexWindows\state.json
-          - Common transport surface for the iPhone client and future house-audio clients
-
-          Run VexWindowsHost\VexWindowsHost.exe.
-
-          This is the host/transport foundation. Local-model response routing, shared long-term memory sync, and direct iPhone UI integration are layered next without replacing this transport.
-          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
-          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.31-Windows-Host.zip -Force
-          Expand-Archive Vex-v0.11.7.31-Windows-Host.zip -DestinationPath verify -Force
+          Copy-Item dist\VexNodeAgent "$pkg\VexNodeAgent" -Recurse
+          Copy-Item Tools\README-VexNetwork-v11733.txt "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.33-Unified-Windows-Host.zip -Force
+          Expand-Archive Vex-v0.11.7.33-Unified-Windows-Host.zip -DestinationPath verify -Force
           if (!(Test-Path verify\VexWindowsHost\VexWindowsHost.exe)) { throw 'packaged host exe missing' }
+          if (!(Test-Path verify\VexNodeAgent\VexNodeAgent.exe)) { throw 'packaged node agent missing' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.31-Windows-Host
-          path: Vex-v0.11.7.31-Windows-Host.zip
+          name: Vex-v0.11.7.33-Unified-Windows-Host
+          path: Vex-v0.11.7.33-Unified-Windows-Host.zip
           retention-days: 14
