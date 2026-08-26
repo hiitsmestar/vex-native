@@ -3,6 +3,8 @@ name: Build Vex v0.11.7.29 Defender Safe Windows
 on:
   push:
     branches: [ "ci/v11729-defender-safe-windows" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
