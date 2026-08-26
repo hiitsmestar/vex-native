@@ -1,0 +1,138 @@
+# v0.11.7.29 true single-supervisor runtime repair - field evidence 2026-08-25
+name: Build Vex v0.11.7.29 True Single Supervisor
+
+on:
+  push:
+    branches:
+      - ci/v1177-remote-chat-relay
+    paths:
+      - '.github/workflows/build-v11729-true-single-supervisor.yml'
+      - 'Tools/build_v11729_chain.py'
+      - 'Tools/apply_v11729_true_single_supervisor_runtime.py'
+      - 'Tools/apply_v11729_defender_safe_packaging.py'
+      - 'Tools/build_v11728_chain.py'
+      - 'Tools/apply_v11728_single_supervisor_cutover.py'
+      - 'Tools/VexRemoteSupport.py'
+      - 'Tools/VexInstall11722.py'
+      - 'Bridge/vex_bridge.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Apply VexNative v0.11.7.29 build chain
+        shell: pwsh
+        run: python Tools/build_v11729_chain.py
+      - name: Verify v0.11.7.29 true single-supervisor and Defender-safe cutover
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11729_true_single_supervisor_runtime.py Tools/apply_v11729_defender_safe_packaging.py
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          $installer = Get-Content Tools/VexInstall11722.py -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.29"')) { throw 'Bridge v0.11.7.29 marker missing' }
+          if (-not $bridge.Contains('VexBridge-v11726-single-instance')) { throw 'Bridge mutex missing' }
+          if (-not $remote.Contains('VERSION = "0.11.7.29"')) { throw 'Remote v0.11.7.29 marker missing' }
+          if (-not $remote.Contains('VexRemoteSupport-v11727-single-instance')) { throw 'Remote single-instance mutex missing' }
+          if (-not $remote.Contains('"mode": "remote_support_direct_only"')) { throw 'Direct-only recovery marker missing' }
+          if (-not $remote.Contains('"scope": "single-remote-support-owner"')) { throw 'Single-owner scope missing' }
+          if (-not $remote.Contains('$_.ProcessId -ne $selfPid')) { throw 'Remote watchdog retirement can self-match helper PowerShell' }
+          if (-not $remote.Contains('exe_dir.name == "VexRemoteSupportRuntime"')) { throw 'One-folder Remote Support runtime resolution missing' }
+          if ($remote.Contains('downloads = Path.home() / "Downloads"')) { throw 'Remote Support can still recover from stale Downloads runtime' }
+          if ($remote.Contains('"mode": "watchdog_fallback"')) { throw 'Legacy watchdog fallback still present' }
+          if ($remote.Contains('_project_start("watchdog")')) { throw 'Remote Support can still launch watchdog' }
+          if ($remote.Contains("START-VEX-SELF-HEAL.cmd' -WorkingDirectory")) { throw 'Safe update can still resurrect legacy launcher' }
+          if (-not $installer.Contains("VERSION='0.11.7.29'")) { throw 'Installer v0.11.7.29 marker missing' }
+          if (-not $installer.Contains("FILES=['VexBridge.exe','VexDoctor.exe']")) { throw 'Installer root file set wrong' }
+          if (-not $installer.Contains("REMOTE_DIR='VexRemoteSupportRuntime'")) { throw 'Installer one-folder Remote Support payload missing' }
+          if (-not $installer.Contains('def replace_tree_with_retry')) { throw 'Installer runtime tree replacement missing' }
+          if (-not $installer.Contains('Get-CimInstance Win32_Process')) { throw 'Live watchdog process retirement missing' }
+          if (-not $installer.Contains("'*VexBridgeWatchdog*'")) { throw 'Live watchdog match missing' }
+          if (-not $installer.Contains('Disable-ScheduledTask')) { throw 'Legacy scheduled-task retirement missing' }
+          if (([regex]::Matches($installer, [regex]::Escape('$selfPid=$PID'))).Count -lt 2) { throw 'Installer legacy retirement helper can self-match its PowerShell process' }
+          if ($installer.Contains("watchdog=home/'VexBridgeWatchdog.ps1'")) { throw 'Installer watchdog launch still present' }
+      - name: Build coordinated Windows binaries
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --noupx --onefile --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          pyinstaller --noconfirm --clean --noupx --onedir --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          Move-Item -LiteralPath .\dist\VexRemoteSupport -Destination .\dist\VexRemoteSupportRuntime
+          pyinstaller --noconfirm --clean --noupx --onefile --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --noupx --onefile --windowed --name Install-Vex-v0.11.7.29 Tools/VexInstall11722.py
+      - name: Smoke test Remote Support one-folder single runtime
+        shell: pwsh
+        run: |
+          $remoteExe = '.\dist\VexRemoteSupportRuntime\VexRemoteSupport.exe'
+          if (!(Test-Path $remoteExe)) { throw 'Remote Support one-folder executable missing' }
+          Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $a = Start-Process -FilePath $remoteExe -PassThru
+          Start-Sleep -Seconds 10
+          $baseline = @(Get-Process VexRemoteSupport -ErrorAction SilentlyContinue).Count
+          if ($baseline -lt 1) { throw 'First VexRemoteSupport did not remain alive' }
+          $b = Start-Process -FilePath $remoteExe -PassThru
+          $deadline = (Get-Date).AddSeconds(25)
+          do {
+            Start-Sleep -Seconds 1
+            $after = @(Get-Process VexRemoteSupport -ErrorAction SilentlyContinue).Count
+          } while ($after -gt $baseline -and (Get-Date) -lt $deadline)
+          if ($after -gt $baseline) { throw "Second Remote Support launch left a sustained extra process set: baseline=$baseline after=$after" }
+          Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Smoke test Bridge single runtime after PyInstaller settle
+        shell: pwsh
+        run: |
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $a = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          Start-Sleep -Seconds 10
+          $baseline = @(Get-Process VexBridge -ErrorAction SilentlyContinue).Count
+          if ($baseline -lt 1) { throw 'First VexBridge did not remain alive' }
+          $b = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          $deadline = (Get-Date).AddSeconds(25)
+          do {
+            Start-Sleep -Seconds 1
+            $after = @(Get-Process VexBridge -ErrorAction SilentlyContinue).Count
+          } while ($after -gt $baseline -and (Get-Date) -lt $deadline)
+          if ($after -gt $baseline) { throw "Second Bridge launch left a sustained extra process set: baseline=$baseline after=$after" }
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Verify package excludes legacy supervisors and one-file Remote Support
+        shell: pwsh
+        run: |
+          @'
+          Vex v0.11.7.29 - True Single Supervisor + Defender-Safe Remote Support
+          =====================================================================
+          - Remote Support is the only Bridge recovery owner.
+          - Removes the historical watchdog/self-heal recovery path.
+          - Uses a non-UPX PyInstaller one-folder Remote Support runtime instead of the field-blocked self-extracting one-file executable.
+          - Retires any old root VexRemoteSupport.exe during install.
+          - Uses the installed runtime only; no stale Downloads fallback.
+          - Terminates live legacy watchdog/self-heal processes and disables scheduled legacy supervisor launches.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.29.txt
+          $stage = Join-Path $PWD 'package-stage'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item dist/VexBridge.exe,dist/VexDoctor.exe,dist/Install-Vex-v0.11.7.29.exe,dist/README-Vex-v0.11.7.29.txt -Destination $stage
+          Copy-Item -Recurse -Force dist/VexRemoteSupportRuntime -Destination $stage
+          if (Test-Path (Join-Path $stage 'VexRemoteSupport.exe')) { throw 'Field-blocked one-file Remote Support leaked into package root' }
+          if (!(Test-Path (Join-Path $stage 'VexRemoteSupportRuntime\VexRemoteSupport.exe'))) { throw 'One-folder Remote Support payload missing' }
+          if (Get-ChildItem $stage -Filter '*Watchdog*' -Recurse) { throw 'legacy watchdog leaked into package' }
+          if (Get-ChildItem $stage -Filter 'START-VEX-SELF-HEAL*' -Recurse) { throw 'legacy self-heal launcher leaked into package' }
+          Compress-Archive -Path "$stage\*" -DestinationPath Vex-v0.11.7.29-True-Single-Supervisor.zip -Force
+          Expand-Archive Vex-v0.11.7.29-True-Single-Supervisor.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.29.exe)) { throw 'packaged installer missing' }
+          if (!(Test-Path verify-package/VexRemoteSupportRuntime/VexRemoteSupport.exe)) { throw 'packaged Remote Support runtime missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.29-True-Single-Supervisor
+          path: Vex-v0.11.7.29-True-Single-Supervisor.zip
+          retention-days: 7

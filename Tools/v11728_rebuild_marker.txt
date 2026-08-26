@@ -1,0 +1,2 @@
+VexNative v0.11.7.28 Single Supervisor Cutover rebuild marker.
+Created to force a fresh push-triggered Windows CI run after the patch-source repairs that superseded failed run 32887446191.

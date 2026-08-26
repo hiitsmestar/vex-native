@@ -1,0 +1,179 @@
+name: Build Vex v0.11.7.12 Bridge Fast Start Health
+
+on:
+  push:
+    branches: [ "ci/v1177-remote-chat-relay" ]
+  pull_request:
+    branches: [ "ci/v113-memory-route-hardening" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Apply current VexNative patch chain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          python Tools/apply_v074_bridge_pairing_patch.py
+          python Tools/apply_v075_search_routing_patch.py
+          python Tools/apply_v076_direct_research_answers_patch.py
+          python Tools/apply_v077_grounded_research_patch.py
+          python Tools/apply_v078_photo_context_patch.py
+          python Tools/apply_v079_camera_visual_replies_patch.py
+          python Tools/apply_v079_compile_hotfix.py
+          python Tools/apply_v0710_visual_intent_fix.py
+          python Tools/apply_v0711_zoomable_chat_images.py
+          python Tools/prepare_v082_build_chain.py
+          python Tools/apply_v080_hybrid_brain_patch.py
+          python Tools/apply_v081_dual_pc_mesh_patch.py
+          python Tools/apply_v082_pc_tools_capability_patch.py
+          python Tools/apply_v083_browser_url_tools_patch.py
+          python Tools/apply_v084_self_learning_skills_patch.py
+          python Tools/apply_v084_skill_resolution_order_hotfix.py
+          python Tools/apply_v085_skill_compiler_patch.py
+          python Tools/apply_v086_bridge_media_patch.py
+          python Tools/apply_v090_bridge_neural_media_patch.py
+          python Tools/apply_v091_youtube_context_bridge_patch.py
+          python Tools/apply_v092_bridge_control_patch.py
+          python Tools/apply_v093_cognition_bridge_patch.py
+          python Tools/apply_v094_art_bridge_patch.py
+          python Tools/apply_v095_resource_housekeeper_art_patch.py
+          python Tools/apply_v096_active_maintenance_bridge_patch.py
+          python Tools/apply_v0961_bridge_stability_patch.py
+          python Tools/apply_v0962_self_healing_patch.py
+          python Tools/apply_v097_learning_engine_art_repair_patch.py
+          python Tools/apply_v0971_art_dll_hotfix.py
+          python Tools/apply_v0972_slow_cpu_coordination_hotfix.py
+          python Tools/apply_v0973_render_grounding_learning_hotfix.py
+          python Tools/apply_v098_modular_toolbox_time_patch.py
+          python Tools/apply_v0991_ntfy_patch.py
+          python Tools/apply_v0992_ntfy_header_fix.py
+          python Tools/apply_v100_art_remote_patch.py
+          python Tools/apply_v100_art_worker_hotfix.py
+          python Tools/apply_v102_art_safe_lowmem_patch.py
+          python Tools/apply_v103_lite_art_patch.py
+          python Tools/apply_v104_art_clipboard_patch.py
+          python Tools/apply_v105_art_realism_patch.py
+          python Tools/apply_v106_smart_prompt_patch.py
+          python Tools/apply_v106_smart_prompt_generic_fix.py
+          python Tools/prepare_v107_adapter_build.py
+          python Tools/apply_v107_art_worker_adapter_patch.py
+          python Tools/apply_v1071_adapter_coordination_fix.py
+          python Tools/apply_v108_windows_cognition_render_stability.py
+          python Tools/apply_v109_adaptive_pc_cognition.py
+          python Tools/apply_v1091_remote_support_compile_fix.py
+          python Tools/apply_v1092_cognition_recursion_hotfix.py
+          python Tools/apply_v1093_runtime_identity_grounding.py
+          python Tools/apply_v1094_verified_runtime_fact_route.py
+          python Tools/apply_v110_personal_memory_worker.py
+          python Tools/apply_v110_package_versions.py
+          python Tools/apply_v112_package_versions.py
+          python Tools/apply_v113_memory_route_hardening.py
+          python Tools/apply_v114_adaptive_learning_supervisor.py
+          python Tools/apply_v115_autonomous_self_improvement.py
+          python Tools/apply_v116_initiative_self_model.py
+          python Tools/apply_v1161_low_memory_initiative_fix.py
+          python Tools/apply_v117_grounded_continuity_foreground_priority.py
+          python Tools/apply_v1172_authoritative_recall_lite_priority.py
+          python Tools/apply_v1173_grounded_natural_recall_lite_learning.py
+          python Tools/apply_v1174_isolated_lite_learning.py
+          python Tools/apply_v1175_remote_relay_pagination.py
+          python Tools/apply_v1176_generic_recall_recovery.py
+          python Tools/apply_v1177_remote_chat_relay.py
+          python Tools/apply_v11710_remote_chat_direct_ollama_fix.py
+          python Tools/apply_v11711_project_control_layer.py
+          python Tools/apply_v11712_bridge_fast_start_health.py
+
+      - name: Verify fast start autonomous health and installer
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/apply_v11712_bridge_fast_start_health.py Tools/test_v11712_bridge_fast_start_health.py
+          python Tools/test_v11712_bridge_fast_start_health.py
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          $remote = Get-Content Tools/VexRemoteSupport.py -Raw
+          if (-not $bridge.Contains('"version": "0.11.7.12"')) { throw "Bridge v0.11.7.12 marker missing" }
+          if (-not $bridge.Contains('name="VexInitialIndex"')) { throw "Bridge background initial index missing" }
+          if (-not $remote.Contains('VERSION = "0.11.7.12"')) { throw "Remote Support v0.11.7.12 marker missing" }
+          if (-not $remote.Contains('bridge_health_changed')) { throw "autonomous health reporting missing" }
+          if (-not $remote.Contains('bridge_auto_recovery')) { throw "bounded auto recovery missing" }
+          if (-not $remote.Contains('action == "safe_update"')) { throw "v0.11.7.11 safe_update regressed" }
+          if (-not $remote.Contains('action == "remote_chat"')) { throw "remote_chat regressed" }
+          if (-not $remote.Contains('http://127.0.0.1:11434/api/chat')) { throw "direct Ollama relay regressed" }
+          if (-not $remote.Contains('user-owned-vex-project-only')) { throw "project control scope regressed" }
+          $installer = Get-Content Tools/Install-Vex-v0.11.7.12.ps1 -Raw
+          if (-not $installer.Contains('$hasLauncher = Test-Path')) { throw "Windows PowerShell-compatible installer discovery missing" }
+          if ($installer.Contains('Program Files')) { throw "installer must not target Program Files" }
+          Write-Host "verified v0.11.7.12 fast-start + autonomous bounded health"
+
+      - name: Build Bridge and Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexBridge `
+            --collect-all requests `
+            --collect-all bs4 `
+            --collect-all pypdf `
+            --collect-all cryptography `
+            Bridge/vex_bridge.py
+          if (!(Test-Path dist/VexBridge.exe)) { throw "VexBridge.exe missing" }
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Package v0.11.7.12
+        shell: pwsh
+        run: |
+          Copy-Item Tools/Install-Vex-v0.11.7.12.ps1 dist/Install-Vex-v0.11.7.12.ps1 -Force
+          @'
+          Vex v0.11.7.12 - Bridge Fast Start + Autonomous Health
+          =======================================================
+
+          WHAT CHANGED
+          - Bridge binds its HTTPS service immediately instead of blocking on the full initial file index.
+          - Initial indexing now runs in a background thread; normal periodic reindex remains intact.
+          - Remote Support publishes sanitized Bridge health changes and a five-minute heartbeat without needing an inbound command.
+          - With SAFE maintenance enabled, a Bridge that remains unreachable for three minutes receives one bounded Bridge-only recovery attempt, rate-limited to once per ten minutes.
+          - Keeps v0.11.7.11 project-only status/hash/start-stop/restart/safe_update controls.
+          - Keeps direct local Ollama technical relay chat.
+          - No generic shell/exec action is exposed.
+          - Installer targets only the existing user-owned Vex folder under Downloads, requests no elevation, and SHA256-verifies both EXEs.
+
+          INSTALL
+          - Extract under Downloads.
+          - Run Install-Vex-v0.11.7.12.ps1 from normal PowerShell with ExecutionPolicy Bypass if Windows opens .ps1 files in Notepad.
+          - The installer stops only Vex Bridge/Remote Support and the Vex watchdog, copies + verifies both EXEs, then restarts them.
+          - Start a fresh two-hour Remote Support session and enable SAFE maintenance if you want bounded automatic Bridge recovery.
+          '@ | Set-Content -Encoding UTF8 dist/README-Vex-v0.11.7.12.txt
+
+          Compress-Archive `
+            -Path dist/VexBridge.exe,dist/VexRemoteSupport.exe,dist/Install-Vex-v0.11.7.12.ps1,dist/README-Vex-v0.11.7.12.txt `
+            -DestinationPath Vex-v0.11.7.12-Bridge-Fast-Start-Health.zip -Force
+          Expand-Archive Vex-v0.11.7.12-Bridge-Fast-Start-Health.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package/VexBridge.exe)) { throw "packaged VexBridge.exe missing" }
+          if (!(Test-Path verify-package/VexRemoteSupport.exe)) { throw "packaged VexRemoteSupport.exe missing" }
+          if (!(Test-Path verify-package/Install-Vex-v0.11.7.12.ps1)) { throw "installer missing" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.12-Bridge-Fast-Start-Health
+          path: Vex-v0.11.7.12-Bridge-Fast-Start-Health.zip
+          retention-days: 7
