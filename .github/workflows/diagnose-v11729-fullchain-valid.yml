@@ -91,3 +91,52 @@ jobs:
       - name: Check compact prompt regex
         continue-on-error: true
         run: python3 Tools/diagnose_v11729_fullchain.py compact_regex
+      - name: Run patch and retain stderr
+        continue-on-error: true
+        run: |
+          python3 Tools/apply_v11729_ios_natural_continuity.py > /tmp/v11729-patch.log 2>&1
+      - name: Fingerprint first PromptComposer failure
+        continue-on-error: true
+        run: grep -Fq 'first PromptComposer call' /tmp/v11729-patch.log
+      - name: Fingerprint retry PromptComposer failure
+        continue-on-error: true
+        run: grep -Fq 'retry PromptComposer call' /tmp/v11729-patch.log
+      - name: Fingerprint web token failure
+        continue-on-error: true
+        run: grep -Fq 'web token budget' /tmp/v11729-patch.log
+      - name: Fingerprint web temperature failure
+        continue-on-error: true
+        run: grep -Fq 'web temperature' /tmp/v11729-patch.log
+      - name: Fingerprint web top-p failure
+        continue-on-error: true
+        run: grep -Fq 'web top-p' /tmp/v11729-patch.log
+      - name: Fingerprint web top-k failure
+        continue-on-error: true
+        run: grep -Fq 'web top-k' /tmp/v11729-patch.log
+      - name: Fingerprint signature failure
+        continue-on-error: true
+        run: grep -Fq 'PromptComposer groundedDirective parameter' /tmp/v11729-patch.log
+      - name: Fingerprint memory failure
+        continue-on-error: true
+        run: grep -Eq 'relevant memory|memory block' /tmp/v11729-patch.log
+      - name: Fingerprint model boundary failure
+        continue-on-error: true
+        run: grep -Fq 'modelUserText/system boundary' /tmp/v11729-patch.log
+      - name: Fingerprint closed-world failure
+        continue-on-error: true
+        run: grep -Fq 'closed-world insertion point' /tmp/v11729-patch.log
+      - name: Fingerprint fresh phrasing failure
+        continue-on-error: true
+        run: grep -Fq 'fresh phrasing rule' /tmp/v11729-patch.log
+      - name: Fingerprint compact failure
+        continue-on-error: true
+        run: grep -Fq 'grounded newest user text' /tmp/v11729-patch.log
+      - name: Fingerprint final marker failure
+        continue-on-error: true
+        run: grep -Eq 'AppModel marker|conversational Qwen token marker|PromptComposer marker' /tmp/v11729-patch.log
+      - name: Fingerprint Python traceback
+        continue-on-error: true
+        run: grep -Fq 'Traceback (most recent call last)' /tmp/v11729-patch.log
+      - name: Fingerprint successful patch
+        continue-on-error: true
+        run: grep -Fq 'Applied v0.11.2 natural continuity patch' /tmp/v11729-patch.log
