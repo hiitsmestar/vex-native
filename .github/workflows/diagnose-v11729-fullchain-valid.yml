@@ -1,0 +1,93 @@
+name: Diagnose v11729 Exact Full Chain
+
+on:
+  push:
+    branches: [ "ci/v11729-natural-continuity" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply proven iOS feature chain
+        run: |
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
+          python3 Tools/apply_v098_ios_time_grounding_patch.py
+          python3 Tools/apply_v107_art_ios_adapter_patch.py
+          python3 Tools/apply_v108_ios_art_followup_grounding.py
+          python3 Tools/apply_v110_ios_memory_sync.py
+          python3 Tools/apply_v111_ios_memory_sync_hotfix.py
+      - name: Check engine end
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py engine_end
+      - name: Check grounded function end
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py fn_end
+      - name: Check main prompt regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py main_regex
+      - name: Check retry prompt regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py retry_regex
+      - name: Check temperature regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py sampling_temp
+      - name: Check top-p regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py sampling_topp
+      - name: Check top-k regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py sampling_topk
+      - name: Check PromptComposer signature
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py signature
+      - name: Check memory block end
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py memory_end
+      - name: Check system boundary
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py system_boundary
+      - name: Check closed-world exact marker
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py closed_exact
+      - name: Check compact prompt regex
+        continue-on-error: true
+        run: python3 Tools/diagnose_v11729_fullchain.py compact_regex
