@@ -13,7 +13,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# Grounded intents should constrain Qwen, not bypass it with a fixed final reply.
 fast_start = app.find("        if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {")
 if fast_start < 0:
     raise SystemExit("v11729 native grounded fast-path anchor missing")
@@ -62,15 +61,30 @@ new_fn = r'''    private func nativeGroundedQwen3Directive(for userText: String)
 '''
 app = app[:fn_start] + new_fn + app[fn_end:]
 
-first_call = "            newestUserText: text,\n            isQwen3: isQwen3\n        )"
-first_new = "            newestUserText: text,\n            isQwen3: isQwen3,\n            groundedDirective: groundedDirective\n        )"
-app = replace_once(app, first_call, first_new, "first PromptComposer call")
-retry_call = "                    isQwen3: true,\n                    retryMode: true\n                )"
-retry_new = "                    isQwen3: true,\n                    retryMode: true,\n                    groundedDirective: groundedDirective\n                )"
-app = replace_once(app, retry_call, retry_new, "retry PromptComposer call")
+# v0.7.8 changes the hidden model input from `text` to `modelText`; accept both
+# source states so this patch works by itself and at the end of the proven chain.
+main_patched = False
+for input_name in ("modelText", "text"):
+    old = f"            newestUserText: {input_name},\n            isQwen3: isQwen3\n        )"
+    if old in app:
+        new = f"            newestUserText: {input_name},\n            isQwen3: isQwen3,\n            groundedDirective: groundedDirective\n        )"
+        app = app.replace(old, new, 1)
+        main_patched = True
+        break
+if not main_patched:
+    raise SystemExit("v11729 first PromptComposer call anchor missing")
 
-# Historical web-answer patches use ternary sampling values. Preserve their
-# low-temperature research side and only loosen ordinary conversation.
+retry_patched = False
+for input_name in ("modelText", "text"):
+    old = f"                    newestUserText: {input_name},\n                    isQwen3: true,\n                    retryMode: true\n                )"
+    if old in app:
+        new = f"                    newestUserText: {input_name},\n                    isQwen3: true,\n                    retryMode: true,\n                    groundedDirective: groundedDirective\n                )"
+        app = app.replace(old, new, 1)
+        retry_patched = True
+        break
+if not retry_patched:
+    raise SystemExit("v11729 retry PromptComposer call anchor missing")
+
 if "webGroundedTurn ? 240 : 56" in app:
     app = replace_once(app, "webGroundedTurn ? 240 : 56", "webGroundedTurn ? 240 : 72", "web-aware token budget")
     app = replace_once(app, "webGroundedTurn ? 0.45 : 0.80", "webGroundedTurn ? 0.45 : 0.90", "web-aware temperature")
