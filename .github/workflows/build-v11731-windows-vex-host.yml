@@ -1,0 +1,77 @@
+name: Build Vex v0.11.7.31 Windows Host
+
+on:
+  push:
+    branches: [ "ci/v11731-windows-vex-host" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-host:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests
+      - name: Verify source
+        shell: pwsh
+        run: |
+          python -m py_compile Tools/VexWindowsHost.py
+          $src = Get-Content Tools/VexWindowsHost.py -Raw
+          if (-not $src.Contains('VERSION = "0.11.7.31"')) { throw 'version marker missing' }
+          if (-not $src.Contains('HOST_PORT = 8768')) { throw 'relay port marker missing' }
+          if (-not $src.Contains('/message')) { throw 'message relay missing' }
+          if (-not $src.Contains('/ping')) { throw 'ping relay missing' }
+      - name: Build Windows host
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexWindowsHost --collect-all requests Tools/VexWindowsHost.py
+      - name: Smoke test GUI process
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexWindowsHost -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) { throw "VexWindowsHost exited during startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexWindowsHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $pkg='Vex-v0.11.7.31-Windows-Host'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+          Copy-Item dist\VexWindowsHost "$pkg\VexWindowsHost" -Recurse
+          @'
+          Vex v0.11.7.31 Windows Host
+          ===========================
+          First PC-native Vex host layer.
+
+          Included now:
+          - Native Windows chat surface
+          - Shared phone/PC relay service on TCP 8768
+          - Authenticated /message, /ping, /events, and /status endpoints
+          - Live VexBridge status display
+          - Persistent relay token under %APPDATA%\VexWindows\state.json
+          - Common transport surface for the iPhone client and future house-audio clients
+
+          Run VexWindowsHost\VexWindowsHost.exe.
+
+          This is the host/transport foundation. Local-model response routing, shared long-term memory sync, and direct iPhone UI integration are layered next without replacing this transport.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.31-Windows-Host.zip -Force
+          Expand-Archive Vex-v0.11.7.31-Windows-Host.zip -DestinationPath verify -Force
+          if (!(Test-Path verify\VexWindowsHost\VexWindowsHost.exe)) { throw 'packaged host exe missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.31-Windows-Host
+          path: Vex-v0.11.7.31-Windows-Host.zip
+          retention-days: 14
