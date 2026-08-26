@@ -25,15 +25,15 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile Tools/VexWindowsHost.py Tools/VexNodeAgent.py
-          $host = Get-Content Tools/VexWindowsHost.py -Raw
-          $node = Get-Content Tools/VexNodeAgent.py -Raw
-          if (-not $host.Contains('VERSION = "0.11.7.33"')) { throw 'host version marker missing' }
-          if (-not $host.Contains('HOST_PORT = 8768')) { throw 'relay port marker missing' }
-          if (-not $host.Contains('/node/register')) { throw 'node registration missing' }
-          if (-not $host.Contains('/node/ping')) { throw 'node ping missing' }
-          if (-not $host.Contains('local_control_port')) { throw 'local Bridge control route missing' }
-          if (-not $node.Contains('VERSION = "0.11.7.33"')) { throw 'node version marker missing' }
-          if (-not $node.Contains('X-Vex-Node-Token')) { throw 'node auth missing' }
+          $hostSource = Get-Content Tools/VexWindowsHost.py -Raw
+          $nodeSource = Get-Content Tools/VexNodeAgent.py -Raw
+          if (-not $hostSource.Contains('VERSION = "0.11.7.33"')) { throw 'host version marker missing' }
+          if (-not $hostSource.Contains('HOST_PORT = 8768')) { throw 'relay port marker missing' }
+          if (-not $hostSource.Contains('/node/register')) { throw 'node registration missing' }
+          if (-not $hostSource.Contains('/node/ping')) { throw 'node ping missing' }
+          if (-not $hostSource.Contains('local_control_port')) { throw 'local Bridge control route missing' }
+          if (-not $nodeSource.Contains('VERSION = "0.11.7.33"')) { throw 'node version marker missing' }
+          if (-not $nodeSource.Contains('X-Vex-Node-Token')) { throw 'node auth missing' }
       - name: Build Windows host and node agent
         shell: pwsh
         run: |
@@ -42,16 +42,16 @@ jobs:
       - name: Smoke test host and node processes
         shell: pwsh
         run: |
-          $host = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
-          $hp = Start-Process -FilePath $host -WorkingDirectory .\dist\VexWindowsHost -PassThru
+          $hostExe = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
+          $hp = Start-Process -FilePath $hostExe -WorkingDirectory .\dist\VexWindowsHost -PassThru
           Start-Sleep -Seconds 6
           $hp.Refresh()
           if ($hp.HasExited) { throw "VexWindowsHost exited during startup with code $($hp.ExitCode)" }
           Stop-Process -Id $hp.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexWindowsHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-          $node = Resolve-Path .\dist\VexNodeAgent\VexNodeAgent.exe
-          $np = Start-Process -FilePath $node -WorkingDirectory .\dist\VexNodeAgent -PassThru
+          $nodeExe = Resolve-Path .\dist\VexNodeAgent\VexNodeAgent.exe
+          $np = Start-Process -FilePath $nodeExe -WorkingDirectory .\dist\VexNodeAgent -PassThru
           Start-Sleep -Seconds 4
           $np.Refresh()
           if ($np.HasExited) { throw "VexNodeAgent exited during startup with code $($np.ExitCode)" }
