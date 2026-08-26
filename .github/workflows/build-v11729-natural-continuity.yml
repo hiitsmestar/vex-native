@@ -73,40 +73,52 @@ jobs:
           python3 Tools/apply_v111_ios_memory_sync_hotfix.py
       - name: Diagnostic A native grounding fast path
         continue-on-error: true
-        run: grep -Fq 'if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text)' VexNative/AppModel.swift
+        run: |
+          grep -Fq 'if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text)' VexNative/AppModel.swift
       - name: Diagnostic B native grounding function
         continue-on-error: true
-        run: grep -Fq 'private func nativeGroundedQwen3Reply(for userText: String)' VexNative/AppModel.swift
+        run: |
+          grep -Fq 'private func nativeGroundedQwen3Reply(for userText: String)' VexNative/AppModel.swift
       - name: Diagnostic C photo-aware main prompt input
         continue-on-error: true
-        run: grep -Fq 'newestUserText: modelText' VexNative/AppModel.swift
+        run: |
+          grep -Fq 'newestUserText: modelText' VexNative/AppModel.swift
       - name: Diagnostic D retry prompt marker
         continue-on-error: true
-        run: grep -Fq 'retryMode: true' VexNative/AppModel.swift
+        run: |
+          grep -Fq 'retryMode: true' VexNative/AppModel.swift
       - name: Diagnostic E web sampling token marker
         continue-on-error: true
-        run: grep -Fq 'webGroundedTurn ? 240 : 56' VexNative/AppModel.swift
+        run: |
+          grep -Fq 'webGroundedTurn ? 240 : 56' VexNative/AppModel.swift
       - name: Diagnostic F PromptComposer retry parameter
         continue-on-error: true
-        run: grep -Fq 'retryMode: Bool = false' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'retryMode: Bool = false' VexNative/Core/PromptComposer.swift
       - name: Diagnostic G focused memory anchor
         continue-on-error: true
-        run: grep -Fq 'let relevant: [BrainMemory]' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'let relevant: [BrainMemory]' VexNative/Core/PromptComposer.swift
       - name: Diagnostic H focused persona limit
         continue-on-error: true
-        run: grep -Fq 'let personaLimit = focusedTurn ? 420 : 760' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'let personaLimit = focusedTurn ? 420 : 760' VexNative/Core/PromptComposer.swift
       - name: Diagnostic I focused user limit
         continue-on-error: true
-        run: grep -Fq 'let userLimit = focusedTurn ? 0 : 280' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'let userLimit = focusedTurn ? 0 : 280' VexNative/Core/PromptComposer.swift
       - name: Diagnostic J closed world marker
         continue-on-error: true
-        run: grep -Fq '\(closedWorld)' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq '\(closedWorld)' VexNative/Core/PromptComposer.swift
       - name: Diagnostic K anti repeat marker
         continue-on-error: true
-        run: grep -Fq 'Do not repeat or lightly paraphrase your previous reply.' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'Do not repeat or lightly paraphrase your previous reply.' VexNative/Core/PromptComposer.swift
       - name: Diagnostic L focused user compact marker
         continue-on-error: true
-        run: grep -Fq 'compact = String(modelUserText.prefix(cap))' VexNative/Core/PromptComposer.swift
+        run: |
+          grep -Fq 'compact = String(modelUserText.prefix(cap))' VexNative/Core/PromptComposer.swift
       - name: Apply v0.11.2 natural continuity source patch
         run: python3 Tools/apply_v11729_ios_natural_continuity.py
       - name: Run v0.11.2 natural continuity regressions after full chain
