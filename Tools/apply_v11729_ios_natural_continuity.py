@@ -70,13 +70,14 @@ retry_pattern = re.compile(r"(newestUserText:\s*(?:modelText|text),\n\s*isQwen3:
 app, count = retry_pattern.subn(r"\1,\n                    groundedDirective: groundedDirective\2", app, count=1)
 require(count == 1, "retry PromptComposer call")
 
-# Preserve low-temperature web research settings while loosening ordinary chat.
+# Preserve whatever research-side values the proven historical chain currently
+# establishes. Only loosen the ordinary-conversation side of each ternary.
 if "webGroundedTurn" in app:
     replacements = [
-        (r"webGroundedTurn\s*\?\s*240\s*:\s*56", "webGroundedTurn ? 240 : 72", "web token budget"),
-        (r"webGroundedTurn\s*\?\s*0\.45\s*:\s*0\.80", "webGroundedTurn ? 0.45 : 0.90", "web temperature"),
-        (r"webGroundedTurn\s*\?\s*0\.78\s*:\s*0\.90", "webGroundedTurn ? 0.78 : 0.94", "web top-p"),
-        (r"webGroundedTurn\s*\?\s*24\s*:\s*40", "webGroundedTurn ? 24 : 50", "web top-k"),
+        (r"webGroundedTurn\s*\?\s*(\d+)\s*:\s*56", r"webGroundedTurn ? \1 : 72", "web token budget"),
+        (r"webGroundedTurn\s*\?\s*([0-9.]+)\s*:\s*0\.80", r"webGroundedTurn ? \1 : 0.90", "web temperature"),
+        (r"webGroundedTurn\s*\?\s*([0-9.]+)\s*:\s*0\.90", r"webGroundedTurn ? \1 : 0.94", "web top-p"),
+        (r"webGroundedTurn\s*\?\s*(\d+)\s*:\s*40", r"webGroundedTurn ? \1 : 50", "web top-k"),
     ]
     for pattern, repl, label in replacements:
         app, n = re.subn(pattern, repl, app, count=1)
