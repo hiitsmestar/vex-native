@@ -29,23 +29,27 @@ jobs:
       - name: Apply v0.11.7.29 Defender-safe packaging patch
         shell: pwsh
         run: python Tools/apply_v11729_windows_defender_safe.py
+      - name: Apply Bridge onedir startup hotfix
+        shell: pwsh
+        run: python Tools/apply_v11729_bridge_onedir_hotfix.py
       - name: Verify v0.11.7.29 source invariants
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11729_windows_defender_safe.py
+          python -m py_compile Bridge/vex_bridge.py Tools/VexRemoteSupport.py Tools/VexDoctor.py Tools/VexInstall11722.py Tools/apply_v11729_windows_defender_safe.py Tools/apply_v11729_bridge_onedir_hotfix.py
           $bridge = Get-Content Bridge/vex_bridge.py -Raw
           $remote = Get-Content Tools/VexRemoteSupport.py -Raw
           $installer = Get-Content Tools/VexInstall11722.py -Raw
           if (-not $bridge.Contains('"version": "0.11.7.29"')) { throw 'Bridge v0.11.7.29 marker missing' }
           if (-not $remote.Contains('VERSION = "0.11.7.29"')) { throw 'Remote v0.11.7.29 marker missing' }
           if (-not $installer.Contains("VERSION='0.11.7.29'")) { throw 'Installer v0.11.7.29 marker missing' }
-          if (-not $installer.Contains("REMOTE_RUNTIME_DIR='VexRemoteSupportRuntime'")) { throw 'one-folder runtime installer marker missing' }
+          if (-not $installer.Contains("REMOTE_RUNTIME_DIR='VexRemoteSupportRuntime'")) { throw 'Remote one-folder runtime marker missing' }
+          if (-not $installer.Contains("BRIDGE_RUNTIME_DIR='VexBridgeRuntime'")) { throw 'Bridge one-folder runtime marker missing' }
           if ($installer.Contains("subprocess.Popen([str(home/'VexRemoteSupport.exe')]")) { throw 'legacy standalone Remote Support launch remains' }
           if (-not $installer.Contains('retire_legacy_supervisors(home)')) { throw 'single-supervisor retirement missing' }
       - name: Build Windows binaries
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
           pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
           pyinstaller --noconfirm --clean --onefile --noupx --console --name VexDoctor --collect-all requests Tools/VexDoctor.py
           pyinstaller --noconfirm --clean --onefile --noupx --windowed --name Install-Vex-v0.11.7.29 Tools/VexInstall11722.py
@@ -63,15 +67,17 @@ jobs:
           if (-not $b.HasExited) { throw 'Second VexRemoteSupport instance remained alive' }
           Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-      - name: Smoke test Bridge runtime
+      - name: Smoke test Bridge onedir runtime
         shell: pwsh
         run: |
           Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          $a = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          $exe = Resolve-Path .\dist\VexBridge\VexBridge.exe
+          if (!(Test-Path .\dist\VexBridge\VexBridgeRuntime)) { throw 'Bridge runtime contents directory missing' }
+          $a = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexBridge -PassThru
           Start-Sleep -Seconds 10
           $baseline = @(Get-Process VexBridge -ErrorAction SilentlyContinue).Count
           if ($baseline -lt 1) { throw 'First VexBridge did not remain alive' }
-          $b = Start-Process -FilePath .\dist\VexBridge.exe -PassThru
+          $b = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexBridge -PassThru
           $deadline = (Get-Date).AddSeconds(25)
           do {
             Start-Sleep -Seconds 1
@@ -82,32 +88,37 @@ jobs:
       - name: Stage and verify install package
         shell: pwsh
         run: |
-          $pkg = 'Vex-v0.11.7.29-Defender-Safe'
+          $pkg = 'Vex-v0.11.7.29-Bridge-Onedir-Hotfix'
           New-Item -ItemType Directory -Path $pkg -Force | Out-Null
-          Copy-Item dist\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
           Copy-Item dist\VexDoctor.exe "$pkg\VexDoctor.exe"
           Copy-Item dist\Install-Vex-v0.11.7.29.exe "$pkg\Install-Vex-v0.11.7.29.exe"
           Copy-Item dist\VexRemoteSupport "$pkg\VexRemoteSupportRuntime" -Recurse
           @'
-          Vex v0.11.7.29 - Defender-Safe True Single Supervisor
-          =======================================================
-          - Preserves the proven v0.11.7.28 single-supervisor cutover.
-          - Remote Support is packaged as a non-UPX PyInstaller one-folder runtime instead of a self-extracting one-file executable.
-          - Retires the old standalone Remote Support executable during install.
-          - Legacy PowerShell watchdog/self-heal launchers remain retired; Remote Support owns Bridge recovery.
-          - Bridge, Doctor, installer, mutex protection, patient health timing, and runtime identity verification are retained.
+          Vex v0.11.7.29 - Bridge Onedir Startup Hotfix
+          ==============================================
+          - Keeps the Defender-safer Remote Support one-folder runtime.
+          - Changes VexBridge from a self-extracting one-file executable to an onedir runtime after field evidence showed the one-file Bridge parent/child pair stalling before normal startup/indexing.
+          - Keeps VexBridge.exe at the existing root path so Remote Support recovery behavior remains compatible.
+          - Installs the Bridge dependency payload beside it as VexBridgeRuntime.
+          - Legacy PowerShell watchdog/self-heal launchers remain retired; Remote Support remains the single Bridge recovery owner.
 
-          Extract this ZIP, keep the VexRemoteSupportRuntime folder beside the installer, then run Install-Vex-v0.11.7.29.exe.
+          Extract this ZIP completely. Keep VexBridgeRuntime and VexRemoteSupportRuntime beside Install-Vex-v0.11.7.29.exe, then run the installer.
           '@ | Set-Content -Encoding UTF8 "$pkg\README-Vex-v0.11.7.29.txt"
+          if (!(Test-Path "$pkg\VexBridge.exe")) { throw 'Bridge executable missing' }
+          if (!(Test-Path "$pkg\VexBridgeRuntime")) { throw 'Bridge runtime folder missing' }
           if (!(Test-Path "$pkg\VexRemoteSupportRuntime\VexRemoteSupport.exe")) { throw 'Remote Support runtime missing' }
           if (!(Test-Path "$pkg\Install-Vex-v0.11.7.29.exe")) { throw 'installer missing' }
           if (Get-ChildItem $pkg -Filter '*Watchdog*' -Recurse) { throw 'legacy watchdog leaked into package' }
-          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.29-Defender-Safe.zip -Force
-          Expand-Archive Vex-v0.11.7.29-Defender-Safe.zip -DestinationPath verify-package -Force
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.29-Bridge-Onedir-Hotfix.zip -Force
+          Expand-Archive Vex-v0.11.7.29-Bridge-Onedir-Hotfix.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package\VexBridge.exe)) { throw 'verified ZIP Bridge missing' }
+          if (!(Test-Path verify-package\VexBridgeRuntime)) { throw 'verified ZIP Bridge runtime missing' }
           if (!(Test-Path verify-package\VexRemoteSupportRuntime\VexRemoteSupport.exe)) { throw 'verified ZIP Remote Support runtime missing' }
           if (!(Test-Path verify-package\Install-Vex-v0.11.7.29.exe)) { throw 'verified ZIP installer missing' }
       - uses: actions/upload-artifact@v4
         with:
-          name: Vex-v0.11.7.29-Defender-Safe
-          path: Vex-v0.11.7.29-Defender-Safe.zip
+          name: Vex-v0.11.7.29-Bridge-Onedir-Hotfix
+          path: Vex-v0.11.7.29-Bridge-Onedir-Hotfix.zip
           retention-days: 14
