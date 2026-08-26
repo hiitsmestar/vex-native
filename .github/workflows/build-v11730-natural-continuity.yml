@@ -1,0 +1,143 @@
+name: Build Vex v0.11.7.30 Natural Continuity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/v11730-natural-continuity
+    paths:
+      - 'VexNative/**'
+      - 'Tools/apply_v11730_natural_continuity.py'
+      - '.github/workflows/build-v11730-natural-continuity.yml'
+  pull_request:
+    paths:
+      - 'VexNative/**'
+      - 'Tools/apply_v11730_natural_continuity.py'
+      - '.github/workflows/build-v11730-natural-continuity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build-ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Apply v0.11.7.30 natural continuity patch
+        run: |
+          python3 Tools/apply_v11730_natural_continuity.py
+
+      - name: Verify natural continuity repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -n 'shouldUseNativeGrounding' VexNative/AppModel.swift
+          grep -n 'contextSize = 3072' VexNative/AppModel.swift
+          grep -n 'maxNewTokens = 96' VexNative/AppModel.swift
+          grep -n 'source: "user-manual"' VexNative/AppModel.swift
+          grep -n "STAR'S NEWEST MESSAGE (verbatim)" VexNative/Core/PromptComposer.swift
+          grep -n 'recent = Array(profile.messages.suffix(4))' VexNative/Core/PromptComposer.swift
+          grep -n 'focusedTurn ? 2 : 3' VexNative/Core/PromptComposer.swift
+          grep -n 'personaLimit = focusedTurn ? 640 : 760' VexNative/Core/PromptComposer.swift
+          grep -n 'userLimit = focusedTurn ? 220 : 280' VexNative/Core/PromptComposer.swift
+          if grep -Fq 'compact = String(modelUserText.prefix(cap))' VexNative/Core/PromptComposer.swift; then
+            echo 'Old newest-message replacement path still exists' >&2
+            exit 1
+          fi
+          if grep -Fq 'if focusedTurn {' VexNative/Core/PromptComposer.swift && grep -Fq 'relevant = []' VexNative/Core/PromptComposer.swift; then
+            echo 'Focused turns still disable memory retrieval' >&2
+            exit 1
+          fi
+
+      - name: Show Apple toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -resolvePackageDependencies
+
+      - name: Build unsigned iPhone app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=11730 \
+            MARKETING_VERSION=0.11.7.30 \
+            build | tee "$RUNNER_TEMP/xcodebuild-v11730.log"
+
+      - name: Preserve device permissions
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          test -f "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to your paired Vex Bridge computer." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose Take Photo so you can attach a picture to your private chat." "$INFO_PLIST"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+          rm -rf "$RUNNER_TEMP/ipa"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.30-Natural-Continuity-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/VexNative-v0.11.7.30-Natural-Continuity-unsigned.ipa"
+
+      - name: Write green-build summary
+        run: |
+          cat > VexNative-v0.11.7.30-GREEN-LIT.txt <<'EOF'
+          VexNative v0.11.7.30 Natural Continuity
+          ========================================
+          - Keeps Star's newest message verbatim in the active Qwen3 turn.
+          - Grounding templates constrain facts instead of replacing Star's wording.
+          - Restores recent chat, relevant memory, and user-profile context on focused turns.
+          - Restricts native canned replies to factual/correction guardrails.
+          - Prevents manual Remember from storing generated Vex replies as permanent fact.
+          - Expands Qwen3 context/output room for more natural variation.
+          - Builds on the v0.11.7.29 Defender-safe true-single-supervisor Windows base.
+          EOF
+
+      - name: Upload v0.11.7.30 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.7.30-Natural-Continuity
+          path: |
+            VexNative-v0.11.7.30-Natural-Continuity-unsigned.ipa
+            VexNative-v0.11.7.30-GREEN-LIT.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.7.30-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild-v11730.log
+          if-no-files-found: ignore
+          retention-days: 7
