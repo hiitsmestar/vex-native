@@ -6,7 +6,7 @@ from pathlib import Path
 import requests
 
 config_path = Path(os.environ["APPDATA"]) / "VexBridge" / "config.json"
-deadline = time.time() + 30
+deadline = time.time() + 60
 last = "no response"
 
 while time.time() < deadline:
@@ -14,10 +14,22 @@ while time.time() < deadline:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
         external_port = int(cfg.get("port", 8765))
         local_port = int(cfg.get("local_control_port") or (external_port + 1))
+
+        status = requests.get(
+            f"http://127.0.0.1:{local_port}/status",
+            params={"token": cfg["token"]},
+            timeout=5,
+        )
+        if status.status_code != 200:
+            raise RuntimeError("local status did not answer 200")
+        status_body = status.json()
+        if str(status_body.get("version")) != "0.11.7.39":
+            raise RuntimeError("packaged local-control version is not .39: " + status.text[:500])
+
         response = requests.get(
             f"http://127.0.0.1:{local_port}/llm/status",
             params={"token": cfg["token"]},
-            timeout=4,
+            timeout=20,
         )
         last = response.text[:1500]
         if response.status_code == 200:
