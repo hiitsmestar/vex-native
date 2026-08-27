@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.42 iPhone PC Brain Roundtrip
+name: Build VexNative v0.11.7.43 iPhone PC Brain Roundtrip
 
 on:
   workflow_dispatch:
@@ -21,12 +21,6 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
-      - name: Apply natural continuity before later iPhone transforms
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 Tools/apply_v11730_natural_continuity.py
 
       - name: Assemble proven iPhone Bridge and PC Brain chain
         shell: bash
@@ -72,10 +66,17 @@ jobs:
           python3 Tools/apply_v110_ios_memory_sync.py
           python3 Tools/apply_v111_ios_memory_sync_hotfix.py
 
+      - name: Apply roundtrip-compatible natural continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_v11743_roundtrip_continuity_compat.py
+
       - name: Verify PC Brain roundtrip and continuity
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m py_compile Tools/apply_v11743_roundtrip_continuity_compat.py
           grep -q 'final class VexBridgeTrustDelegate' VexNative/VexNativeApp.swift
           grep -q 'PCCognitionOverlay' VexNative/ContentView.swift
           grep -q 'path: "/llm/chat"' VexNative/ContentView.swift
@@ -85,6 +86,7 @@ jobs:
           grep -q 'shouldUseNativeGrounding' VexNative/AppModel.swift
           grep -q 'contextSize = 3072' VexNative/AppModel.swift
           grep -q 'maxNewTokens = 96' VexNative/AppModel.swift
+          grep -q 'temperature = 0.88' VexNative/AppModel.swift
           grep -q "STAR'S NEWEST MESSAGE (verbatim)" VexNative/Core/PromptComposer.swift
           echo 'iPhone PC Brain roundtrip + secure Bridge + local fallback + natural continuity verified'
 
@@ -116,9 +118,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=11742 \
-            MARKETING_VERSION=0.11.7.42 \
-            build | tee "$RUNNER_TEMP/xcodebuild-v11742.log"
+            CURRENT_PROJECT_VERSION=11743 \
+            MARKETING_VERSION=0.11.7.43 \
+            build | tee "$RUNNER_TEMP/xcodebuild-v11743.log"
 
       - name: Preserve device permissions
         shell: bash
@@ -137,8 +139,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.42"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11742"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.43"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11743"
 
       - name: Package unsigned IPA
         shell: bash
@@ -149,31 +151,31 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.42-PC-Brain-Roundtrip-unsigned.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.42-PC-Brain-Roundtrip-unsigned.ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.43-PC-Brain-Roundtrip-unsigned.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.43-PC-Brain-Roundtrip-unsigned.ipa"
 
       - name: Write field-test notes
         shell: bash
         run: |
-          cat > VexNative-v0.11.7.42-FIELD-TEST.txt <<'EOF'
-          VexNative v0.11.7.42 - iPhone PC Brain Roundtrip
+          cat > VexNative-v0.11.7.43-FIELD-TEST.txt <<'EOF'
+          VexNative v0.11.7.43 - iPhone PC Brain Roundtrip
           =================================================
           - Secure certificate-pinned private-LAN Bridge transport.
           - PC cognition overlay for ordinary chat when the paired Bridge is available.
           - Recent iPhone chat history goes to PC /llm/chat; the PC reply returns into the iPhone conversation.
           - Tool, web, photo, media and device-control routes stay ahead of ordinary PC chat where appropriate.
           - Local iPhone model remains the fallback when no paired PC cognition endpoint answers and it is explicitly loaded.
-          - Personal-memory synchronization plus v0.11.7.30 natural-continuity/anti-parrot behavior are preserved.
+          - Personal-memory synchronization plus natural-continuity/anti-parrot behavior are preserved through a roundtrip-compatible patch.
           - No private pairing endpoint, token, certificate pin, Star/Vex profile, or chat data is included in this public artifact.
           EOF
 
-      - name: Upload v0.11.7.42 IPA
+      - name: Upload v0.11.7.43 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.42-PC-Brain-Roundtrip
+          name: VexNative-v0.11.7.43-PC-Brain-Roundtrip
           path: |
-            VexNative-v0.11.7.42-PC-Brain-Roundtrip-unsigned.ipa
-            VexNative-v0.11.7.42-FIELD-TEST.txt
+            VexNative-v0.11.7.43-PC-Brain-Roundtrip-unsigned.ipa
+            VexNative-v0.11.7.43-FIELD-TEST.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -181,7 +183,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.42-xcodebuild-log
-          path: ${{ runner.temp }}/xcodebuild-v11742.log
+          name: VexNative-v0.11.7.43-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild-v11743.log
           if-no-files-found: ignore
           retention-days: 7
