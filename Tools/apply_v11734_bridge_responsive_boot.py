@@ -36,3 +36,4 @@ if 'start_initial_reindex(state)' not in s:
 
 p.write_text(s, encoding='utf-8')
 print('Applied v0.11.7.34 responsive Bridge bootstrap patch')
+# workflow trigger: field-test responsive health
