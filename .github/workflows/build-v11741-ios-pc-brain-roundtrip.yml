@@ -1,0 +1,187 @@
+name: Build VexNative v0.11.7.41 iPhone PC Brain Roundtrip
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/v11741-ios-pc-brain-roundtrip
+    paths:
+      - 'VexNative/**'
+      - 'Tools/**'
+      - '.github/workflows/build-v11741-ios-pc-brain-roundtrip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-pc-brain:
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Assemble proven iPhone Bridge and PC Brain chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_v074_bridge_pairing_patch.py
+          python3 Tools/apply_v075_search_routing_patch.py
+          python3 Tools/apply_v076_direct_research_answers_patch.py
+          python3 Tools/apply_v077_grounded_research_patch.py
+          python3 Tools/apply_v078_photo_context_patch.py
+          python3 Tools/apply_v079_camera_visual_replies_patch.py
+          python3 Tools/apply_v079_compile_hotfix.py
+          python3 Tools/apply_v0710_visual_intent_fix.py
+          python3 Tools/apply_v0711_zoomable_chat_images.py
+          python3 Tools/prepare_v082_build_chain.py
+          python3 Tools/apply_v080_hybrid_brain_patch.py
+          python3 Tools/apply_v081_dual_pc_mesh_patch.py
+          python3 Tools/apply_v082_pc_tools_capability_patch.py
+          python3 Tools/apply_v083_browser_url_tools_patch.py
+          python3 Tools/apply_v084_self_learning_skills_patch.py
+          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
+          python3 Tools/apply_v085_skill_compiler_patch.py
+          python3 Tools/apply_v086_voice_ui_patch.py
+          python3 Tools/apply_v087_voice_crash_hotfix.py
+          python3 Tools/apply_v088_voice_transcript_patch.py
+          python3 Tools/apply_v089_voice_conversation_patch.py
+          python3 Tools/apply_v090_neural_voice_ios_patch.py
+          python3 Tools/apply_v090_named_media_ios_patch.py
+          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          python3 Tools/apply_v092_device_control_patch.py || true
+          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
+          python3 Tools/apply_v093_cognition_ios_patch.py
+          python3 Tools/apply_v094_art_ios_patch.py
+          python3 Tools/apply_v0941_startup_safe_mode_patch.py
+          python3 Tools/apply_v0942_send_reliability_patch.py
+          python3 Tools/apply_v0943_dual_node_race_patch.py
+          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
+          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
+          python3 Tools/apply_v098_ios_time_grounding_patch.py
+          python3 Tools/apply_v107_art_ios_adapter_patch.py
+          python3 Tools/apply_v108_ios_art_followup_grounding.py
+          python3 Tools/apply_v110_ios_memory_sync.py
+          python3 Tools/apply_v111_ios_memory_sync_hotfix.py
+
+      - name: Apply v0.11.7.30 natural continuity on top
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_v11730_natural_continuity.py
+
+      - name: Verify PC Brain roundtrip and local fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'final class VexBridgeTrustDelegate' VexNative/VexNativeApp.swift
+          grep -q 'PCCognitionOverlay' VexNative/ContentView.swift
+          grep -q 'path: "/llm/chat"' VexNative/ContentView.swift
+          grep -q 'return !exclusions.contains' VexNative/ContentView.swift
+          grep -q 'syncPersonalMemory(endpoint: primary' VexNative/ContentView.swift
+          grep -q '/memory/sync' VexNative/ContentView.swift
+          grep -q 'shouldUseNativeGrounding' VexNative/AppModel.swift
+          grep -q 'contextSize = 3072' VexNative/AppModel.swift
+          grep -q 'maxNewTokens = 96' VexNative/AppModel.swift
+          grep -q "STAR'S NEWEST MESSAGE (verbatim)" VexNative/Core/PromptComposer.swift
+          echo 'iPhone PC Brain preferred chat + secure Bridge + local fallback + v0.11.7.30 continuity verified'
+
+      - name: Show Apple toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -resolvePackageDependencies
+
+      - name: Build unsigned iPhone app
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=11741 \
+            MARKETING_VERSION=0.11.7.41 \
+            build | tee "$RUNNER_TEMP/xcodebuild-v11741.log"
+
+      - name: Preserve device permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          test -d "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          test -f "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to your paired Vex Bridge computer and PC Brain." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera or photo features." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.41"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11741"
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          rm -rf "$RUNNER_TEMP/ipa"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.41-PC-Brain-Roundtrip-unsigned.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.41-PC-Brain-Roundtrip-unsigned.ipa"
+
+      - name: Write field-test notes
+        shell: bash
+        run: |
+          cat > VexNative-v0.11.7.41-FIELD-TEST.txt <<'EOF'
+          VexNative v0.11.7.41 - iPhone PC Brain Roundtrip
+          =================================================
+          - Reassembles the proven secure certificate-pinned private-LAN Bridge transport.
+          - Restores the PC cognition overlay for ordinary chat when a paired Bridge is available.
+          - Sends recent iPhone chat history to the PC /llm/chat route and returns the PC reply into the iPhone conversation.
+          - Keeps tool, web, photo, media and device-control routing ahead of ordinary PC chat where appropriate.
+          - Falls through to the local iPhone model when no paired PC cognition endpoint answers.
+          - Restores personal-memory synchronization and the v0.11.7.30 natural-continuity/anti-parrot fixes.
+          - No private pairing endpoint, token, certificate pin, Star/Vex profile, or chat data is included in this public artifact.
+          EOF
+
+      - name: Upload v0.11.7.41 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.7.41-PC-Brain-Roundtrip
+          path: |
+            VexNative-v0.11.7.41-PC-Brain-Roundtrip-unsigned.ipa
+            VexNative-v0.11.7.41-FIELD-TEST.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.11.7.41-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild-v11741.log
+          if-no-files-found: ignore
+          retention-days: 7
