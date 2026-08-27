@@ -43,6 +43,61 @@ def kill(proc: subprocess.Popen | None) -> None:
             pass
 
 
+def _ps_quote(value: str | Path) -> str:
+    return str(value).replace("'", "''")
+
+
+def start_windows_process(exe: Path, cwd: Path | None = None, env: dict | None = None) -> int:
+    """Launch a frozen GUI executable with the same Start-Process path proven by earlier Greenline."""
+    work = cwd or exe.parent
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f"$p=Start-Process -FilePath '{_ps_quote(exe)}' "
+        f"-WorkingDirectory '{_ps_quote(work)}' -PassThru; "
+        "Write-Output $p.Id"
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+        cwd=str(work),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError(f"Windows launcher returned no PID for {exe.name}")
+    pid = int(lines[-1])
+    log(f"Windows launched {exe.name} as PID {pid}")
+    return pid
+
+
+def windows_process_alive(pid: int) -> bool:
+    result = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"if (Get-Process -Id {int(pid)} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def stop_windows_process(pid: int | None) -> None:
+    if not pid:
+        return
+    subprocess.run(
+        ["taskkill.exe", "/PID", str(int(pid)), "/T", "/F"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
 def no_proxy_opener():
     return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -216,15 +271,25 @@ def local_control_request(config_path: Path, path: str) -> dict:
         return body
 
 
+def bridge_failure_detail(env: dict, pid: int | None) -> str:
+    details = [f"process_alive={windows_process_alive(pid) if pid else False}"]
+    startup = Path(env["APPDATA"]) / "VexBridge/startup-health.json"
+    try:
+        details.append("startup=" + startup.read_text("utf-8")[:500])
+    except Exception as exc:
+        details.append(f"startup_unavailable={exc.__class__.__name__}")
+    return "; ".join(details)
+
+
 def smoke_bridge_agent_runtime() -> None:
     env = isolated_env("VexAgentBridgeSmoke")
     memory = DIST / "VexBridge/VexMemoryWorkerRuntime/VexMemoryWorker.exe"
     bridge = DIST / "VexBridge/VexBridge.exe"
     mp = popen(memory, ["--serve", "--port", "8806"], env=env)
-    bp = None
+    bridge_pid = None
     try:
         wait_json("http://127.0.0.1:8806/health", lambda d: d.get("ok") is True, 25, "production memory sidecar")
-        bp = popen(bridge, env=env)
+        bridge_pid = start_windows_process(bridge, cwd=bridge.parent, env=env)
         config_path = Path(env["APPDATA"]) / "VexBridge/config.json"
         deadline = time.time() + 80
         last = None
@@ -239,9 +304,11 @@ def smoke_bridge_agent_runtime() -> None:
                 last = status
             except Exception as exc:
                 last = f"{exc.__class__.__name__}: {exc}"
+            if bridge_pid and not windows_process_alive(bridge_pid):
+                raise RuntimeError(f"Bridge exited before ready: {bridge_failure_detail(env, bridge_pid)}; last={last}")
             time.sleep(0.5)
         else:
-            raise RuntimeError(f"Bridge never became ready: {last}")
+            raise RuntimeError(f"Bridge never became ready: {last}; {bridge_failure_detail(env, bridge_pid)}")
 
         memory_status = local_control_request(config_path, "/memory/status")
         if not memory_status.get("ok"):
@@ -259,7 +326,7 @@ def smoke_bridge_agent_runtime() -> None:
             time.sleep(0.5)
         raise RuntimeError(f"Adaptive worker liveness failed: {last}")
     finally:
-        kill(bp)
+        stop_windows_process(bridge_pid)
         kill(mp)
 
 
@@ -269,15 +336,14 @@ def smoke_user_processes() -> None:
         (DIST / "VexWindowsHost/VexWindowsHost.exe", 6, "Windows Host"),
     ]
     for exe, seconds, label in tests:
-        proc = popen(exe)
+        pid = start_windows_process(exe, cwd=exe.parent)
         try:
             time.sleep(seconds)
-            code = proc.poll()
-            if code is not None:
-                raise RuntimeError(f"{label} exited during startup with {code}")
+            if not windows_process_alive(pid):
+                raise RuntimeError(f"{label} exited during startup")
             log(f"{label} remained alive for {seconds}s")
         finally:
-            kill(proc)
+            stop_windows_process(pid)
 
 
 def package_runtime() -> None:
