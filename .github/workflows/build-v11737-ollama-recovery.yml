@@ -1,0 +1,73 @@
+name: Build Vex v0.11.7.37 Ollama Recovery Bridge
+
+on:
+  push:
+    branches: [ "ci/v11731-windows-vex-host" ]
+    paths:
+      - "Tools/apply_v11737_ollama_recovery.py"
+      - ".github/workflows/build-v11737-ollama-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build source chain
+        shell: pwsh
+        run: |
+          python Tools/build_v11728_chain.py
+          python Tools/apply_v11729_windows_defender_safe.py
+          python Tools/apply_v11729_bridge_onedir_hotfix.py
+          python Tools/apply_v11734_bridge_responsive_boot.py
+          python Tools/apply_v11737_ollama_recovery.py
+      - name: Verify source
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/apply_v11737_ollama_recovery.py
+          $src = Get-Content Bridge/vex_bridge.py -Raw
+          if (-not $src.Contains('"version": "0.11.7.37"')) { throw 'version marker missing' }
+          if (-not $src.Contains('def _start_ollama_if_needed()')) { throw 'Ollama recovery missing' }
+      - name: Build Bridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+      - name: Smoke test startup
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path .\dist\VexBridge\VexBridge.exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexBridge -PassThru
+          Start-Sleep -Seconds 4
+          $p.Refresh()
+          if ($p.HasExited) { throw "Bridge exited during startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $pkg='Vex-v0.11.7.37-Ollama-Recovery-Bridge'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+          Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
+          @'
+          Vex v0.11.7.37 Ollama Recovery Bridge
+          =======================================
+          Replaces only VexBridge.exe + VexBridgeRuntime. Keep existing %APPDATA%\VexBridge config.
+          Adds bounded local Ollama self-recovery when cognition models disappear because the Ollama service is not running.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.37-Ollama-Recovery-Bridge.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.37-Ollama-Recovery-Bridge
+          path: Vex-v0.11.7.37-Ollama-Recovery-Bridge.zip
+          retention-days: 14
