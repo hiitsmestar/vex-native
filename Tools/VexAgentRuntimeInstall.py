@@ -18,12 +18,12 @@ HOST_VERSION = "0.11.7.40"
 
 ROOT_FILES = (
     "VexBridge.exe",
-    "VexMemoryWorker.exe",
     "VexDoctor.exe",
     "VexToolbox.exe",
 )
 RUNTIME_DIRS = (
     "VexBridgeRuntime",
+    "VexMemoryWorkerRuntime",
     "VexRemoteSupportRuntime",
     "VexWindowsHost",
     "VexNodeAgent",
@@ -65,8 +65,10 @@ def _candidate_score(path: Path) -> tuple[int, float]:
         score += 10
     if (path / "VexRemoteSupportRuntime").is_dir():
         score += 8
-    if (path / "VexMemoryWorker.exe").exists():
+    if (path / "VexMemoryWorkerRuntime" / "VexMemoryWorker.exe").exists():
         score += 4
+    if (path / "VexMemoryWorker.exe").exists():
+        score += 2
     if (path / "START-VEX-SELF-HEAL.cmd").exists():
         score += 2
     if "vex" in path.name.lower():
@@ -203,7 +205,7 @@ def wait_bridge(seconds: int = 120) -> dict:
     raise RuntimeError(f"Bridge {BRIDGE_VERSION} did not become ready: {last}")
 
 
-def wait_memory(seconds: int = 35) -> dict:
+def wait_memory(seconds: int = 40) -> dict:
     deadline = time.time() + seconds
     last = "no response"
     while time.time() < deadline:
@@ -218,7 +220,7 @@ def wait_memory(seconds: int = 35) -> dict:
     raise RuntimeError(f"Persistent memory did not become ready: {last}")
 
 
-def wait_adaptive(seconds: int = 35) -> dict:
+def wait_adaptive(seconds: int = 40) -> dict:
     deadline = time.time() + seconds
     last = "no response"
     while time.time() < deadline:
@@ -253,6 +255,7 @@ def verify_package(pkg: Path) -> None:
         if not (pkg / name).is_dir():
             raise RuntimeError(f"Package runtime folder missing: {name}")
     required = (
+        pkg / "VexMemoryWorkerRuntime" / "VexMemoryWorker.exe",
         pkg / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe",
         pkg / "VexWindowsHost" / "VexWindowsHost.exe",
         pkg / "VexNodeAgent" / "VexNodeAgent.exe",
@@ -276,9 +279,15 @@ def main() -> None:
         for name in RUNTIME_DIRS:
             replace_dir(pkg / name, home / name)
 
-        # Preserve %APPDATA% VexBridge/VexRemoteSupport data. Pairing token,
-        # certificate, searchable folders, memory DB and private continuity stay
-        # on this machine and are never copied from the public artifact.
+        # Retire the old root-level memory launcher after the dedicated runtime is
+        # staged. Its SQLite data lives under LOCALAPPDATA and is untouched.
+        try:
+            (home / "VexMemoryWorker.exe").unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        # Preserve APPDATA/LOCALAPPDATA private configuration, pairing, memory DB,
+        # searchable folders and continuity. Public package contains none of it.
         launch(home / "VexBridge.exe", home)
         wait_bridge()
         memory = wait_memory()
