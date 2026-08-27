@@ -48,11 +48,14 @@ if len(matches) != 1:
     raise SystemExit(f"Qwen3 generation block: expected one semantic block, found {len(matches)}")
 m = matches[0]
 block = m.group(1)
+
+# v0.7.6 gives researched turns a larger, cooler generation budget. Preserve that
+# branch while upgrading the ordinary-chat side to the v0.11.7.30 natural values.
 for label, pattern, replacement in [
-    ("maxNewTokens", r'(^\s*maxNewTokens = )\d+', r'\g<1>96'),
-    ("temperature", r'(^\s*temperature = )[0-9.]+', r'\g<1>0.88'),
-    ("topP", r'(^\s*topP = )[0-9.]+', r'\g<1>0.92'),
-    ("topK", r'(^\s*topK = )\d+', r'\g<1>48'),
+    ("maxNewTokens", r'(^\s*maxNewTokens = ).*$', r'\g<1>webGroundedTurn ? 180 : 96'),
+    ("temperature", r'(^\s*temperature = ).*$', r'\g<1>webGroundedTurn ? 0.62 : 0.88'),
+    ("topP", r'(^\s*topP = ).*$', r'\g<1>webGroundedTurn ? 0.86 : 0.92'),
+    ("topK", r'(^\s*topK = ).*$', r'\g<1>webGroundedTurn ? 32 : 48'),
 ]:
     block, n = re.subn(pattern, replacement, block, count=1, flags=re.MULTILINE)
     if n != 1:
@@ -107,10 +110,10 @@ for path, markers in [
     (APP, [
         'contextSize = 3072',
         'shouldUseNativeGrounding(for: text)',
-        'maxNewTokens = 96',
-        'temperature = 0.88',
-        'topP = 0.92',
-        'topK = 48',
+        'maxNewTokens = webGroundedTurn ? 180 : 96',
+        'temperature = webGroundedTurn ? 0.62 : 0.88',
+        'topP = webGroundedTurn ? 0.86 : 0.92',
+        'topK = webGroundedTurn ? 32 : 48',
         'source: "user-manual"',
     ]),
     (PROMPT, [
@@ -124,4 +127,4 @@ for path, markers in [
         if marker not in data:
             raise SystemExit(f"{path}: missing continuity marker: {marker}")
 
-print("Applied VexNative v0.11.7.43 roundtrip-compatible natural continuity patch")
+print("Applied VexNative v0.11.7.44 roundtrip-compatible natural continuity patch")
