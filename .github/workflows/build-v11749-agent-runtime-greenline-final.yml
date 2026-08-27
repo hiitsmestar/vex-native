@@ -1,5 +1,6 @@
 name: Build Vex Agent Runtime v0.11.7.49 Greenline Final
 
+# Single authoritative Agent Runtime build lane. Historical brittle lanes were retired.
 on:
   push:
     branches: [ "feat/vex-agent-runtime-windows-v1" ]
