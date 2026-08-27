@@ -1,0 +1,91 @@
+name: Build Vex v0.11.7.40 Cognition Live Smoke Bridge
+
+on:
+  push:
+    branches: [ "ci/v11731-windows-vex-host" ]
+    paths:
+      - "Tools/apply_v11740_cognition_live_smoke_fix.py"
+      - "Tools/test_v11740_cognition_route.py"
+      - ".github/workflows/build-v11740-cognition-live-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build source chain
+        shell: pwsh
+        run: |
+          python Tools/build_v11728_chain.py
+          python Tools/apply_v11729_windows_defender_safe.py
+          python Tools/apply_v11729_bridge_onedir_hotfix.py
+          python Tools/apply_v11734_bridge_responsive_boot.py
+          python Tools/apply_v11737_ollama_recovery.py
+          python Tools/apply_v11738_cognition_capacity_hotfix.py
+          python Tools/apply_v11739_cognition_helper_bundle.py
+          python Tools/apply_v11740_cognition_live_smoke_fix.py
+      - name: Verify cognition helper graph
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/apply_v11740_cognition_live_smoke_fix.py Tools/test_v11740_cognition_route.py
+          $src = Get-Content Bridge/vex_bridge.py -Raw
+          foreach ($marker in @(
+            '"version": "0.11.7.40"',
+            'def _cognition_capacity() -> dict:',
+            'def _model_billions(name: str) -> float | None:',
+            'def _cognition_model_rank(name: str, max_billions: float) -> tuple:',
+            'def _start_ollama_if_needed()',
+            'def _choose_ollama_model() -> str | None:'
+          )) {
+            if (-not $src.Contains($marker)) { throw "missing marker: $marker" }
+          }
+          python -c "import Bridge.vex_bridge as b; assert b._model_billions('qwen3:1.7b') == 1.7; assert b._model_billions('qwen3:4b') == 4.0; r=b._cognition_model_rank('qwen3:1.7b', 2.0); assert isinstance(r, tuple); c=b._cognition_capacity(); assert isinstance(c, dict) and 'max_billions' in c; print('cognition helper runtime checks passed')"
+      - name: Build Bridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+      - name: Smoke test live status and cognition route
+        shell: pwsh
+        run: |
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $exe = Resolve-Path .\dist\VexBridge\VexBridge.exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexBridge -PassThru
+          Start-Sleep -Seconds 4
+          $p.Refresh()
+          if ($p.HasExited) { throw "Bridge exited during startup with code $($p.ExitCode)" }
+          python Tools/test_v11734_responsive_bridge.py
+          python Tools/test_v11740_cognition_route.py
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $pkg='Vex-v0.11.7.40-Cognition-Live-Smoke-Bridge'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+          Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
+          @'
+          Vex v0.11.7.40 Cognition Live Smoke Bridge
+          ===========================================
+          Replaces only VexBridge.exe + VexBridgeRuntime. Keep existing %APPDATA%\VexBridge config.
+          Keeps Ollama self-recovery, capacity detection, and the complete model-selection helper bundle.
+          Normalizes every runtime-facing Bridge version marker and validates /llm/status against a deterministic local Ollama stub during CI so cognition must actually answer before the artifact is published.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.40-Cognition-Live-Smoke-Bridge.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.40-Cognition-Live-Smoke-Bridge
+          path: Vex-v0.11.7.40-Cognition-Live-Smoke-Bridge.zip
+          retention-days: 14
