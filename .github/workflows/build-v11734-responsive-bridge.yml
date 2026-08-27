@@ -5,6 +5,7 @@ on:
     branches: [ "ci/v11731-windows-vex-host" ]
     paths:
       - "Tools/apply_v11734_bridge_responsive_boot.py"
+      - "Tools/test_v11734_responsive_bridge.py"
       - ".github/workflows/build-v11734-responsive-bridge.yml"
   workflow_dispatch:
 
@@ -34,7 +35,7 @@ jobs:
       - name: Verify responsive bootstrap source
         shell: pwsh
         run: |
-          python -m py_compile Bridge/vex_bridge.py Tools/apply_v11734_bridge_responsive_boot.py
+          python -m py_compile Bridge/vex_bridge.py Tools/apply_v11734_bridge_responsive_boot.py Tools/test_v11734_responsive_bridge.py
           $src = Get-Content Bridge/vex_bridge.py -Raw
           if (-not $src.Contains('start_initial_reindex(state)')) { throw 'nonblocking initial index call missing' }
           if (-not $src.Contains('VexBridgeInitialIndex')) { throw 'initial index worker marker missing' }
@@ -53,14 +54,7 @@ jobs:
           Start-Sleep -Seconds 4
           $p.Refresh()
           if ($p.HasExited) { throw "Bridge exited during startup with code $($p.ExitCode)" }
-          python -c "import json,os,time,requests,pathlib; requests.packages.urllib3.disable_warnings(); c=pathlib.Path(os.environ['APPDATA'])/'VexBridge'/'config.json'; deadline=time.time()+20; ok=False; last='';
-while time.time()<deadline:
-  try:
-    cfg=json.loads(c.read_text(encoding='utf-8')); r=requests.get('https://127.0.0.1:%s/status'%cfg.get('port',8765),params={'token':cfg['token']},verify=False,timeout=2); last=r.text; ok=(r.status_code==200 and isinstance(r.json(),dict));
-    if ok: break
-  except Exception as e: last=type(e).__name__
-  time.sleep(1)
-assert ok, 'Bridge health did not answer during bootstrap: '+str(last)"
+          python Tools/test_v11734_responsive_bridge.py
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
       - name: Stage Bridge hotfix
