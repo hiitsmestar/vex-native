@@ -3,7 +3,7 @@ from pathlib import Path
 p = Path('Bridge/vex_bridge.py')
 s = p.read_text(encoding='utf-8')
 
-# Bump any packaged v0.11.7.29 Bridge identity markers after the full chain.
+# Bump packaged Bridge identity after the full proven chain.
 s = s.replace('"version": "0.11.7.29"', '"version": "0.11.7.34"')
 s = s.replace('VexBridge/0.11.7.29', 'VexBridge/0.11.7.34')
 
@@ -23,17 +23,21 @@ anchor = '\ndef start_background_reindex(state: BridgeState) -> None:\n'
 if 'def start_initial_reindex(state: BridgeState)' not in s and anchor in s:
     s = s.replace(anchor, helper + anchor, 1)
 
-# Replace blocking bootstrap if it survived earlier chain patches.
-s = s.replace('    state.index.rebuild()\n    start_background_reindex(state)\n', '    start_initial_reindex(state)\n    start_background_reindex(state)\n', 1)
+# Replace the generated chain's foreground initial index regardless of whether
+# later patches inserted lines between rebuild() and the background scheduler.
+call_anchor = '    state.index.rebuild()\n'
+if call_anchor in s:
+    s = s.replace(call_anchor, '    start_initial_reindex(state)\n', 1)
 
-# A second common generated form used by later bridge patches.
+# Alternate generated form seen in some chain revisions.
 s = s.replace('    initial_index_thread = threading.Thread(target=state.index.rebuild, daemon=True)\n    initial_index_thread.start()\n', '    start_initial_reindex(state)\n', 1)
 
 if 'def start_initial_reindex(state: BridgeState)' not in s:
     raise SystemExit('responsive bootstrap helper anchor not found')
-if 'start_initial_reindex(state)' not in s:
+if '    start_initial_reindex(state)\n' not in s:
     raise SystemExit('responsive bootstrap call not installed')
+if '"version": "0.11.7.34"' not in s:
+    raise SystemExit('v0.11.7.34 version marker not installed')
 
 p.write_text(s, encoding='utf-8')
 print('Applied v0.11.7.34 responsive Bridge bootstrap patch')
-# workflow trigger: field-test responsive health
