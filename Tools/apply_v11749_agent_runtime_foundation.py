@@ -67,6 +67,18 @@ if spawn_anchor in bridge:
 elif 'PYINSTALLER_RESET_ENVIRONMENT' not in bridge:
     raise SystemExit("v0.11.7.49 memory child reset anchor missing")
 
+# Proactively warm persistent memory in its own daemon thread. The previous lazy
+# /memory/status path could spend longer booting the packaged worker than the
+# local-control request timeout, so callers saw a timeout even though the worker
+# package itself was healthy. Starting it with the other background services keeps
+# Bridge startup nonblocking while making memory ready before the first phone turn.
+bg_marker = '''def _vex_background_services() -> None:\n'''
+if bg_marker not in bridge:
+    raise SystemExit("v0.11.7.49 background service anchor missing")
+if 'name="VexPersistentMemoryWarmup"' not in bridge:
+    bg_insert = '''def _vex_background_services() -> None:\n    threading.Thread(\n        target=lambda: _memory_worker_health(start_if_needed=True),\n        daemon=True,\n        name="VexPersistentMemoryWarmup",\n    ).start()\n'''
+    bridge = bridge.replace(bg_marker, bg_insert, 1)
+
 # Route local Agent Runtime health directly through the authenticated loopback
 # handler instead of delegating these supervision requests into the LAN/TLS handler.
 local_old = '''    def do_GET(self) -> None:\n        parsed = urllib.parse.urlparse(self.path)\n        if parsed.path not in ("/", "/status"):\n            return super().do_GET()\n        params = urllib.parse.parse_qs(parsed.query)\n        supplied = (params.get("token") or [""])[0]\n        state = STATE\n        if state is None or not secrets.compare_digest(supplied, str(state.config.get("token") or "")):\n'''
@@ -77,10 +89,10 @@ elif local_new not in bridge:
     raise SystemExit("v0.11.7.49 LocalControlHandler auth anchor missing")
 
 local_status_anchor = '''            self.wfile.write(body)\n            return\n        payload = {\n            "name": "Vex Bridge",\n'''
-local_agent_routes = '''            self.wfile.write(body)\n            return\n        if parsed.path == "/memory/status":\n            health = _memory_worker_health(start_if_needed=True)\n            self._json(200 if health.get("ok") else 503, health)\n            return\n        if parsed.path == "/adaptive/status":\n            adaptive = _adaptive_status()\n            self._json(200 if adaptive.get("ok") else 503, adaptive)\n            return\n        if parsed.path not in ("/", "/status"):\n            return super().do_GET()\n        payload = {\n            "name": "Vex Bridge",\n'''
+local_agent_routes = '''            self.wfile.write(body)\n            return\n        if parsed.path == "/memory/status":\n            health = _memory_worker_health(start_if_needed=False)\n            if not health.get("ok"):\n                threading.Thread(\n                    target=lambda: _memory_worker_health(start_if_needed=True),\n                    daemon=True,\n                    name="VexPersistentMemoryRecovery",\n                ).start()\n            self._json(200 if health.get("ok") else 503, health)\n            return\n        if parsed.path == "/adaptive/status":\n            adaptive = _adaptive_status()\n            self._json(200 if adaptive.get("ok") else 503, adaptive)\n            return\n        if parsed.path not in ("/", "/status"):\n            return super().do_GET()\n        payload = {\n            "name": "Vex Bridge",\n'''
 if local_status_anchor in bridge:
     bridge = bridge.replace(local_status_anchor, local_agent_routes, 1)
-elif 'health = _memory_worker_health(start_if_needed=True)' not in bridge:
+elif 'name="VexPersistentMemoryRecovery"' not in bridge:
     raise SystemExit("v0.11.7.49 direct local Agent Runtime route anchor missing")
 
 status_anchor = '"local_control_protocol": "vex-local-v1",'
@@ -96,6 +108,8 @@ required_bridge_markers = [
     'if parsed.path == "/adaptive/status"',
     "for _ in range(80)",
     'PYINSTALLER_RESET_ENVIRONMENT',
+    'name="VexPersistentMemoryWarmup"',
+    'name="VexPersistentMemoryRecovery"',
     "def _adaptive_worker_cycle(",
     "def _autonomy_worker_loop(",
     "def _initiative_scheduler_loop(",
@@ -133,4 +147,4 @@ for marker in [
 BRIDGE.write_text(bridge, encoding="utf-8")
 compile(bridge, str(BRIDGE), "exec")
 compile(remote, str(REMOTE), "exec")
-print("Applied v0.11.7.49 Agent Runtime foundation: source-shape-safe bootstrap repair, direct local routes, collision-free memory, isolated learning graph")
+print("Applied v0.11.7.49 Agent Runtime foundation: async memory warmup, source-shape-safe bootstrap, direct health routes, isolated learning graph")
