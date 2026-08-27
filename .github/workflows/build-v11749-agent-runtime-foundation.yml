@@ -64,10 +64,11 @@ jobs:
           foreach ($marker in @(
             '"version": "0.11.7.39"',
             '"agent_runtime_bundle": "0.11.7.49"',
-            'MEMORY_WORKER_PORT = 8786',
+            'MEMORY_WORKER_PORT = 8806',
             'VexMemoryWorkerRuntime',
             'parsed.path == "/memory/status"',
             'parsed.path == "/memory/sync"',
+            'if parsed.path == "/adaptive/status"',
             'def _adaptive_worker_cycle(',
             'name="VexAdaptiveLearning"',
             'name="VexAutonomousImprovement"',
@@ -77,7 +78,15 @@ jobs:
           )) {
             if (-not $bridge.Contains($marker)) { throw "Agent Runtime marker missing: $marker" }
           }
-          if ($bridge.Contains('MEMORY_WORKER_PORT = 8766')) { throw 'memory worker/control-plane port collision remains' }
+          if ($bridge.Contains('MEMORY_WORKER_PORT = 8766') -or $bridge.Contains('MEMORY_WORKER_PORT = 8786')) {
+            throw 'memory worker still overlaps the Bridge local-control ring'
+          }
+          $helperStart = $bridge.IndexOf('def start_initial_reindex(state: BridgeState) -> None:')
+          $helperEnd = $bridge.IndexOf('def start_background_reindex', $helperStart)
+          if ($helperStart -lt 0 -or $helperEnd -le $helperStart) { throw 'initial-index helper missing' }
+          $helper = $bridge.Substring($helperStart, $helperEnd - $helperStart)
+          if ($helper.Contains('start_initial_reindex(state)')) { throw 'recursive initial-index helper remains' }
+          if (-not $helper.Contains('state.index.rebuild()')) { throw 'initial-index helper does not rebuild index' }
 
       - name: Build Agent Runtime components
         shell: pwsh
@@ -103,9 +112,6 @@ jobs:
           )) {
             if (!(Test-Path $file)) { throw "built component missing: $file" }
           }
-
-          # Stage the entire memory onedir runtime beside Bridge. Do not mix the two
-          # PyInstaller runtimes; Bridge launches this folder's EXE directly.
           Copy-Item dist\VexMemoryWorker dist\VexBridge\VexMemoryWorkerRuntime -Recurse -Force
 
       - name: Smoke test persistent memory worker
@@ -115,7 +121,7 @@ jobs:
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemorySmoke\Local'
           New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
           $worker = Resolve-Path .\dist\VexMemoryWorker\VexMemoryWorker.exe
-          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexMemoryWorker -ArgumentList '--serve','--port','8786' -PassThru
+          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexMemoryWorker -ArgumentList '--serve','--port','8806' -PassThru
           try {
             @'
           import json, time, urllib.request
@@ -123,7 +129,7 @@ jobs:
           last = None
           while time.time() < deadline:
               try:
-                  with urllib.request.urlopen('http://127.0.0.1:8786/health', timeout=2) as r:
+                  with urllib.request.urlopen('http://127.0.0.1:8806/health', timeout=2) as r:
                       data = json.loads(r.read().decode('utf-8'))
                   assert data.get('ok') is True, data
                   print('memory worker health:', data)
@@ -147,7 +153,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
           Get-Process VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           $worker = Resolve-Path .\dist\VexBridge\VexMemoryWorkerRuntime\VexMemoryWorker.exe
-          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexBridge\VexMemoryWorkerRuntime -ArgumentList '--serve','--port','8786' -PassThru
+          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexBridge\VexMemoryWorkerRuntime -ArgumentList '--serve','--port','8806' -PassThru
           try {
             @'
           import json, time, urllib.request
@@ -155,7 +161,7 @@ jobs:
           last = None
           while time.time() < deadline:
               try:
-                  with urllib.request.urlopen('http://127.0.0.1:8786/health', timeout=2) as r:
+                  with urllib.request.urlopen('http://127.0.0.1:8806/health', timeout=2) as r:
                       data = json.loads(r.read().decode('utf-8'))
                   assert data.get('ok') is True, data
                   print('staged memory health:', data)
@@ -190,41 +196,38 @@ jobs:
           last = 'config not created'
           opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-          def request(path, timeout=5):
+          def request(path, timeout=8):
               cfg = json.loads(config_path.read_text('utf-8'))
               token = str(cfg.get('token') or '')
-              external = int(cfg.get('port') or 8765)
-              preferred = int(cfg.get('local_control_port') or (external + 1))
-              ports = [preferred] + [p for p in range(external + 1, external + 13) if p != preferred]
-              err = None
-              for port in ports:
-                  url = f'http://127.0.0.1:{port}{path}?' + urllib.parse.urlencode({'token': token})
+              port = int(cfg.get('local_control_port') or 0)
+              if not token or not port:
+                  raise RuntimeError('local control identity not persisted yet')
+              url = f'http://127.0.0.1:{port}{path}?' + urllib.parse.urlencode({'token': token})
+              try:
+                  with opener.open(url, timeout=timeout) as r:
+                      return json.loads(r.read().decode('utf-8'))
+              except urllib.error.HTTPError as exc:
                   try:
-                      with opener.open(url, timeout=timeout) as r:
-                          return json.loads(r.read().decode('utf-8'))
-                  except urllib.error.HTTPError as exc:
-                      try:
-                          body = json.loads(exc.read().decode('utf-8'))
-                      except Exception:
-                          body = {'ok': False, 'error': f'HTTP {exc.code}'}
-                      if isinstance(body, dict):
-                          body['http_status'] = exc.code
-                          return body
-                      return {'ok': False, 'error': f'HTTP {exc.code}', 'http_status': exc.code}
-                  except Exception as exc:
-                      err = exc
-              raise RuntimeError(f'{path}: {err}')
+                      body = json.loads(exc.read().decode('utf-8'))
+                  except Exception:
+                      body = {'ok': False, 'error': f'HTTP {exc.code}'}
+                  if isinstance(body, dict):
+                      body['http_status'] = exc.code
+                      return body
+                  return {'ok': False, 'error': f'HTTP {exc.code}', 'http_status': exc.code}
 
           while time.time() < deadline:
               try:
                   status = request('/status')
                   if status.get('version') == '0.11.7.39' and status.get('local_control_protocol') == 'vex-local-v1':
+                      safe_cfg = json.loads(config_path.read_text('utf-8'))
+                      print('Bridge local-control port:', int(safe_cfg.get('local_control_port') or 0))
                       print('Bridge status:', status)
                       break
                   last = status
               except Exception as exc:
                   last = exc
-              time.sleep(1)
+              time.sleep(.5)
           else:
               raise SystemExit(f'Bridge never became ready: {last}')
 
@@ -238,9 +241,15 @@ jobs:
                   last = memory
               except Exception as exc:
                   last = exc
-              time.sleep(.8)
+              time.sleep(.5)
           else:
               raise SystemExit(f'Bridge could not start persistent memory: {last}')
+
+          with opener.open('http://127.0.0.1:8806/health', timeout=4) as r:
+              direct_memory = json.loads(r.read().decode('utf-8'))
+          if not direct_memory.get('ok'):
+              raise SystemExit(f'direct memory health failed after Bridge launch: {direct_memory}')
+          print('Bridge-launched direct memory health:', direct_memory)
 
           adaptive_deadline = time.time() + 45
           while time.time() < adaptive_deadline:
@@ -252,11 +261,13 @@ jobs:
                   last = adaptive
               except Exception as exc:
                   last = exc
-              time.sleep(1)
+              time.sleep(.5)
           else:
               raise SystemExit(f'Adaptive worker liveness failed: {last}')
           '@ | python -
           } finally {
+            $p.Refresh()
+            if ($p.HasExited) { Write-Host "Bridge exited during integration smoke with code $($p.ExitCode)" }
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
             Get-Process VexBridge,VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
@@ -317,8 +328,10 @@ jobs:
 
           v0.11.7.49 foundation fixes
           --------------------------
-          - persistent memory moves from conflicting 8766 to local-only 8786
-          - Memory Worker ships as its own complete onedir runtime instead of a frozen child sharing Bridge internals
+          - persistent memory uses local-only 8806, outside Bridge's reserved 8766-8797 local-control ring
+          - repairs the recursive v0.11.7.34 initial-index bootstrap and restores real nonblocking indexing
+          - Memory Worker ships as its own complete onedir runtime instead of sharing Bridge frozen internals
+          - local memory/adaptive health routes are handled directly by the authenticated loopback control handler
           - restores companion executables omitted by later Bridge-only cognition updates
           - CI proves standalone memory, staged memory, Bridge-memory integration, adaptive-worker liveness, UI process liveness and package integrity before publishing
           - private tokens, certificate, folder permissions, profile and memory remain local
