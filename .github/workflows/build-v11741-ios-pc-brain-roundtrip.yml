@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.45 iPhone PC Brain Roundtrip
+name: Build VexNative v0.11.7.46 iPhone PC Brain Roundtrip
 
 on:
   workflow_dispatch:
@@ -88,7 +88,7 @@ jobs:
           checks = [
               ('certificate-pinned LAN transport', 'final class VexBridgeTrustDelegate' in files['transport']),
               ('PC cognition overlay', 'PCCognitionOverlay' in files['content']),
-              ('PC /llm/chat route', 'path: "/llm/chat"' in files['content']),
+              ('PC /llm/chat route', 'parts.path = "/llm/chat"' in files['content']),
               ('personal memory sync route', '/memory/sync' in files['content']),
               ('natural grounding gate', 'shouldUseNativeGrounding' in files['app']),
               ('Qwen3 3072 context', 'contextSize = 3072' in files['app']),
@@ -132,9 +132,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=11745 \
-            MARKETING_VERSION=0.11.7.45 \
-            build | tee "$RUNNER_TEMP/xcodebuild-v11745.log"
+            CURRENT_PROJECT_VERSION=11746 \
+            MARKETING_VERSION=0.11.7.46 \
+            build | tee "$RUNNER_TEMP/xcodebuild-v11746.log"
 
       - name: Preserve device permissions
         shell: bash
@@ -153,8 +153,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.45"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11745"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.46"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11746"
 
       - name: Package unsigned IPA
         shell: bash
@@ -165,31 +165,31 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.45-PC-Brain-Roundtrip-unsigned.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.45-PC-Brain-Roundtrip-unsigned.ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa"
 
       - name: Write field-test notes
         shell: bash
         run: |
-          cat > VexNative-v0.11.7.45-FIELD-TEST.txt <<'EOF'
-          VexNative v0.11.7.45 - iPhone PC Brain Roundtrip
+          cat > VexNative-v0.11.7.46-FIELD-TEST.txt <<'EOF'
+          VexNative v0.11.7.46 - iPhone PC Brain Roundtrip
           =================================================
           - Secure certificate-pinned private-LAN Bridge transport.
           - PC cognition overlay for ordinary chat when the paired Bridge is available.
-          - Recent iPhone chat history goes to PC /llm/chat; the PC reply returns into the iPhone conversation.
+          - Dual-node cognition races paired PCs and sends the request to /llm/chat; the first valid PC reply returns into the iPhone conversation.
           - Tool, web, photo, media and device-control routes stay ahead of ordinary PC chat where appropriate.
           - Researched turns keep their larger/cooler web-grounded Qwen budget while ordinary local fallback chat keeps the natural-continuity tuning.
           - Personal-memory synchronization and natural-continuity/anti-parrot behavior are preserved.
           - No private pairing endpoint, token, certificate pin, Star/Vex profile, or chat data is included in this public artifact.
           EOF
 
-      - name: Upload v0.11.7.45 IPA
+      - name: Upload v0.11.7.46 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.45-PC-Brain-Roundtrip
+          name: VexNative-v0.11.7.46-PC-Brain-Roundtrip
           path: |
-            VexNative-v0.11.7.45-PC-Brain-Roundtrip-unsigned.ipa
-            VexNative-v0.11.7.45-FIELD-TEST.txt
+            VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa
+            VexNative-v0.11.7.46-FIELD-TEST.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -197,7 +197,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.45-xcodebuild-log
-          path: ${{ runner.temp }}/xcodebuild-v11745.log
+          name: VexNative-v0.11.7.46-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild-v11746.log
           if-no-files-found: ignore
           retention-days: 7
