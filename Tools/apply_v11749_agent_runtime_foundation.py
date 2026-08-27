@@ -59,9 +59,6 @@ if spawn_anchor in bridge:
 elif 'PYINSTALLER_RESET_ENVIRONMENT' not in bridge:
     raise SystemExit("v0.11.7.49 memory child reset anchor missing")
 
-# If a frozen Bridge child launch returns but the worker never binds, retry once
-# through Windows Start-Process. This is intentionally bounded and only occurs in
-# memory recovery; normal conversation never shells out on every turn.
 retry_anchor = '''        for attempt in range(80):\n            time.sleep(0.15)\n            try:\n'''
 retry_block = '''        for attempt in range(80):\n            time.sleep(0.15)\n            if attempt == 20:\n                try:\n                    ps_exe = str(exe).replace("'", "''")\n                    ps_cwd = str(exe.parent).replace("'", "''")\n                    ps = (\n                        "$ErrorActionPreference='Stop'; "\n                        f"Start-Process -FilePath '{ps_exe}' -WorkingDirectory '{ps_cwd}' "\n                        f"-ArgumentList '--serve','--port','{MEMORY_WORKER_PORT}' -WindowStyle Hidden"\n                    )\n                    subprocess.Popen(\n                        ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps],\n                        stdout=subprocess.DEVNULL,\n                        stderr=subprocess.DEVNULL,\n                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),\n                    )\n                except Exception:\n                    pass\n            try:\n'''
 if retry_anchor in bridge:
@@ -75,6 +72,23 @@ if bg_marker not in bridge:
 if 'name="VexPersistentMemoryWarmup"' not in bridge:
     bg_insert = '''def _vex_background_services() -> None:\n    threading.Thread(\n        target=lambda: _memory_worker_health(start_if_needed=True),\n        daemon=True,\n        name="VexPersistentMemoryWarmup",\n    ).start()\n'''
     bridge = bridge.replace(bg_marker, bg_insert, 1)
+
+# The later fast-start Bridge retained the background-service function but lost
+# its main() invocation. That leaves the adaptive/autonomy/initiative thread
+# definitions present while worker_started stays false forever. Start the whole
+# existing bounded background graph once, after Bridge state and reindex startup.
+main_start = bridge.find("def main()")
+main_text = bridge[main_start:]
+if "_vex_background_services()" not in main_text:
+    background_anchor = "    start_background_reindex(state)\n"
+    if background_anchor not in main_text:
+        raise SystemExit("v0.11.7.49 main background-service startup anchor missing")
+    main_text = main_text.replace(
+        background_anchor,
+        background_anchor + "    _vex_background_services()\n",
+        1,
+    )
+    bridge = bridge[:main_start] + main_text
 
 local_old = '''    def do_GET(self) -> None:\n        parsed = urllib.parse.urlparse(self.path)\n        if parsed.path not in ("/", "/status"):\n            return super().do_GET()\n        params = urllib.parse.parse_qs(parsed.query)\n        supplied = (params.get("token") or [""])[0]\n        state = STATE\n        if state is None or not secrets.compare_digest(supplied, str(state.config.get("token") or "")):\n'''
 local_new = '''    def do_GET(self) -> None:\n        parsed = urllib.parse.urlparse(self.path)\n        params = urllib.parse.parse_qs(parsed.query)\n        supplied = (params.get("token") or [""])[0]\n        state = STATE\n        if state is None or not secrets.compare_digest(supplied, str(state.config.get("token") or "")):\n'''
@@ -128,8 +142,11 @@ if "start_initial_reindex(state)" in helper_text:
 if "state.index.rebuild()" not in helper_text:
     raise SystemExit("v0.11.7.49 initial-index helper no longer rebuilds index")
 main_start = bridge.find("def main()")
-if "start_initial_reindex(state)" not in bridge[main_start:]:
+main_text = bridge[main_start:]
+if "start_initial_reindex(state)" not in main_text:
     raise SystemExit("v0.11.7.49 main still blocks on initial indexing")
+if "_vex_background_services()" not in main_text:
+    raise SystemExit("v0.11.7.49 main does not start Agent Runtime background workers")
 
 for marker in [
     'VERSION = "0.11.7.29"',
@@ -143,4 +160,4 @@ for marker in [
 BRIDGE.write_text(bridge, encoding="utf-8")
 compile(bridge, str(BRIDGE), "exec")
 compile(remote, str(REMOTE), "exec")
-print("Applied v0.11.7.49 Agent Runtime foundation: hardened memory sidecar recovery, nonblocking bootstrap, direct health routes, isolated learning graph")
+print("Applied v0.11.7.49 Agent Runtime foundation: starts full background worker graph, hardened memory sidecar recovery, nonblocking bootstrap, direct health routes")
