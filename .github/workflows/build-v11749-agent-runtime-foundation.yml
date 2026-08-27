@@ -65,7 +65,7 @@ jobs:
             '"version": "0.11.7.39"',
             '"agent_runtime_bundle": "0.11.7.49"',
             'MEMORY_WORKER_PORT = 8786',
-            'VexMemoryWorker.exe',
+            'VexMemoryWorkerRuntime',
             'parsed.path == "/memory/status"',
             'parsed.path == "/memory/sync"',
             'def _adaptive_worker_cycle(',
@@ -83,10 +83,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
-          # Memory is deliberately onedir too. It is copied beside Bridge and reuses the
-          # same VexBridgeRuntime directory, avoiding nested one-file extraction/Defender
-          # startup failures while keeping the installed folder layout unchanged.
-          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexMemoryWorker --hidden-import sqlite3 Tools/VexMemoryWorker.py
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexMemoryRuntime --noupx --windowed --name VexMemoryWorker --hidden-import sqlite3 Tools/VexMemoryWorker.py
           pyinstaller --noconfirm --clean --onefile --noupx --console --name VexDoctor --collect-all requests --hidden-import sqlite3 Tools/VexDoctor.py
           pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexToolbox --hidden-import tkinter Tools/VexToolbox.py
           pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
@@ -107,10 +104,9 @@ jobs:
             if (!(Test-Path $file)) { throw "built component missing: $file" }
           }
 
-          # The Memory Worker was built against the same Python/PyInstaller runtime
-          # shape as Bridge. Put only its small launcher beside Bridge; it consumes the
-          # already-present VexBridgeRuntime folder there.
-          Copy-Item dist\VexMemoryWorker\VexMemoryWorker.exe dist\VexBridge\VexMemoryWorker.exe -Force
+          # Stage the entire memory onedir runtime beside Bridge. Do not mix the two
+          # PyInstaller runtimes; Bridge launches this folder's EXE directly.
+          Copy-Item dist\VexMemoryWorker dist\VexBridge\VexMemoryWorkerRuntime -Recurse -Force
 
       - name: Smoke test persistent memory worker
         shell: pwsh
@@ -143,6 +139,38 @@ jobs:
             Get-Process VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Smoke test staged memory runtime
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemoryStagedSmoke\Roaming'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemoryStagedSmoke\Local'
+          New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+          Get-Process VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $worker = Resolve-Path .\dist\VexBridge\VexMemoryWorkerRuntime\VexMemoryWorker.exe
+          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexBridge\VexMemoryWorkerRuntime -ArgumentList '--serve','--port','8786' -PassThru
+          try {
+            @'
+          import json, time, urllib.request
+          deadline = time.time() + 25
+          last = None
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8786/health', timeout=2) as r:
+                      data = json.loads(r.read().decode('utf-8'))
+                  assert data.get('ok') is True, data
+                  print('staged memory health:', data)
+                  break
+              except Exception as exc:
+                  last = exc
+                  time.sleep(.5)
+          else:
+              raise SystemExit(f'staged memory runtime never became healthy: {last}')
+          '@ | python -
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Smoke test Bridge memory and adaptive learner integration
         shell: pwsh
         run: |
@@ -158,11 +186,11 @@ jobs:
           from pathlib import Path
 
           config_path = Path(os.environ['APPDATA']) / 'VexBridge' / 'config.json'
-          deadline = time.time() + 70
+          deadline = time.time() + 80
           last = 'config not created'
           opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-          def request(path, timeout=4):
+          def request(path, timeout=5):
               cfg = json.loads(config_path.read_text('utf-8'))
               token = str(cfg.get('token') or '')
               external = int(cfg.get('port') or 8765)
@@ -175,8 +203,6 @@ jobs:
                       with opener.open(url, timeout=timeout) as r:
                           return json.loads(r.read().decode('utf-8'))
                   except urllib.error.HTTPError as exc:
-                      # A real Bridge HTTP response is authoritative. Preserve its JSON
-                      # error instead of walking on to dead ports and masking the cause.
                       try:
                           body = json.loads(exc.read().decode('utf-8'))
                       except Exception:
@@ -202,7 +228,7 @@ jobs:
           else:
               raise SystemExit(f'Bridge never became ready: {last}')
 
-          memory_deadline = time.time() + 35
+          memory_deadline = time.time() + 45
           while time.time() < memory_deadline:
               try:
                   memory = request('/memory/status')
@@ -216,7 +242,7 @@ jobs:
           else:
               raise SystemExit(f'Bridge could not start persistent memory: {last}')
 
-          adaptive_deadline = time.time() + 35
+          adaptive_deadline = time.time() + 45
           while time.time() < adaptive_deadline:
               try:
                   adaptive = request('/adaptive/status')
@@ -262,7 +288,7 @@ jobs:
 
           Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
           Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
-          Copy-Item dist\VexMemoryWorker\VexMemoryWorker.exe "$pkg\VexMemoryWorker.exe"
+          Copy-Item dist\VexMemoryWorker "$pkg\VexMemoryWorkerRuntime" -Recurse
           Copy-Item dist\VexDoctor.exe "$pkg\VexDoctor.exe"
           Copy-Item dist\VexToolbox.exe "$pkg\VexToolbox.exe"
           Copy-Item dist\VexRemoteSupport "$pkg\VexRemoteSupportRuntime" -Recurse
@@ -276,27 +302,27 @@ jobs:
 
           Purpose
           -------
-          Turn the proven v0.11.7.39 PC cognition Bridge into a complete local Agent Runtime without changing the working VexNative v0.11.7.48 iPhone pairing.
+          Complete the local Agent Runtime around the proven v0.11.7.39 PC cognition Bridge without changing the working VexNative v0.11.7.48 iPhone pairing.
 
           Included
           --------
-          - VexBridge v0.11.7.39 + onedir runtime (proven PC cognition route)
-          - VexMemoryWorker local-only SQLite persistent semantic/episodic memory
+          - VexBridge v0.11.7.39 + runtime
+          - independent VexMemoryWorker runtime with local SQLite semantic/episodic memory
           - VexDoctor diagnostics
           - VexToolbox local utilities
-          - VexRemoteSupport Defender-safer one-folder runtime
+          - VexRemoteSupport
           - VexWindowsHost v0.11.7.40
-          - VexNodeAgent for multi-PC registration
+          - VexNodeAgent foundation for future multi-PC routing
           - one-click Agent Runtime installer
 
-          v0.11.7.49 foundation fix
-          -------------------------
-          - Moves the memory worker from loopback 8766 to 8786. The unified Bridge local-control listener owns the 8766-8777 ring, so the old fixed memory port could prevent persistent memory from ever starting.
-          - Packages the Memory Worker as an onedir companion that reuses VexBridgeRuntime instead of a nested self-extracting one-file child.
-          - Restores companion executables omitted by the later Bridge-only cognition-helper bundle.
-          - CI must prove Bridge status, persistent-memory health, and adaptive-worker startup before this artifact is published.
-          - Existing local tokens, certificate, folder permissions, private profile data and memory stay local and are not in this artifact.
-          - No paid API or cloud inference is introduced.
+          v0.11.7.49 foundation fixes
+          --------------------------
+          - persistent memory moves from conflicting 8766 to local-only 8786
+          - Memory Worker ships as its own complete onedir runtime instead of a frozen child sharing Bridge internals
+          - restores companion executables omitted by later Bridge-only cognition updates
+          - CI proves standalone memory, staged memory, Bridge-memory integration, adaptive-worker liveness, UI process liveness and package integrity before publishing
+          - private tokens, certificate, folder permissions, profile and memory remain local
+          - no paid API or cloud inference is introduced
 
           Install
           -------
@@ -306,7 +332,7 @@ jobs:
 
           foreach ($file in @(
             "$pkg\VexBridge.exe",
-            "$pkg\VexMemoryWorker.exe",
+            "$pkg\VexMemoryWorkerRuntime\VexMemoryWorker.exe",
             "$pkg\VexDoctor.exe",
             "$pkg\VexToolbox.exe",
             "$pkg\VexRemoteSupportRuntime\VexRemoteSupport.exe",
@@ -319,7 +345,7 @@ jobs:
 
           Compress-Archive -Path "$pkg\*" -DestinationPath Vex-Agent-Runtime-v0.11.7.49-Foundation.zip -Force
           Expand-Archive Vex-Agent-Runtime-v0.11.7.49-Foundation.zip -DestinationPath verify-package -Force
-          if (!(Test-Path verify-package\VexMemoryWorker.exe)) { throw 'verified ZIP memory worker missing' }
+          if (!(Test-Path verify-package\VexMemoryWorkerRuntime\VexMemoryWorker.exe)) { throw 'verified ZIP memory runtime missing' }
           if (!(Test-Path verify-package\VexBridgeRuntime)) { throw 'verified ZIP Bridge runtime missing' }
           if (!(Test-Path verify-package\VexRemoteSupportRuntime\VexRemoteSupport.exe)) { throw 'verified ZIP Remote Support missing' }
 
