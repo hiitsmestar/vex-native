@@ -1,0 +1,313 @@
+name: Build Vex Agent Runtime v0.11.7.49 Foundation
+
+on:
+  push:
+    branches: [ "feat/vex-agent-runtime-windows-v1" ]
+    paths:
+      - "Tools/apply_v11749_agent_runtime_foundation.py"
+      - "Tools/VexAgentRuntimeInstall.py"
+      - ".github/workflows/build-v11749-agent-runtime-foundation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-agent-runtime:
+    runs-on: windows-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Assemble proven PC cognition source chain
+        shell: pwsh
+        run: |
+          python Tools/build_v11728_chain.py
+          python Tools/apply_v11729_windows_defender_safe.py
+          python Tools/apply_v11729_bridge_onedir_hotfix.py
+          python Tools/apply_v11734_bridge_responsive_boot.py
+          python Tools/apply_v11737_ollama_recovery.py
+          python Tools/apply_v11738_cognition_capacity_hotfix.py
+          python Tools/apply_v11739_cognition_helper_bundle.py
+          python Tools/apply_v11749_agent_runtime_foundation.py
+
+      - name: Assemble current Windows Host source
+        shell: pwsh
+        run: |
+          python Tools/apply_v11736_host_clipboard.py
+          python Tools/apply_v11740_host_phone_ping.py
+
+      - name: Verify Agent Runtime source graph
+        shell: pwsh
+        run: |
+          python -m py_compile `
+            Bridge/vex_bridge.py `
+            Tools/VexMemoryWorker.py `
+            Tools/VexDoctor.py `
+            Tools/VexToolbox.py `
+            Tools/VexRemoteSupport.py `
+            Tools/VexWindowsHost-v11740.py `
+            Tools/VexNodeAgent.py `
+            Tools/VexAgentRuntimeInstall.py `
+            Tools/apply_v11749_agent_runtime_foundation.py
+
+          $bridge = Get-Content Bridge/vex_bridge.py -Raw
+          foreach ($marker in @(
+            '"version": "0.11.7.39"',
+            '"agent_runtime_bundle": "0.11.7.49"',
+            'MEMORY_WORKER_PORT = 8786',
+            'VexMemoryWorker.exe',
+            'parsed.path == "/memory/status"',
+            'parsed.path == "/memory/sync"',
+            'def _adaptive_worker_cycle(',
+            'name="VexAdaptiveLearning"',
+            'name="VexAutonomousImprovement"',
+            'name="VexInitiativeScheduler"',
+            'IDLE_AUTONOMY_HARD_FLOOR_BYTES',
+            'IDLE_AUTONOMY_PLANNER_FLOOR_BYTES'
+          )) {
+            if (-not $bridge.Contains($marker)) { throw "Agent Runtime marker missing: $marker" }
+          }
+          if ($bridge.Contains('MEMORY_WORKER_PORT = 8766')) { throw 'memory worker/control-plane port collision remains' }
+
+      - name: Build Agent Runtime components
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+          pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexMemoryWorker --hidden-import sqlite3 Tools/VexMemoryWorker.py
+          pyinstaller --noconfirm --clean --onefile --noupx --console --name VexDoctor --collect-all requests --hidden-import sqlite3 Tools/VexDoctor.py
+          pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexToolbox --hidden-import tkinter Tools/VexToolbox.py
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexWindowsHost --collect-all requests Tools/VexWindowsHost-v11740.py
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexNodeAgent Tools/VexNodeAgent.py
+          pyinstaller --noconfirm --clean --onefile --noupx --windowed --name Install-Vex-Agent-Runtime-v0.11.7.49 Tools/VexAgentRuntimeInstall.py
+
+          foreach ($file in @(
+            'dist\VexBridge\VexBridge.exe',
+            'dist\VexMemoryWorker.exe',
+            'dist\VexDoctor.exe',
+            'dist\VexToolbox.exe',
+            'dist\VexRemoteSupport\VexRemoteSupport.exe',
+            'dist\VexWindowsHost\VexWindowsHost.exe',
+            'dist\VexNodeAgent\VexNodeAgent.exe',
+            'dist\Install-Vex-Agent-Runtime-v0.11.7.49.exe'
+          )) {
+            if (!(Test-Path $file)) { throw "built component missing: $file" }
+          }
+
+          # Bridge auto-discovers the local-only memory worker beside its own exe.
+          Copy-Item dist\VexMemoryWorker.exe dist\VexBridge\VexMemoryWorker.exe -Force
+
+      - name: Smoke test persistent memory worker
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemorySmoke\Roaming'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemorySmoke\Local'
+          New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+          $worker = Resolve-Path .\dist\VexMemoryWorker.exe
+          $p = Start-Process -FilePath $worker -ArgumentList '--serve','--port','8786' -PassThru
+          try {
+            @'
+          import json, time, urllib.request
+          deadline = time.time() + 25
+          last = None
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8786/health', timeout=2) as r:
+                      data = json.loads(r.read().decode('utf-8'))
+                  assert data.get('ok') is True, data
+                  print('memory worker health:', data)
+                  break
+              except Exception as exc:
+                  last = exc
+                  time.sleep(.5)
+          else:
+              raise SystemExit(f'memory worker never became healthy: {last}')
+          '@ | python -
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Smoke test Bridge memory and adaptive learner integration
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentBridgeSmoke\Roaming'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentBridgeSmoke\Local'
+          New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+          Get-Process VexBridge,VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $bridge = Resolve-Path .\dist\VexBridge\VexBridge.exe
+          $p = Start-Process -FilePath $bridge -WorkingDirectory .\dist\VexBridge -PassThru
+          try {
+            @'
+          import json, os, time, urllib.parse, urllib.request
+          from pathlib import Path
+
+          config_path = Path(os.environ['APPDATA']) / 'VexBridge' / 'config.json'
+          deadline = time.time() + 70
+          last = 'config not created'
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+          def request(path, timeout=4):
+              cfg = json.loads(config_path.read_text('utf-8'))
+              token = str(cfg.get('token') or '')
+              external = int(cfg.get('port') or 8765)
+              preferred = int(cfg.get('local_control_port') or (external + 1))
+              ports = [preferred] + [p for p in range(external + 1, external + 13) if p != preferred]
+              err = None
+              for port in ports:
+                  url = f'http://127.0.0.1:{port}{path}?' + urllib.parse.urlencode({'token': token})
+                  try:
+                      with opener.open(url, timeout=timeout) as r:
+                          return json.loads(r.read().decode('utf-8'))
+                  except Exception as exc:
+                      err = exc
+              raise RuntimeError(f'{path}: {err}')
+
+          while time.time() < deadline:
+              try:
+                  status = request('/status')
+                  if status.get('version') == '0.11.7.39' and status.get('local_control_protocol') == 'vex-local-v1':
+                      print('Bridge status:', status)
+                      break
+                  last = status
+              except Exception as exc:
+                  last = exc
+              time.sleep(1)
+          else:
+              raise SystemExit(f'Bridge never became ready: {last}')
+
+          memory_deadline = time.time() + 35
+          while time.time() < memory_deadline:
+              try:
+                  memory = request('/memory/status')
+                  if memory.get('ok'):
+                      print('Memory status:', memory)
+                      break
+                  last = memory
+              except Exception as exc:
+                  last = exc
+              time.sleep(.8)
+          else:
+              raise SystemExit(f'Bridge could not start persistent memory: {last}')
+
+          adaptive_deadline = time.time() + 35
+          while time.time() < adaptive_deadline:
+              try:
+                  adaptive = request('/adaptive/status')
+                  if adaptive.get('ok') and adaptive.get('worker_started'):
+                      print('Adaptive status:', adaptive)
+                      break
+                  last = adaptive
+              except Exception as exc:
+                  last = exc
+              time.sleep(1)
+          else:
+              raise SystemExit(f'Adaptive worker liveness failed: {last}')
+          '@ | python -
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process VexBridge,VexMemoryWorker -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Smoke test user-facing Windows processes
+        shell: pwsh
+        run: |
+          $remote = Resolve-Path .\dist\VexRemoteSupport\VexRemoteSupport.exe
+          $rp = Start-Process -FilePath $remote -WorkingDirectory .\dist\VexRemoteSupport -PassThru
+          Start-Sleep -Seconds 7
+          $rp.Refresh()
+          if ($rp.HasExited) { throw "Remote Support exited during startup with $($rp.ExitCode)" }
+          Stop-Process -Id $rp.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexRemoteSupport -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $host = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
+          $hp = Start-Process -FilePath $host -WorkingDirectory .\dist\VexWindowsHost -PassThru
+          Start-Sleep -Seconds 6
+          $hp.Refresh()
+          if ($hp.HasExited) { throw "Windows Host exited during startup with $($hp.ExitCode)" }
+          Stop-Process -Id $hp.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexWindowsHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+      - name: Stage Agent Runtime installer package
+        shell: pwsh
+        run: |
+          $pkg = 'Vex-Agent-Runtime-v0.11.7.49-Foundation'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+
+          Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
+          Copy-Item dist\VexMemoryWorker.exe "$pkg\VexMemoryWorker.exe"
+          Copy-Item dist\VexDoctor.exe "$pkg\VexDoctor.exe"
+          Copy-Item dist\VexToolbox.exe "$pkg\VexToolbox.exe"
+          Copy-Item dist\VexRemoteSupport "$pkg\VexRemoteSupportRuntime" -Recurse
+          Copy-Item dist\VexWindowsHost "$pkg\VexWindowsHost" -Recurse
+          Copy-Item dist\VexNodeAgent "$pkg\VexNodeAgent" -Recurse
+          Copy-Item dist\Install-Vex-Agent-Runtime-v0.11.7.49.exe "$pkg\Install-Vex-Agent-Runtime-v0.11.7.49.exe"
+
+          @'
+          Vex Agent Runtime v0.11.7.49 Foundation
+          ========================================
+
+          Purpose
+          -------
+          Turn the proven v0.11.7.39 PC cognition Bridge into a complete local Agent Runtime without changing the working VexNative v0.11.7.48 iPhone pairing.
+
+          Included
+          --------
+          - VexBridge v0.11.7.39 + onedir runtime (proven PC cognition route)
+          - VexMemoryWorker local-only SQLite persistent semantic/episodic memory
+          - VexDoctor diagnostics
+          - VexToolbox local utilities
+          - VexRemoteSupport Defender-safer one-folder runtime
+          - VexWindowsHost v0.11.7.40
+          - VexNodeAgent for multi-PC registration
+          - one-click Agent Runtime installer
+
+          v0.11.7.49 foundation fix
+          -------------------------
+          - Moves the memory worker from loopback 8766 to 8786. The unified Bridge local-control listener owns the 8766-8777 ring, so the old fixed memory port could prevent persistent memory from ever starting.
+          - Restores companion executables omitted by the later Bridge-only cognition-helper bundle.
+          - CI must prove Bridge status, persistent-memory health, and adaptive-worker startup before this artifact is published.
+          - Existing local tokens, certificate, folder permissions, private profile data and memory stay local and are not in this artifact.
+          - No paid API or cloud inference is introduced.
+
+          Install
+          -------
+          Extract the ZIP completely and run Install-Vex-Agent-Runtime-v0.11.7.49.exe.
+          Keep VexNative v0.11.7.48 installed on the iPhone.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+
+          foreach ($file in @(
+            "$pkg\VexBridge.exe",
+            "$pkg\VexMemoryWorker.exe",
+            "$pkg\VexDoctor.exe",
+            "$pkg\VexToolbox.exe",
+            "$pkg\VexRemoteSupportRuntime\VexRemoteSupport.exe",
+            "$pkg\VexWindowsHost\VexWindowsHost.exe",
+            "$pkg\VexNodeAgent\VexNodeAgent.exe",
+            "$pkg\Install-Vex-Agent-Runtime-v0.11.7.49.exe"
+          )) {
+            if (!(Test-Path $file)) { throw "staged package missing: $file" }
+          }
+
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-Agent-Runtime-v0.11.7.49-Foundation.zip -Force
+          Expand-Archive Vex-Agent-Runtime-v0.11.7.49-Foundation.zip -DestinationPath verify-package -Force
+          if (!(Test-Path verify-package\VexMemoryWorker.exe)) { throw 'verified ZIP memory worker missing' }
+          if (!(Test-Path verify-package\VexBridgeRuntime)) { throw 'verified ZIP Bridge runtime missing' }
+          if (!(Test-Path verify-package\VexRemoteSupportRuntime\VexRemoteSupport.exe)) { throw 'verified ZIP Remote Support missing' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.49-Foundation
+          path: Vex-Agent-Runtime-v0.11.7.49-Foundation.zip
+          retention-days: 14
