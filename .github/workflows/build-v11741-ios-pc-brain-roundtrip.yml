@@ -1,4 +1,4 @@
-name: Build VexNative v0.11.7.46 iPhone PC Brain Roundtrip
+name: Build VexNative v0.11.7.47 iPhone PC Cognition Diagnostics
 
 on:
   workflow_dispatch:
@@ -71,12 +71,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 Tools/apply_v11743_roundtrip_continuity_compat.py
+          python3 Tools/apply_v11747_pc_cognition_diagnostics.py
 
-      - name: Verify PC Brain roundtrip and continuity
+      - name: Verify PC Brain roundtrip, diagnostics, and continuity
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile Tools/apply_v11743_roundtrip_continuity_compat.py
+          python3 -m py_compile Tools/apply_v11747_pc_cognition_diagnostics.py Tools/test_v11747_pc_cognition_diagnostics.py
+          python3 Tools/test_v11747_pc_cognition_diagnostics.py
           python3 - <<'PY'
           from pathlib import Path
           files = {
@@ -95,13 +98,16 @@ jobs:
               ('ordinary/web generation split', 'maxNewTokens = webGroundedTurn ? 180 : 96' in files['app']),
               ('natural temperature split', 'temperature = webGroundedTurn ? 0.62 : 0.88' in files['app']),
               ('verbatim newest message', "STAR'S NEWEST MESSAGE (verbatim)" in files['prompt']),
+              ('PC cognition diagnostics', 'private enum CognitionResult: Sendable' in files['content'] and 'bridge token rejected' in files['content']),
+              ('PC cognition last-good retry', 'lastCognition' in files['content'] and 'vex.pc.cognition.lastGoodEndpoint.v1' in files['content']),
+              ('startup-safe route detail', "I couldn't use the PC cognition path for that turn" in files['app']),
           ]
           missing = [name for name, ok in checks if not ok]
           for name, ok in checks:
               print(('PASS ' if ok else 'FAIL ') + name)
           if missing:
               raise SystemExit('Missing roundtrip markers: ' + ', '.join(missing))
-          print('iPhone PC Brain roundtrip + secure Bridge + memory + continuity verified')
+          print('iPhone PC Brain roundtrip + diagnostics + secure Bridge + memory + continuity verified')
           PY
 
       - name: Show Apple toolchain
@@ -132,9 +138,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=11746 \
-            MARKETING_VERSION=0.11.7.46 \
-            build | tee "$RUNNER_TEMP/xcodebuild-v11746.log"
+            CURRENT_PROJECT_VERSION=11747 \
+            MARKETING_VERSION=0.11.7.47 \
+            build | tee "$RUNNER_TEMP/xcodebuild-v11747.log"
 
       - name: Preserve device permissions
         shell: bash
@@ -153,8 +159,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.46"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11746"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.47"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11747"
 
       - name: Package unsigned IPA
         shell: bash
@@ -165,31 +171,33 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.47-PC-Cognition-Diagnostics-unsigned.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.47-PC-Cognition-Diagnostics-unsigned.ipa"
 
       - name: Write field-test notes
         shell: bash
         run: |
-          cat > VexNative-v0.11.7.46-FIELD-TEST.txt <<'EOF'
-          VexNative v0.11.7.46 - iPhone PC Brain Roundtrip
-          =================================================
+          cat > VexNative-v0.11.7.47-FIELD-TEST.txt <<'EOF'
+          VexNative v0.11.7.47 - iPhone PC Cognition Diagnostics
+          ======================================================
           - Secure certificate-pinned private-LAN Bridge transport.
           - PC cognition overlay for ordinary chat when the paired Bridge is available.
-          - Dual-node cognition races paired PCs and sends the request to /llm/chat; the first valid PC reply returns into the iPhone conversation.
+          - Dual-node cognition tries the primary/last-good/secondary Bridge endpoints and sends the request to /llm/chat; the first valid PC reply returns into the iPhone conversation.
+          - Failed PC cognition attempts now preserve a sanitized reason in Brain, such as token rejected, route missing, no local model, timeout, LAN failure, or TLS/pin mismatch.
+          - Last-good PC cognition endpoints are retried before the secondary endpoint, and non-tool PC/computer wording can reach PC cognition after tool routers decline it.
           - Tool, web, photo, media and device-control routes stay ahead of ordinary PC chat where appropriate.
           - Researched turns keep their larger/cooler web-grounded Qwen budget while ordinary local fallback chat keeps the natural-continuity tuning.
           - Personal-memory synchronization and natural-continuity/anti-parrot behavior are preserved.
           - No private pairing endpoint, token, certificate pin, Star/Vex profile, or chat data is included in this public artifact.
           EOF
 
-      - name: Upload v0.11.7.46 IPA
+      - name: Upload v0.11.7.47 IPA
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.46-PC-Brain-Roundtrip
+          name: VexNative-v0.11.7.47-PC-Cognition-Diagnostics
           path: |
-            VexNative-v0.11.7.46-PC-Brain-Roundtrip-unsigned.ipa
-            VexNative-v0.11.7.46-FIELD-TEST.txt
+            VexNative-v0.11.7.47-PC-Cognition-Diagnostics-unsigned.ipa
+            VexNative-v0.11.7.47-FIELD-TEST.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -197,7 +205,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.46-xcodebuild-log
-          path: ${{ runner.temp }}/xcodebuild-v11746.log
+          name: VexNative-v0.11.7.47-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild-v11747.log
           if-no-files-found: ignore
           retention-days: 7
