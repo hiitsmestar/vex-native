@@ -15,6 +15,7 @@ BUNDLE_VERSION = "0.11.7.49"
 BRIDGE_VERSION = "0.11.7.39"
 REMOTE_VERSION = "0.11.7.29"
 HOST_VERSION = "0.11.7.40"
+MEMORY_PORT = 8806
 
 ROOT_FILES = (
     "VexBridge.exe",
@@ -205,6 +206,23 @@ def wait_bridge(seconds: int = 120) -> dict:
     raise RuntimeError(f"Bridge {BRIDGE_VERSION} did not become ready: {last}")
 
 
+def wait_direct_memory(seconds: int = 30) -> dict:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.time() + seconds
+    last = "no response"
+    while time.time() < deadline:
+        try:
+            with opener.open(f"http://127.0.0.1:{MEMORY_PORT}/health", timeout=2.0) as response:
+                value = json.loads(response.read().decode("utf-8"))
+            if isinstance(value, dict) and bool(value.get("ok")):
+                return value
+            last = str(value)
+        except Exception as exc:
+            last = str(exc)
+        time.sleep(0.5)
+    raise RuntimeError(f"Persistent memory sidecar did not become ready: {last}")
+
+
 def wait_memory(seconds: int = 40) -> dict:
     deadline = time.time() + seconds
     last = "no response"
@@ -235,15 +253,18 @@ def wait_adaptive(seconds: int = 40) -> dict:
     raise RuntimeError(f"Adaptive learning worker did not prove liveness: {last}")
 
 
-def launch(path: Path, cwd: Path | None = None) -> None:
+def launch(path: Path, cwd: Path | None = None, args: list[str] | None = None) -> None:
     if not path.exists():
         raise RuntimeError(f"Runtime executable missing after install: {path.name}")
+    child_env = os.environ.copy()
+    child_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     subprocess.Popen(
-        [str(path)],
+        [str(path), *(args or [])],
         cwd=str(cwd or path.parent),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        env=child_env,
     )
 
 
@@ -279,12 +300,17 @@ def main() -> None:
         for name in RUNTIME_DIRS:
             replace_dir(pkg / name, home / name)
 
-        # Retire the old root-level memory launcher after the dedicated runtime is
-        # staged. Its SQLite data lives under LOCALAPPDATA and is untouched.
         try:
             (home / "VexMemoryWorker.exe").unlink(missing_ok=True)
         except Exception:
             pass
+
+        # Persistent memory is an independent local sidecar, not a child that must
+        # be cold-started inside the first Bridge request. This keeps the first phone
+        # turn responsive and lets Bridge reconnect to the same durable memory DB.
+        memory_exe = home / "VexMemoryWorkerRuntime" / "VexMemoryWorker.exe"
+        launch(memory_exe, memory_exe.parent, ["--serve", "--port", str(MEMORY_PORT)])
+        wait_direct_memory()
 
         # Preserve APPDATA/LOCALAPPDATA private configuration, pairing, memory DB,
         # searchable folders and continuity. Public package contains none of it.
