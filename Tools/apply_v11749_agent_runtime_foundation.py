@@ -9,15 +9,9 @@ REMOTE = Path("Tools/VexRemoteSupport.py")
 bridge = BRIDGE.read_text(encoding="utf-8")
 remote = REMOTE.read_text(encoding="utf-8")
 
-# v0.11.7.49 Agent Runtime Foundation
-# Restore the complete local Agent Runtime around the proven v0.11.7.39 Bridge
-# without changing the working v0.11.7.48 iPhone pairing.
 if '"version": "0.11.7.39"' not in bridge:
     raise SystemExit("v0.11.7.49 expected Bridge v0.11.7.39 source")
 
-# Repair a latent v0.11.7.34 bootstrap bug. Its broad substring replacement can
-# rewrite the newly-added helper into recursive thread spawning while leaving the
-# real foreground index call in main(). Repair the helper first.
 bad_index_helper = '''def start_initial_reindex(state: BridgeState) -> None:\n    def work() -> None:\n        state.indexing = True\n        state.index_error = None\n        try:\n            start_initial_reindex(state)\n        except Exception as exc:\n            state.index_error = exc.__class__.__name__\n        finally:\n            state.indexing = False\n    threading.Thread(target=work, daemon=True, name="VexBridgeInitialIndex").start()\n'''
 good_index_helper = '''def start_initial_reindex(state: BridgeState) -> None:\n    def work() -> None:\n        state.indexing = True\n        state.index_error = None\n        try:\n            state.index.rebuild()\n        except Exception as exc:\n            state.index_error = exc.__class__.__name__\n        finally:\n            state.indexing = False\n    threading.Thread(target=work, daemon=True, name="VexBridgeInitialIndex").start()\n'''
 if bad_index_helper in bridge:
@@ -25,9 +19,6 @@ if bad_index_helper in bridge:
 elif good_index_helper not in bridge:
     raise SystemExit("v0.11.7.49 could not verify initial-index helper")
 
-# Make the real main() index call nonblocking without depending on surrounding
-# wording changed by later bootstrap/supervisor patches. Never touch the periodic
-# background reindex function.
 main_start = bridge.find("def main()")
 if main_start < 0:
     raise SystemExit("v0.11.7.49 Bridge main() missing")
@@ -38,7 +29,6 @@ if "state.index.rebuild()" in main_text:
 elif "start_initial_reindex(state)" not in main_text:
     raise SystemExit("v0.11.7.49 could not verify nonblocking initial-index call in main")
 
-# Keep persistent memory clear of the current Bridge control ring 8766-8797.
 if "MEMORY_WORKER_PORT = 8766" in bridge:
     bridge = bridge.replace("MEMORY_WORKER_PORT = 8766", "MEMORY_WORKER_PORT = 8806", 1)
 elif "MEMORY_WORKER_PORT = 8786" in bridge:
@@ -47,9 +37,11 @@ elif "MEMORY_WORKER_PORT = 8806" not in bridge:
     raise SystemExit("v0.11.7.49 persistent-memory port marker missing")
 
 old_grace = "        for _ in range(25):\n            time.sleep(0.12)\n"
-new_grace = "        for _ in range(80):\n            time.sleep(0.15)\n"
+new_grace = "        for attempt in range(80):\n            time.sleep(0.15)\n"
 if old_grace in bridge:
     bridge = bridge.replace(old_grace, new_grace, 1)
+elif new_grace not in bridge and "for _ in range(80):" in bridge:
+    bridge = bridge.replace("        for _ in range(80):\n            time.sleep(0.15)\n", new_grace, 1)
 elif new_grace not in bridge:
     raise SystemExit("v0.11.7.49 memory startup grace marker missing")
 
@@ -61,17 +53,22 @@ elif 'VexMemoryWorkerRuntime' not in bridge:
     raise SystemExit("v0.11.7.49 memory runtime locator anchor missing")
 
 spawn_anchor = '''                subprocess.Popen(\n                    [str(exe), "--serve", "--port", str(MEMORY_WORKER_PORT)],\n                    cwd=str(exe.parent),\n                    stdout=subprocess.DEVNULL,\n                    stderr=subprocess.DEVNULL,\n                    creationflags=flags,\n                )\n'''
-spawn_fixed = '''                child_env = os.environ.copy()\n                child_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"\n                subprocess.Popen(\n                    [str(exe), "--serve", "--port", str(MEMORY_WORKER_PORT)],\n                    cwd=str(exe.parent),\n                    stdout=subprocess.DEVNULL,\n                    stderr=subprocess.DEVNULL,\n                    creationflags=flags,\n                    env=child_env,\n                )\n'''
+spawn_fixed = '''                child_env = os.environ.copy()\n                child_env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"\n                subprocess.Popen(\n                    [str(exe), "--serve", "--port", str(MEMORY_WORKER_PORT)],\n                    cwd=str(exe.parent),\n                    stdout=subprocess.DEVNULL,\n                    stderr=subprocess.DEVNULL,\n                    creationflags=flags,\n                    env=child_env,\n                    close_fds=True,\n                )\n'''
 if spawn_anchor in bridge:
     bridge = bridge.replace(spawn_anchor, spawn_fixed, 1)
 elif 'PYINSTALLER_RESET_ENVIRONMENT' not in bridge:
     raise SystemExit("v0.11.7.49 memory child reset anchor missing")
 
-# Proactively warm persistent memory in its own daemon thread. The previous lazy
-# /memory/status path could spend longer booting the packaged worker than the
-# local-control request timeout, so callers saw a timeout even though the worker
-# package itself was healthy. Starting it with the other background services keeps
-# Bridge startup nonblocking while making memory ready before the first phone turn.
+# If a frozen Bridge child launch returns but the worker never binds, retry once
+# through Windows Start-Process. This is intentionally bounded and only occurs in
+# memory recovery; normal conversation never shells out on every turn.
+retry_anchor = '''        for attempt in range(80):\n            time.sleep(0.15)\n            try:\n'''
+retry_block = '''        for attempt in range(80):\n            time.sleep(0.15)\n            if attempt == 20:\n                try:\n                    ps_exe = str(exe).replace("'", "''")\n                    ps_cwd = str(exe.parent).replace("'", "''")\n                    ps = (\n                        "$ErrorActionPreference='Stop'; "\n                        f"Start-Process -FilePath '{ps_exe}' -WorkingDirectory '{ps_cwd}' "\n                        f"-ArgumentList '--serve','--port','{MEMORY_WORKER_PORT}' -WindowStyle Hidden"\n                    )\n                    subprocess.Popen(\n                        ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps],\n                        stdout=subprocess.DEVNULL,\n                        stderr=subprocess.DEVNULL,\n                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),\n                    )\n                except Exception:\n                    pass\n            try:\n'''
+if retry_anchor in bridge:
+    bridge = bridge.replace(retry_anchor, retry_block, 1)
+elif "Start-Process -FilePath" not in bridge:
+    raise SystemExit("v0.11.7.49 memory recovery fallback anchor missing")
+
 bg_marker = '''def _vex_background_services() -> None:\n'''
 if bg_marker not in bridge:
     raise SystemExit("v0.11.7.49 background service anchor missing")
@@ -79,8 +76,6 @@ if 'name="VexPersistentMemoryWarmup"' not in bridge:
     bg_insert = '''def _vex_background_services() -> None:\n    threading.Thread(\n        target=lambda: _memory_worker_health(start_if_needed=True),\n        daemon=True,\n        name="VexPersistentMemoryWarmup",\n    ).start()\n'''
     bridge = bridge.replace(bg_marker, bg_insert, 1)
 
-# Route local Agent Runtime health directly through the authenticated loopback
-# handler instead of delegating these supervision requests into the LAN/TLS handler.
 local_old = '''    def do_GET(self) -> None:\n        parsed = urllib.parse.urlparse(self.path)\n        if parsed.path not in ("/", "/status"):\n            return super().do_GET()\n        params = urllib.parse.parse_qs(parsed.query)\n        supplied = (params.get("token") or [""])[0]\n        state = STATE\n        if state is None or not secrets.compare_digest(supplied, str(state.config.get("token") or "")):\n'''
 local_new = '''    def do_GET(self) -> None:\n        parsed = urllib.parse.urlparse(self.path)\n        params = urllib.parse.parse_qs(parsed.query)\n        supplied = (params.get("token") or [""])[0]\n        state = STATE\n        if state is None or not secrets.compare_digest(supplied, str(state.config.get("token") or "")):\n'''
 if local_old in bridge:
@@ -106,8 +101,9 @@ required_bridge_markers = [
     'parsed.path == "/memory/status"',
     'parsed.path == "/memory/sync"',
     'if parsed.path == "/adaptive/status"',
-    "for _ in range(80)",
+    "for attempt in range(80)",
     'PYINSTALLER_RESET_ENVIRONMENT',
+    'Start-Process -FilePath',
     'name="VexPersistentMemoryWarmup"',
     'name="VexPersistentMemoryRecovery"',
     "def _adaptive_worker_cycle(",
@@ -147,4 +143,4 @@ for marker in [
 BRIDGE.write_text(bridge, encoding="utf-8")
 compile(bridge, str(BRIDGE), "exec")
 compile(remote, str(REMOTE), "exec")
-print("Applied v0.11.7.49 Agent Runtime foundation: async memory warmup, source-shape-safe bootstrap, direct health routes, isolated learning graph")
+print("Applied v0.11.7.49 Agent Runtime foundation: hardened memory sidecar recovery, nonblocking bootstrap, direct health routes, isolated learning graph")
