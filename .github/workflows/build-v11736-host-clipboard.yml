@@ -1,0 +1,79 @@
+name: Build Vex v0.11.7.36 Host Clipboard
+
+on:
+  push:
+    branches: [ "ci/v11731-windows-vex-host" ]
+    paths:
+      - "Tools/VexWindowsHost-v11735.py"
+      - "Tools/apply_v11736_host_clipboard.py"
+      - ".github/workflows/build-v11736-host-clipboard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-host-clipboard:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests
+      - name: Build v0.11.7.36 source
+        shell: pwsh
+        run: |
+          python Tools/apply_v11736_host_clipboard.py
+          python -m py_compile Tools/VexWindowsHost-v11736.py
+          $src = Get-Content Tools/VexWindowsHost-v11736.py -Raw
+          if (-not $src.Contains('VERSION = "0.11.7.36"')) { throw 'version marker missing' }
+          if (-not $src.Contains('text="Copy reply"')) { throw 'Copy reply button missing' }
+          if (-not $src.Contains('def copy_selection(')) { throw 'selection copy handler missing' }
+          if (-not $src.Contains('self.log.bind("<Control-c>"')) { throw 'Ctrl+C binding missing' }
+          if (-not $src.Contains('def show_log_menu(')) { throw 'right-click menu missing' }
+          if (-not $src.Contains('bridge_post("/llm/chat"')) { throw 'PC Brain route regressed' }
+          if (-not $src.Contains('self.after(5000, self.poll_status)')) { throw 'Bridge polling regressed' }
+      - name: Build Windows Host
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexWindowsHost --collect-all requests Tools/VexWindowsHost-v11736.py
+      - name: Smoke test packaged Host
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path .\dist\VexWindowsHost\VexWindowsHost.exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexWindowsHost -PassThru
+          Start-Sleep -Seconds 7
+          $p.Refresh()
+          if ($p.HasExited) { throw "VexWindowsHost exited during startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexWindowsHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $pkg='Vex-v0.11.7.36-PC-Brain-Host-Clipboard'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+          Copy-Item dist\VexWindowsHost "$pkg\VexWindowsHost" -Recurse
+          @'
+          Vex v0.11.7.36 PC Brain Host Clipboard
+          =======================================
+          Replaces only the Windows Host. Keep v0.11.7.34 Bridge and Remote Support running.
+
+          Adds:
+          - Select transcript text and press Ctrl+C.
+          - Right-click selected transcript text and choose Copy.
+          - Copy reply button copies the latest Vex response.
+          - Keeps v0.11.7.35 PC Brain routing and automatic Bridge status polling.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.36-PC-Brain-Host-Clipboard.zip -Force
+          Expand-Archive Vex-v0.11.7.36-PC-Brain-Host-Clipboard.zip -DestinationPath verify -Force
+          if (!(Test-Path verify\VexWindowsHost\VexWindowsHost.exe)) { throw 'packaged host exe missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.36-PC-Brain-Host-Clipboard
+          path: Vex-v0.11.7.36-PC-Brain-Host-Clipboard.zip
+          retention-days: 14
