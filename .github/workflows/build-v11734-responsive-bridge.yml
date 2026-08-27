@@ -1,0 +1,87 @@
+name: Build Vex v0.11.7.34 Responsive Bridge
+
+on:
+  push:
+    branches: [ "ci/v11731-windows-vex-host" ]
+    paths:
+      - "Tools/apply_v11734_bridge_responsive_boot.py"
+      - ".github/workflows/build-v11734-responsive-bridge.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-responsive-bridge:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build proven Bridge source chain
+        shell: pwsh
+        run: |
+          python Tools/build_v11728_chain.py
+          python Tools/apply_v11729_windows_defender_safe.py
+          python Tools/apply_v11729_bridge_onedir_hotfix.py
+          python Tools/apply_v11734_bridge_responsive_boot.py
+      - name: Verify responsive bootstrap source
+        shell: pwsh
+        run: |
+          python -m py_compile Bridge/vex_bridge.py Tools/apply_v11734_bridge_responsive_boot.py
+          $src = Get-Content Bridge/vex_bridge.py -Raw
+          if (-not $src.Contains('start_initial_reindex(state)')) { throw 'nonblocking initial index call missing' }
+          if (-not $src.Contains('VexBridgeInitialIndex')) { throw 'initial index worker marker missing' }
+          if (-not $src.Contains('"indexing": bool(getattr(STATE, "indexing", False))')) { throw 'indexing health marker missing' }
+          if (-not $src.Contains('"version": "0.11.7.34"')) { throw 'v0.11.7.34 marker missing' }
+      - name: Build Bridge onedir runtime
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
+      - name: Smoke test Bridge health while bootstrap is live
+        shell: pwsh
+        run: |
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $exe = Resolve-Path .\dist\VexBridge\VexBridge.exe
+          $p = Start-Process -FilePath $exe -WorkingDirectory .\dist\VexBridge -PassThru
+          Start-Sleep -Seconds 4
+          $p.Refresh()
+          if ($p.HasExited) { throw "Bridge exited during startup with code $($p.ExitCode)" }
+          python -c "import json,os,time,requests,pathlib; requests.packages.urllib3.disable_warnings(); c=pathlib.Path(os.environ['APPDATA'])/'VexBridge'/'config.json'; deadline=time.time()+20; ok=False; last='';
+while time.time()<deadline:
+  try:
+    cfg=json.loads(c.read_text(encoding='utf-8')); r=requests.get('https://127.0.0.1:%s/status'%cfg.get('port',8765),params={'token':cfg['token']},verify=False,timeout=2); last=r.text; ok=(r.status_code==200 and isinstance(r.json(),dict));
+    if ok: break
+  except Exception as e: last=type(e).__name__
+  time.sleep(1)
+assert ok, 'Bridge health did not answer during bootstrap: '+str(last)"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+      - name: Stage Bridge hotfix
+        shell: pwsh
+        run: |
+          $pkg='Vex-v0.11.7.34-Responsive-Bridge-Hotfix'
+          New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+          Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
+          Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
+          @'
+          Vex v0.11.7.34 Responsive Bridge Hotfix
+          =======================================
+          Field fix for a Bridge process that remains alive but does not answer health/status while bootstrap/indexing is busy.
+
+          This build starts the Bridge listener first and moves the initial file index into a background worker. /status remains responsive and reports indexing state while the index is being built.
+
+          Replace the existing VexBridge.exe and VexBridgeRuntime together while Bridge is stopped. Keep the existing %APPDATA%\VexBridge config so pairing/token settings remain unchanged.
+          '@ | Set-Content -Encoding UTF8 "$pkg\README.txt"
+          Compress-Archive -Path "$pkg\*" -DestinationPath Vex-v0.11.7.34-Responsive-Bridge-Hotfix.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-v0.11.7.34-Responsive-Bridge-Hotfix
+          path: Vex-v0.11.7.34-Responsive-Bridge-Hotfix.zip
+          retention-days: 14
