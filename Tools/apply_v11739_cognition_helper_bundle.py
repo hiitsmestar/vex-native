@@ -56,7 +56,10 @@ def _cognition_model_rank(name: str, max_billions: float) -> tuple:
 if helpers:
     text = text[:choose_at] + helpers + text[choose_at:]
 
-text = text.replace('"version": "0.11.7.38"', '"version": "0.11.7.39"', 1)
+# Normalize all live Bridge status/version literals from the two preceding
+# field-hotfix layers so packaged local-control identity reports .39 too.
+text = text.replace('"version": "0.11.7.38"', '"version": "0.11.7.39"')
+text = text.replace('"version": "0.11.7.37"', '"version": "0.11.7.39"')
 PATH.write_text(text, encoding="utf-8")
 compile(text, str(PATH), "exec")
 
