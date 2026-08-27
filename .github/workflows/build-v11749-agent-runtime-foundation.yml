@@ -83,7 +83,10 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexBridge --collect-all requests --collect-all bs4 --collect-all pypdf --collect-all cryptography Bridge/vex_bridge.py
-          pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexMemoryWorker --hidden-import sqlite3 Tools/VexMemoryWorker.py
+          # Memory is deliberately onedir too. It is copied beside Bridge and reuses the
+          # same VexBridgeRuntime directory, avoiding nested one-file extraction/Defender
+          # startup failures while keeping the installed folder layout unchanged.
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed --name VexMemoryWorker --hidden-import sqlite3 Tools/VexMemoryWorker.py
           pyinstaller --noconfirm --clean --onefile --noupx --console --name VexDoctor --collect-all requests --hidden-import sqlite3 Tools/VexDoctor.py
           pyinstaller --noconfirm --clean --onefile --noupx --windowed --name VexToolbox --hidden-import tkinter Tools/VexToolbox.py
           pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --collect-all requests Tools/VexRemoteSupport.py
@@ -93,7 +96,7 @@ jobs:
 
           foreach ($file in @(
             'dist\VexBridge\VexBridge.exe',
-            'dist\VexMemoryWorker.exe',
+            'dist\VexMemoryWorker\VexMemoryWorker.exe',
             'dist\VexDoctor.exe',
             'dist\VexToolbox.exe',
             'dist\VexRemoteSupport\VexRemoteSupport.exe',
@@ -104,8 +107,10 @@ jobs:
             if (!(Test-Path $file)) { throw "built component missing: $file" }
           }
 
-          # Bridge auto-discovers the local-only memory worker beside its own exe.
-          Copy-Item dist\VexMemoryWorker.exe dist\VexBridge\VexMemoryWorker.exe -Force
+          # The Memory Worker was built against the same Python/PyInstaller runtime
+          # shape as Bridge. Put only its small launcher beside Bridge; it consumes the
+          # already-present VexBridgeRuntime folder there.
+          Copy-Item dist\VexMemoryWorker\VexMemoryWorker.exe dist\VexBridge\VexMemoryWorker.exe -Force
 
       - name: Smoke test persistent memory worker
         shell: pwsh
@@ -113,8 +118,8 @@ jobs:
           $env:APPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemorySmoke\Roaming'
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'VexAgentMemorySmoke\Local'
           New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
-          $worker = Resolve-Path .\dist\VexMemoryWorker.exe
-          $p = Start-Process -FilePath $worker -ArgumentList '--serve','--port','8786' -PassThru
+          $worker = Resolve-Path .\dist\VexMemoryWorker\VexMemoryWorker.exe
+          $p = Start-Process -FilePath $worker -WorkingDirectory .\dist\VexMemoryWorker -ArgumentList '--serve','--port','8786' -PassThru
           try {
             @'
           import json, time, urllib.request
@@ -149,7 +154,7 @@ jobs:
           $p = Start-Process -FilePath $bridge -WorkingDirectory .\dist\VexBridge -PassThru
           try {
             @'
-          import json, os, time, urllib.parse, urllib.request
+          import json, os, time, urllib.error, urllib.parse, urllib.request
           from pathlib import Path
 
           config_path = Path(os.environ['APPDATA']) / 'VexBridge' / 'config.json'
@@ -169,6 +174,17 @@ jobs:
                   try:
                       with opener.open(url, timeout=timeout) as r:
                           return json.loads(r.read().decode('utf-8'))
+                  except urllib.error.HTTPError as exc:
+                      # A real Bridge HTTP response is authoritative. Preserve its JSON
+                      # error instead of walking on to dead ports and masking the cause.
+                      try:
+                          body = json.loads(exc.read().decode('utf-8'))
+                      except Exception:
+                          body = {'ok': False, 'error': f'HTTP {exc.code}'}
+                      if isinstance(body, dict):
+                          body['http_status'] = exc.code
+                          return body
+                      return {'ok': False, 'error': f'HTTP {exc.code}', 'http_status': exc.code}
                   except Exception as exc:
                       err = exc
               raise RuntimeError(f'{path}: {err}')
@@ -246,7 +262,7 @@ jobs:
 
           Copy-Item dist\VexBridge\VexBridge.exe "$pkg\VexBridge.exe"
           Copy-Item dist\VexBridge\VexBridgeRuntime "$pkg\VexBridgeRuntime" -Recurse
-          Copy-Item dist\VexMemoryWorker.exe "$pkg\VexMemoryWorker.exe"
+          Copy-Item dist\VexMemoryWorker\VexMemoryWorker.exe "$pkg\VexMemoryWorker.exe"
           Copy-Item dist\VexDoctor.exe "$pkg\VexDoctor.exe"
           Copy-Item dist\VexToolbox.exe "$pkg\VexToolbox.exe"
           Copy-Item dist\VexRemoteSupport "$pkg\VexRemoteSupportRuntime" -Recurse
@@ -276,6 +292,7 @@ jobs:
           v0.11.7.49 foundation fix
           -------------------------
           - Moves the memory worker from loopback 8766 to 8786. The unified Bridge local-control listener owns the 8766-8777 ring, so the old fixed memory port could prevent persistent memory from ever starting.
+          - Packages the Memory Worker as an onedir companion that reuses VexBridgeRuntime instead of a nested self-extracting one-file child.
           - Restores companion executables omitted by the later Bridge-only cognition-helper bundle.
           - CI must prove Bridge status, persistent-memory health, and adaptive-worker startup before this artifact is published.
           - Existing local tokens, certificate, folder permissions, private profile data and memory stay local and are not in this artifact.
