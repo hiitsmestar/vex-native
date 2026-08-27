@@ -223,11 +223,11 @@ private enum PCCognitionOverlay {
         }
     }
 
-    private static func failure(_ endpoint: ConfiguredEndpoint, _ reason: String) -> CognitionResult {
+    nonisolated private static func failure(_ endpoint: ConfiguredEndpoint, _ reason: String) -> CognitionResult {
         .failure(CognitionFailure(label: endpoint.label, reason: reason))
     }
 
-    private static func httpFailure(status: Int, data: Data) -> String {
+    nonisolated private static func httpFailure(status: Int, data: Data) -> String {
         let bridgeMessage = decodeBridgeMessage(data)
         switch status {
         case 401:
@@ -252,14 +252,14 @@ private enum PCCognitionOverlay {
         }
     }
 
-    private static func decodeBridgeMessage(_ data: Data) -> String? {
+    nonisolated private static func decodeBridgeMessage(_ data: Data) -> String? {
         guard !data.isEmpty,
               let decoded = try? JSONDecoder().decode(BridgeErrorReply.self, from: data)
         else { return nil }
         return sanitizedBridgeMessage(decoded.error) ?? sanitizedBridgeMessage(decoded.setup)
     }
 
-    private static func sanitizedBridgeMessage(_ raw: String?) -> String? {
+    nonisolated private static func sanitizedBridgeMessage(_ raw: String?) -> String? {
         guard var value = raw else { return nil }
         value = value
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -270,7 +270,7 @@ private enum PCCognitionOverlay {
         return String(value.prefix(120))
     }
 
-    private static func networkFailure(_ error: Error) -> String {
+    nonisolated private static func networkFailure(_ error: Error) -> String {
         if let bridgeError = error as? VexBridgeNetworkingError {
             switch bridgeError {
             case .missingCertificatePin:
@@ -300,7 +300,7 @@ private enum PCCognitionOverlay {
         return "network error"
     }
 
-    private static func failureSummary(_ failures: [CognitionFailure], endpointCount: Int) -> String {
+    nonisolated private static func failureSummary(_ failures: [CognitionFailure], endpointCount: Int) -> String {
         guard !failures.isEmpty else {
             return endpointCount <= 0 ? "no paired Bridge endpoint" : "no endpoint returned a result"
         }

@@ -22,6 +22,7 @@ exclusions = overlay[exclusion_start:exclusion_end]
 
 checks = [
     ("diagnostic result enum", "private enum CognitionResult: Sendable" in overlay),
+    ("nonisolated worker helpers", "nonisolated private static func networkFailure" in overlay and "nonisolated private static func httpFailure" in overlay),
     ("sanitized HTTP status diagnostics", "httpFailure(status: http.statusCode, data: data)" in overlay),
     ("token rejection diagnostic", "bridge token rejected" in overlay),
     ("route missing diagnostic", '"/llm/chat route missing"' in overlay),
