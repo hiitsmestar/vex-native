@@ -21,6 +21,7 @@ replacements = {
         '        "Tools/apply_v11752_variant_state_hotfix.py",\n'
         '        "Tools/apply_v11753_autonomous_learning_supervisor.py",\n'
         '        "Tools/apply_v11754_windows_native_autolearn_remote_v2.py",\n'
+        '        "Tools/apply_v11754_installer_self_home_hotfix.py",\n'
     ),
     '\'"agent_runtime_bundle": "0.11.7.49"\'': '\'"agent_runtime_bundle": "0.11.7.54"\'',
     'Install-Vex-Agent-Runtime-v0.11.7.49': 'Install-Vex-Agent-Runtime-v0.11.7.54',
