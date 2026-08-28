@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path.cwd()
 SAVE = "Remember this test fact: my imaginary fox is named Mica"
 CORRECT = "Correction: my imaginary fox is named Nyx, not Mica. Replace the old fact and remember Nyx as the current name."
-RECALL = "Recall the current name of my imaginary fox."
+RECALL = "What is my imaginary fox's current name?"
 OLD = "my imaginary fox is named Mica"
 NEW = "my imaginary fox is named Nyx"
 
@@ -127,14 +127,14 @@ def main():
         texts = [str(x.get("text") or "").strip() for x in found.get("memories", []) if isinstance(x, dict)]
         if NEW not in texts or OLD in texts:
             raise RuntimeError(f"newest-correction memory regression: {texts}")
-        # Use the deterministic verified-memory recall wording already guaranteed by
-        # v0.11.7.52. GitHub runners intentionally have no local Ollama model; natural
-        # synthesis wording is field-tested on the real PC rather than faking a model in CI.
+        # Exercise the real v0.11.7.52 deterministic factual-memory classifier:
+        # "what" + "my" + factual cue "name". This is the same natural question
+        # used in field testing and does not require a local Ollama model on CI.
         recall = post_json(chat, {"message": RECALL, "history": []}, timeout=12)
         reply = str(recall.get("reply") or "")
-        if "Nyx" not in reply or "Mica" in reply:
+        if recall.get("ok") is not True or "Nyx" not in reply or "Mica" in reply:
             raise RuntimeError(f"fresh recall regression: {recall}")
-        print("[v11753-memory] PASS .51 write + .52 correction + deterministic Nyx recall under .53", flush=True)
+        print("[v11753-memory] PASS .51 write + .52 correction + natural Nyx recall under .53", flush=True)
     finally:
         stop(bp)
         try:
