@@ -10,7 +10,8 @@ memory = MEMORY.read_text(encoding="utf-8")
 
 # v0.11.7.52 recall hotfix:
 # 1) expose the authoritative MemoryWorker /facts route the Bridge recall code expects;
-# 2) restore direct factual personal-question classification that v0.11.7.2 narrowed too far.
+# 2) restore direct factual personal-question classification that v0.11.7.2 narrowed too far;
+# 3) restore the reply-variant globals used by the natural verified-memory formatter.
 
 facts_method = r'''
     def facts(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
@@ -68,6 +69,22 @@ if 'if path == "/facts":' not in memory:
     if route_anchor not in memory:
         raise SystemExit("v0.11.7.52 recall hotfix MemoryWorker facts-route anchor missing")
     memory = memory.replace(route_anchor, facts_route + route_anchor, 1)
+
+# v0.11.7.3's natural verified-memory formatter calls _next_memory_reply_variant().
+# Some later patch-chain replacements retained that function but dropped its module-level
+# lock/counter declarations. Restore them without touching formatter semantics.
+if "_MEMORY_REPLY_VARIANT_LOCK = threading.Lock()" not in bridge:
+    variant_anchor = "def _next_memory_reply_variant() -> int:\n"
+    if variant_anchor not in bridge:
+        raise SystemExit("v0.11.7.52 recall hotfix reply-variant function missing")
+    bridge = bridge.replace(
+        variant_anchor,
+        "_MEMORY_REPLY_VARIANT_LOCK = threading.Lock()\n_MEMORY_REPLY_VARIANT = 0\n\n\n" + variant_anchor,
+        1,
+    )
+elif "_MEMORY_REPLY_VARIANT = 0" not in bridge:
+    lock_anchor = "_MEMORY_REPLY_VARIANT_LOCK = threading.Lock()\n"
+    bridge = bridge.replace(lock_anchor, lock_anchor + "_MEMORY_REPLY_VARIANT = 0\n", 1)
 
 classifier_start = bridge.find("def _personal_memory_fact_question(message: str) -> bool:")
 classifier_end = bridge.find("\n\ndef ", classifier_start + 5)
@@ -132,6 +149,8 @@ for marker in [
     '" named "',
     'if _explicit_memory_correction_value(message) is not None:',
     'if _explicit_memory_write_value(message) is not None:',
+    "_MEMORY_REPLY_VARIANT_LOCK = threading.Lock()",
+    "_MEMORY_REPLY_VARIANT = 0",
 ]:
     if marker not in bridge:
         raise SystemExit(f"v0.11.7.52 recall Bridge marker missing: {marker}")
