@@ -1,0 +1,47 @@
+name: Build Vex Agent Runtime v0.11.7.53 Autonomous Learning
+
+on:
+  push:
+    branches: [ "feat/vex-agent-runtime-windows-v1" ]
+    paths:
+      - "Tools/apply_v11753_autonomous_learning_supervisor.py"
+      - "Tools/ci_v11753_autonomous_learning.py"
+      - "Tools/test_v11753_autonomous_learning_supervisor.py"
+      - "Tools/test_v11753_memory_regression.py"
+      - ".github/workflows/build-v11753-autonomous-learning.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v11753-autonomous-learning:
+    runs-on: windows-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build and prove production Agent Runtime
+        run: python Tools/ci_v11753_autonomous_learning.py
+
+      - name: Prove autonomous learning and privacy boundaries
+        run: python Tools/test_v11753_autonomous_learning_supervisor.py
+
+      - name: Prove field memory write correction and recall survived
+        run: python Tools/test_v11753_memory_regression.py
+
+      - name: Upload proven v0.11.7.53 autonomous-learning runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.53-AutonomousLearning
+          path: Vex-Agent-Runtime-v0.11.7.53-AutonomousLearning.zip
+          if-no-files-found: error
+          retention-days: 14
