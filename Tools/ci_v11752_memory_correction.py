@@ -10,7 +10,7 @@ source = source_path.read_text(encoding="utf-8")
 # only the narrow newest-correction-wins layer.
 replacements = {
     'PKG_NAME = "Vex-Agent-Runtime-v0.11.7.49-Greenline"': 'PKG_NAME = "Vex-Agent-Runtime-v0.11.7.52-MemoryCorrection"',
-    '        "Tools/apply_v11749_agent_runtime_foundation.py",\n': '        "Tools/apply_v11749_agent_runtime_foundation.py",\n        "Tools/apply_v11750_windows_locale_hotfix.py",\n        "Tools/apply_v11751_explicit_memory_write.py",\n        "Tools/apply_v11752_memory_correction.py",\n',
+    '        "Tools/apply_v11749_agent_runtime_foundation.py",\n': '        "Tools/apply_v11749_agent_runtime_foundation.py",\n        "Tools/apply_v11750_windows_locale_hotfix.py",\n        "Tools/apply_v11751_explicit_memory_write.py",\n        "Tools/apply_v11752_memory_correction.py",\n        "Tools/apply_v11752_explicit_key_hotfix.py",\n',
     '\'"agent_runtime_bundle": "0.11.7.49"\'': '\'"agent_runtime_bundle": "0.11.7.52"\'',
     'Install-Vex-Agent-Runtime-v0.11.7.49': 'Install-Vex-Agent-Runtime-v0.11.7.52',
 }
