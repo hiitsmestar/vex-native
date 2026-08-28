@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json, os, shutil, subprocess, tempfile, time, urllib.parse, urllib.request
+import json, os, shutil, subprocess, tempfile, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path.cwd()
@@ -15,7 +15,12 @@ def get_json(url, timeout=3):
     with opener().open(url, timeout=timeout) as r: return json.loads(r.read().decode("utf-8"))
 def post_json(url, payload, timeout=8):
     req=urllib.request.Request(url,data=json.dumps(payload).encode(),headers={"Content-Type":"application/json"},method="POST")
-    with opener().open(req,timeout=timeout) as r: return json.loads(r.read().decode("utf-8"))
+    try:
+        with opener().open(req,timeout=timeout) as r: return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try: body=e.read().decode("utf-8","replace")
+        except Exception: body="<unreadable>"
+        raise RuntimeError(f"HTTP {e.code} from {url}: {body}") from e
 def wait_json(url,predicate,seconds,label):
     deadline=time.time()+seconds; last=None
     while time.time()<deadline:
@@ -68,6 +73,7 @@ def main():
         if NEW not in texts: raise RuntimeError(f"Nyx missing: {texts}")
         if OLD in texts: raise RuntimeError(f"stale Mica still active: {texts}")
         recall=post_json(chat,{"message":"What is my imaginary fox named?","history":[]},timeout=12)
+        print(json.dumps(recall,ensure_ascii=True),flush=True)
         reply=str(recall.get("reply") or "")
         if "Nyx" not in reply or "Mica" in reply: raise RuntimeError(f"fresh recall did not prefer correction: {recall}")
         print("[v11752-test] PASS Mica -> correction -> Nyx only -> fresh recall Nyx",flush=True)
