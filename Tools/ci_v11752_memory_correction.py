@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# v0.11.7.52 CI rerun: includes verified-memory reply-variant state recovery.
+# v0.11.7.52 CI rerun: includes final verified-memory reply-variant state recovery.
 source_path = Path("Tools/ci_v11749_greenline.py")
 source = source_path.read_text(encoding="utf-8")
 
@@ -11,7 +11,7 @@ source = source_path.read_text(encoding="utf-8")
 # only the narrow newest-correction-wins + authoritative recall layers.
 replacements = {
     'PKG_NAME = "Vex-Agent-Runtime-v0.11.7.49-Greenline"': 'PKG_NAME = "Vex-Agent-Runtime-v0.11.7.52-MemoryCorrection"',
-    '        "Tools/apply_v11749_agent_runtime_foundation.py",\n': '        "Tools/apply_v11749_agent_runtime_foundation.py",\n        "Tools/apply_v11750_windows_locale_hotfix.py",\n        "Tools/apply_v11751_explicit_memory_write.py",\n        "Tools/apply_v11752_memory_correction.py",\n        "Tools/apply_v11752_explicit_key_hotfix.py",\n        "Tools/apply_v11752_recall_hotfix.py",\n',
+    '        "Tools/apply_v11749_agent_runtime_foundation.py",\n': '        "Tools/apply_v11749_agent_runtime_foundation.py",\n        "Tools/apply_v11750_windows_locale_hotfix.py",\n        "Tools/apply_v11751_explicit_memory_write.py",\n        "Tools/apply_v11752_memory_correction.py",\n        "Tools/apply_v11752_explicit_key_hotfix.py",\n        "Tools/apply_v11752_recall_hotfix.py",\n        "Tools/apply_v11752_variant_state_hotfix.py",\n',
     '\'"agent_runtime_bundle": "0.11.7.49"\'': '\'"agent_runtime_bundle": "0.11.7.52"\'',
     'Install-Vex-Agent-Runtime-v0.11.7.49': 'Install-Vex-Agent-Runtime-v0.11.7.52',
 }
