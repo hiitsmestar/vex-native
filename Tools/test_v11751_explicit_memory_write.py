@@ -32,6 +32,10 @@ def post_json(url: str, payload: dict, timeout: float = 5.0) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def safe_text(value) -> str:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True)
+
+
 def wait_json(url: str, predicate, seconds: float, label: str) -> dict:
     deadline = time.time() + seconds
     last = None
@@ -39,7 +43,7 @@ def wait_json(url: str, predicate, seconds: float, label: str) -> dict:
         try:
             value = get_json(url, 2.5)
             if predicate(value):
-                print(f"[v11751-test] {label}: {value}", flush=True)
+                print(f"[v11751-test] {label}: {safe_text(value)}", flush=True)
                 return value
             last = value
         except Exception as exc:
@@ -143,11 +147,11 @@ def main() -> None:
 
         chat_url = f"http://127.0.0.1:{port}/llm/chat?{query}"
         result = post_json(chat_url, {"message": PHRASE, "history": []}, timeout=12)
-        print(f"[v11751-test] write reply: {result}", flush=True)
+        print(f"[v11751-test] write reply: {safe_text(result)}", flush=True)
         if result.get("memory_write") is not True:
-            raise RuntimeError(f"explicit write was not verified: {result}")
+            raise RuntimeError(f"explicit write was not verified: {safe_text(result)}")
         if result.get("grounding") != "explicit-personal-memory-write-v11751":
-            raise RuntimeError(f"explicit write fell into the wrong router: {result}")
+            raise RuntimeError(f"explicit write fell into the wrong router: {safe_text(result)}")
 
         recalled = post_json(
             "http://127.0.0.1:8806/search",
@@ -157,7 +161,7 @@ def main() -> None:
         memories = recalled.get("memories") if isinstance(recalled.get("memories"), list) else []
         exact = any(str(item.get("text") or "").strip().casefold() == EXPECTED.casefold() for item in memories if isinstance(item, dict))
         if not exact:
-            raise RuntimeError(f"written phrase did not read back from persistent memory: {recalled}")
+            raise RuntimeError(f"written phrase did not read back from persistent memory: {safe_text(recalled)}")
         print("[v11751-test] PASS explicit remember -> trusted write -> readback", flush=True)
     finally:
         stop_pid(bridge_pid)
