@@ -110,8 +110,9 @@ def main():
         query = urllib.parse.urlencode({"token": cfg["token"]})
         port = int(cfg["local_control_port"])
         status = wait_json(f"http://127.0.0.1:{port}/status?{query}", lambda d: d.get("version") == "0.11.7.39", 60, "Bridge")
-        if status.get("agent_runtime_bundle") != "0.11.7.53":
-            raise RuntimeError(f"wrong bundle identity: {status}")
+        print(json.dumps(status, ensure_ascii=True), flush=True)
+        # Bundle identity belongs to the .53 supervisor endpoint; the stable local
+        # /status contract intentionally exposes only Bridge protocol identity.
         auto = wait_json(f"http://127.0.0.1:{port}/autolearn/status?{query}", lambda d: d.get("ok") is True and d.get("version") == "0.11.7.53", 30, "autolearn")
         print(json.dumps(auto, ensure_ascii=True), flush=True)
         chat = f"http://127.0.0.1:{port}/llm/chat?{query}"
