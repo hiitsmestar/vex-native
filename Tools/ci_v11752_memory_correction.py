@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# v0.11.7.52 CI rerun: includes verified-memory reply-variant state recovery.
 source_path = Path("Tools/ci_v11749_greenline.py")
 source = source_path.read_text(encoding="utf-8")
 
