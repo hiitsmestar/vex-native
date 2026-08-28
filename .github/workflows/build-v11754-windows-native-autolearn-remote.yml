@@ -5,8 +5,11 @@ on:
     branches: [ "feat/vex-agent-runtime-windows-v1" ]
     paths:
       - "Tools/apply_v11754_windows_native_autolearn_remote.py"
+      - "Tools/apply_v11754_windows_native_autolearn_remote_v2.py"
+      - "Tools/apply_v11754_installer_self_home_hotfix.py"
       - "Tools/ci_v11754_windows_native_autolearn_remote.py"
       - "Tools/test_v11754_windows_native_autolearn_remote.py"
+      - "Tools/test_v11754_installer_self_home_hotfix.py"
       - "Tools/test_v11754_memory_regression.py"
       - ".github/workflows/build-v11754-windows-native-autolearn-remote.yml"
   workflow_dispatch:
@@ -34,6 +37,9 @@ jobs:
 
       - name: Prove Windows-native and public-relay privacy boundaries
         run: python Tools/test_v11754_windows_native_autolearn_remote.py
+
+      - name: Prove installer excludes its own extracted package
+        run: python Tools/test_v11754_installer_self_home_hotfix.py
 
       - name: Prove field memory write correction and recall survived
         run: python Tools/test_v11754_memory_regression.py
