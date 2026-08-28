@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
@@ -18,9 +19,6 @@ if 'BUNDLE_VERSION = "0.11.7.50"' not in installer:
 if "def _memory_post(" not in bridge or "def _memory_record_turn(" not in bridge:
     raise SystemExit("v0.11.7.51 persistent-memory helpers missing")
 
-# Explicit write intent must be handled before authoritative recall.  A command
-# such as "remember this ..." is not a question about the past; it is a request
-# to create a trusted user-authored memory.
 classifier_anchor = "def _personal_memory_fact_question(message: str) -> bool:\n"
 helpers = r'''def _explicit_memory_write_value(message: str) -> str | None:
     raw = re.sub(r"\s+", " ", str(message or "").replace("’", "'")).strip()
@@ -28,7 +26,6 @@ helpers = r'''def _explicit_memory_write_value(message: str) -> str | None:
         return None
     low = raw.lower()
 
-    # Preserve genuine recall questions such as "remember when...?".
     recall_prefixes = (
         "do you remember", "can you remember", "could you remember",
         "remember when", "remember what", "remember where", "remember who",
@@ -48,14 +45,9 @@ helpers = r'''def _explicit_memory_write_value(message: str) -> str | None:
     if remainder is None:
         return None
 
-    # A trailing question mark without an explicit value separator is much more
-    # likely a recall request than an instruction to store new information.
     if raw.endswith("?") and ":" not in remainder:
         return None
 
-    # For explicit labelled forms, the value after ':' is authoritative.  This
-    # handles the field regression exactly:
-    # "Remember this exact test phrase for me: violet raccoon 731."
     if ":" in remainder:
         tail = remainder.split(":", 1)[1].strip()
         if tail:
@@ -102,8 +94,6 @@ def _explicit_memory_store(value: str) -> bool:
     if not isinstance(result, dict):
         return False
 
-    # Verify the just-written value through the same retrieval service used by
-    # conversation recall; never acknowledge a save that cannot be read back.
     check = _memory_post(
         "/search",
         {"query": text_value, "memory_limit": 16, "episode_limit": 0},
@@ -111,7 +101,11 @@ def _explicit_memory_store(value: str) -> bool:
     )
     memories = check.get("memories") if isinstance(check, dict) and isinstance(check.get("memories"), list) else []
     expected = text_value.casefold()
-    return any(str(item.get("text") or "").strip().casefold() == expected for item in memories if isinstance(item, dict))
+    return any(
+        str(item.get("text") or "").strip().casefold() == expected
+        for item in memories
+        if isinstance(item, dict)
+    )
 
 
 '''
@@ -120,7 +114,6 @@ if "def _explicit_memory_write_value(message: str) -> str | None:" not in bridge
         raise SystemExit("v0.11.7.51 personal-memory recall classifier anchor missing")
     bridge = bridge.replace(classifier_anchor, helpers + classifier_anchor, 1)
 
-# Never let an explicit write command fall through into the verified-recall gate.
 classifier_guard = '''def _personal_memory_fact_question(message: str) -> bool:\n'''
 classifier_guarded = '''def _personal_memory_fact_question(message: str) -> bool:\n    if _explicit_memory_write_value(message) is not None:\n        return False\n'''
 if classifier_guarded not in bridge:
@@ -128,22 +121,55 @@ if classifier_guarded not in bridge:
         raise SystemExit("v0.11.7.51 recall classifier definition missing")
     bridge = bridge.replace(classifier_guard, classifier_guarded, 1)
 
-# Insert the deterministic write route immediately after /llm/chat extracts the
-# user's message.  It therefore runs before verified recall and before Ollama.
-chat_at = bridge.find('if parsed.path == "/llm/chat":')
-if chat_at < 0:
+# Insert the explicit write route at the same structurally-safe point used by the
+# existing verified-recall route: after message/history payload validation and
+# before recall/Ollama. This avoids landing inside the route's preceding try block.
+start = bridge.find('        if parsed.path == "/llm/chat":')
+if start < 0:
     raise SystemExit("v0.11.7.51 /llm/chat route missing")
-message_anchor = '                message = str(payload.get("message") or "").strip()\n'
-message_at = bridge.find(message_anchor, chat_at)
-if message_at < 0:
-    raise SystemExit("v0.11.7.51 cognition message extraction anchor missing")
-insert_at = message_at + len(message_anchor)
-write_route = '''                explicit_memory = _explicit_memory_write_value(message)\n                if explicit_memory is not None:\n                    stored = _explicit_memory_store(explicit_memory)\n                    if stored:\n                        shown = explicit_memory[:240]\n                        reply = f'Got it, baby - I will remember "{shown}". 🖤'\n                        grounding = "explicit-personal-memory-write-v11751"\n                    else:\n                        reply = "Baby, I understood that as something you wanted me to remember, but the persistent memory write did not verify, so I am not going to pretend I saved it. 🖤"\n                        grounding = "explicit-personal-memory-write-failed-v11751"\n                    _memory_record_turn(message, reply)\n                    self._json(200, {\n                        "ok": True,\n                        "reply": reply,\n                        "model": "pc-memory",\n                        "grounding": grounding,\n                        "memory": "persistent-pc",\n                        "memory_write": bool(stored),\n                    })\n                    return\n'''
-if '"grounding": grounding' not in bridge[chat_at:chat_at + 16000]:
-    bridge = bridge[:insert_at] + write_route + bridge[insert_at:]
+end = bridge.find('        if parsed.path == "/tts/speak":', start)
+if end < 0:
+    raise SystemExit("v0.11.7.51 /llm/chat end marker missing")
+block = bridge[start:end]
 
-# Package identity only: preserve Bridge 0.11.7.39 so the working iPhone pairing
-# and protocol detection remain unchanged.
+if '"explicit-personal-memory-write-v11751"' not in block:
+    pattern = re.compile(
+        r'(\n\s*if not message or not isinstance\(history, list\):\n'
+        r'\s*self\._json\(400, \{"ok": False, "error": "invalid cognition payload"\}\)\n'
+        r'\s*return\n)',
+        re.M,
+    )
+    match = pattern.search(block)
+    if not match:
+        raise SystemExit("v0.11.7.51 cognition payload validation anchor missing")
+
+    write_route = r'''
+                # v0.11.7.51: explicit remember/save/store is a trusted WRITE,
+                # not a question asking verified memory for an existing fact.
+                explicit_memory = _explicit_memory_write_value(message)
+                if explicit_memory is not None:
+                    stored = _explicit_memory_store(explicit_memory)
+                    if stored:
+                        shown = explicit_memory[:240]
+                        reply = f'Got it, baby - I will remember "{shown}". 🖤'
+                        grounding = "explicit-personal-memory-write-v11751"
+                    else:
+                        reply = "Baby, I understood that as something you wanted me to remember, but the persistent memory write did not verify, so I am not going to pretend I saved it. 🖤"
+                        grounding = "explicit-personal-memory-write-failed-v11751"
+                    _memory_record_turn(message, reply)
+                    self._json(200, {
+                        "ok": True,
+                        "reply": reply,
+                        "model": "pc-memory",
+                        "grounding": grounding,
+                        "memory": "persistent-pc",
+                        "memory_write": bool(stored),
+                    })
+                    return
+'''
+    block = block[:match.end()] + write_route + block[match.end():]
+    bridge = bridge[:start] + block + bridge[end:]
+
 bridge = bridge.replace('"agent_runtime_bundle": "0.11.7.50"', '"agent_runtime_bundle": "0.11.7.51"', 1)
 installer = installer.replace('BUNDLE_VERSION = "0.11.7.50"', 'BUNDLE_VERSION = "0.11.7.51"', 1)
 installer = installer.replace("Vex Agent Runtime v0.11.7.50 installed.", "Vex Agent Runtime v0.11.7.51 installed.", 1)
@@ -153,17 +179,25 @@ INSTALLER.write_text(installer, encoding="utf-8")
 compile(bridge, str(BRIDGE), "exec")
 compile(installer, str(INSTALLER), "exec")
 
+final_start = bridge.find('        if parsed.path == "/llm/chat":')
+final_end = bridge.find('        if parsed.path == "/tts/speak":', final_start)
+final_block = bridge[final_start:final_end]
 for marker in [
     "def _explicit_memory_write_value(message: str) -> str | None:",
     "def _explicit_memory_store(value: str) -> bool:",
     "if _explicit_memory_write_value(message) is not None:",
-    '"explicit-personal-memory-write-v11751"',
-    '"memory_write": bool(stored)',
     '"agent_runtime_bundle": "0.11.7.51"',
     '"version": "0.11.7.39"',
 ]:
     if marker not in bridge:
         raise SystemExit(f"v0.11.7.51 Bridge marker missing: {marker}")
+for marker in [
+    'explicit_memory = _explicit_memory_write_value(message)',
+    '"explicit-personal-memory-write-v11751"',
+    '"memory_write": bool(stored)',
+]:
+    if marker not in final_block:
+        raise SystemExit(f"v0.11.7.51 cognition block marker missing: {marker}")
 if 'BUNDLE_VERSION = "0.11.7.51"' not in installer:
     raise SystemExit("v0.11.7.51 installer marker missing")
 
