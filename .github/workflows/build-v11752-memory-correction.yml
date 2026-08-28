@@ -7,6 +7,7 @@ on:
       - "Tools/apply_v11750_windows_locale_hotfix.py"
       - "Tools/apply_v11751_explicit_memory_write.py"
       - "Tools/apply_v11752_memory_correction.py"
+      - "Tools/apply_v11752_explicit_key_hotfix.py"
       - "Tools/ci_v11752_memory_correction.py"
       - "Tools/test_v11752_memory_correction.py"
       - ".github/workflows/build-v11752-memory-correction.yml"
