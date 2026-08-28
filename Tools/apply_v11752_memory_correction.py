@@ -30,8 +30,6 @@ helpers = r'''def _explicit_memory_correction_value(message: str) -> tuple[str, 
     if not match:
         return None
     body = match.group(1).strip()
-    # The first sentence carries the mutation.  Follow-on wording such as
-    # "Replace the old fact and remember ..." is instruction, not memory text.
     first = re.split(r"(?<=[.!?])\s+", body, maxsplit=1)[0].strip()
     pair = re.match(r"^(?P<new>.+?),\s*not\s+(?P<old>[^,.!?]+)[.!?]?$", first, flags=re.I)
     if not pair:
@@ -66,8 +64,6 @@ def _explicit_memory_replace(new_fact: str, old_value: str) -> tuple[bool, str |
             continue
         if str(item.get("kind") or "") != "explicit_user_memory":
             continue
-        if not str(item.get("source_type") or "").startswith("user-explicit"):
-            continue
         old_tokens = set(re.findall(r"[a-z0-9][a-z0-9_-]+", old_text.casefold()))
         overlap = len(new_tokens & old_tokens)
         candidates.append((overlap, float(item.get("updated_at") or 0.0), old_text))
@@ -76,30 +72,29 @@ def _explicit_memory_replace(new_fact: str, old_value: str) -> tuple[bool, str |
     candidates.sort(reverse=True)
     old_text = candidates[0][2]
 
-    # .51 used a hash of the exact explicit text as its canonical slot. Reusing
-    # that canonical key makes MemoryDB.upsert_memory UPDATE the existing row;
-    # the worker then refreshes FTS for the same id, so stale text stops winning.
-    digest = hashlib.sha256(old_text.encode("utf-8", "ignore")).hexdigest()[:20]
-    canonical_key = "explicit:star:" + digest
+    # .51 writes travel through /sync. MemoryWorker.sync_profile canonicalizes those
+    # rows as iphone-memory:<sha256(clean text)> and normalizes source_type. Reuse
+    # that exact canonical slot through /import (which preserves canonical_key) so
+    # MemoryDB updates the existing row instead of creating a competing Nyx row.
+    canonical_key = "iphone-memory:" + hashlib.sha256(old_text.encode("utf-8", "ignore")).hexdigest()
     now = time.time()
     result = _memory_post(
-        "/sync",
+        "/import",
         {
-            "profile": {
-                "memories": [{
-                    "canonical_key": canonical_key,
-                    "subject": "star",
-                    "kind": "explicit_user_memory",
-                    "text": new_text,
-                    "tags": ["explicit", "user-authored", "correction", "current"],
-                    "source_type": "user-explicit-correction",
-                    "source_ref": "vexnative-live",
-                    "authority": 100,
-                    "confidence": 1.0,
-                    "importance": 0.96,
-                    "updated_at": now,
-                }]
-            }
+            "memories": [{
+                "canonical_key": canonical_key,
+                "subject": "star",
+                "kind": "explicit_user_memory",
+                "text": new_text,
+                "tags": ["explicit", "user-authored", "correction", "current"],
+                "source_type": "user-explicit-correction",
+                "source_ref": "vexnative-live",
+                "authority": 100,
+                "confidence": 1.0,
+                "importance": 0.96,
+                "updated_at": now,
+            }],
+            "source": "user-explicit-correction",
         },
         timeout=4.0,
     )
@@ -161,7 +156,7 @@ if '"explicit-personal-memory-correction-v11752"' not in block:
     indent = block[line_start:pos]
     route_template = '''
 # v0.11.7.52: explicit corrections are mutations. Find the prior explicit fact,
-# reuse its canonical slot, and let MemoryDB newest-evidence semantics replace it.
+# reuse its .51 canonical slot, and let MemoryDB newest-evidence semantics replace it.
 correction = _explicit_memory_correction_value(message)
 if correction is not None:
     new_fact, old_value = correction
