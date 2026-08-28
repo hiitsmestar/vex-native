@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
@@ -121,9 +122,6 @@ if classifier_guarded not in bridge:
         raise SystemExit("v0.11.7.51 recall classifier definition missing")
     bridge = bridge.replace(classifier_guard, classifier_guarded, 1)
 
-# Insert the explicit write route at the same structurally-safe point used by the
-# existing verified-recall route: after message/history payload validation and
-# before recall/Ollama. This avoids landing inside the route's preceding try block.
 start = bridge.find('        if parsed.path == "/llm/chat":')
 if start < 0:
     raise SystemExit("v0.11.7.51 /llm/chat route missing")
@@ -134,39 +132,41 @@ block = bridge[start:end]
 
 if '"explicit-personal-memory-write-v11751"' not in block:
     pattern = re.compile(
-        r'(\n\s*if not message or not isinstance\(history, list\):\n'
-        r'\s*self\._json\(400, \{"ok": False, "error": "invalid cognition payload"\}\)\n'
-        r'\s*return\n)',
+        r'(\n(?P<indent>\s*)if not message or not isinstance\(history, list\):\n'
+        r'(?P=indent)\s*self\._json\(400, \{"ok": False, "error": "invalid cognition payload"\}\)\n'
+        r'(?P=indent)\s*return\n)',
         re.M,
     )
     match = pattern.search(block)
     if not match:
         raise SystemExit("v0.11.7.51 cognition payload validation anchor missing")
 
-    write_route = r'''
-                # v0.11.7.51: explicit remember/save/store is a trusted WRITE,
-                # not a question asking verified memory for an existing fact.
-                explicit_memory = _explicit_memory_write_value(message)
-                if explicit_memory is not None:
-                    stored = _explicit_memory_store(explicit_memory)
-                    if stored:
-                        shown = explicit_memory[:240]
-                        reply = f'Got it, baby - I will remember "{shown}". 🖤'
-                        grounding = "explicit-personal-memory-write-v11751"
-                    else:
-                        reply = "Baby, I understood that as something you wanted me to remember, but the persistent memory write did not verify, so I am not going to pretend I saved it. 🖤"
-                        grounding = "explicit-personal-memory-write-failed-v11751"
-                    _memory_record_turn(message, reply)
-                    self._json(200, {
-                        "ok": True,
-                        "reply": reply,
-                        "model": "pc-memory",
-                        "grounding": grounding,
-                        "memory": "persistent-pc",
-                        "memory_write": bool(stored),
-                    })
-                    return
+    indent = match.group("indent")
+    route_template = '''
+# v0.11.7.51: explicit remember/save/store is a trusted WRITE,
+# not a question asking verified memory for an existing fact.
+explicit_memory = _explicit_memory_write_value(message)
+if explicit_memory is not None:
+    stored = _explicit_memory_store(explicit_memory)
+    if stored:
+        shown = explicit_memory[:240]
+        reply = f'Got it, baby - I will remember "{shown}". 🖤'
+        grounding = "explicit-personal-memory-write-v11751"
+    else:
+        reply = "Baby, I understood that as something you wanted me to remember, but the persistent memory write did not verify, so I am not going to pretend I saved it. 🖤"
+        grounding = "explicit-personal-memory-write-failed-v11751"
+    _memory_record_turn(message, reply)
+    self._json(200, {
+        "ok": True,
+        "reply": reply,
+        "model": "pc-memory",
+        "grounding": grounding,
+        "memory": "persistent-pc",
+        "memory_write": bool(stored),
+    })
+    return
 '''
+    write_route = textwrap.indent(textwrap.dedent(route_template).lstrip("\n"), indent)
     block = block[:match.end()] + write_route + block[match.end():]
     bridge = bridge[:start] + block + bridge[end:]
 
