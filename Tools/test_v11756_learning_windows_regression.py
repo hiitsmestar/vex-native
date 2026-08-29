@@ -10,12 +10,15 @@ from pathlib import Path
 path = Path("Tools/test_v11755_cortana_inspired_learning_guard.py")
 source = path.read_text(encoding="utf-8")
 
+# Replace the specific compound VERSION names before generic VERSION. Otherwise
+# generic `VERSION =` is a substring of BUNDLE_VERSION/REMOTE_VERSION and makes
+# the later checks falsely report those markers as missing.
 replacements = [
     ('\"agent_runtime_bundle\": \"0.11.7.55\"', '\"agent_runtime_bundle\": \"0.11.7.56\"'),
-    ('VERSION = \"0.11.7.55\"', 'VERSION = \"0.11.7.56\"'),
     ('BUNDLE_VERSION = \"0.11.7.55\"', 'BUNDLE_VERSION = \"0.11.7.56\"'),
     ('REMOTE_VERSION = \"0.11.7.55\"', 'REMOTE_VERSION = \"0.11.7.56\"'),
     ('Vex Agent Runtime v0.11.7.55 installed.', 'Vex Agent Runtime v0.11.7.56 installed.'),
+    ('VERSION = \"0.11.7.55\"', 'VERSION = \"0.11.7.56\"'),
 ]
 for old, new in replacements:
     if old not in source:
