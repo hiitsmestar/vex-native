@@ -69,3 +69,4 @@ if "Local\\\\VexRemoteSupport-v11761-single-instance" not in remote:
     raise SystemExit("v0.11.7.61 mutex marker missing")
 
 print("Applied v0.11.7.61 Remote Support single-instance definition repair")
+print("v0.11.7.61 trigger 2026-08-29")
