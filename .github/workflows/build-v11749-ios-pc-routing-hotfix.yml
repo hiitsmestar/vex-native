@@ -1,10 +1,10 @@
-name: Build VexNative v0.11.7.49 iPhone PC Routing Hotfix
+name: Build VexNative v0.11.7.50 Smart Autonomous PC Brain
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - ci/v11741-ios-pc-brain-roundtrip
+      - build/v11750-autonomy-smart
     paths:
       - 'VexNative/**'
       - 'Tools/**'
@@ -17,12 +17,9 @@ jobs:
   build-ios-pc-routing:
     runs-on: macos-15
     timeout-minutes: 60
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Assemble proven iPhone Bridge and PC Brain chain
+      - uses: actions/checkout@v4
+      - name: Assemble proven iPhone feature chain
         shell: bash
         run: |
           set -euo pipefail
@@ -65,8 +62,7 @@ jobs:
           python3 Tools/apply_v108_ios_art_followup_grounding.py
           python3 Tools/apply_v110_ios_memory_sync.py
           python3 Tools/apply_v111_ios_memory_sync_hotfix.py
-
-      - name: Apply proven roundtrip chain and current-word routing hotfix
+      - name: Apply latest cognition, continuity, and routing chain
         shell: bash
         run: |
           set -euo pipefail
@@ -74,131 +70,89 @@ jobs:
           python3 Tools/apply_v11747_pc_cognition_diagnostics.py
           python3 Tools/apply_v11748_pc_cognition_timeout_recovery.py
           python3 Tools/apply_v11749_pc_cognition_current_word_hotfix.py
-
-      - name: Verify PC routing hotfix and preserved roundtrip behavior
+      - name: Verify smart/autonomous routing stack
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile Tools/apply_v11749_pc_cognition_current_word_hotfix.py Tools/test_v11749_pc_cognition_current_word_hotfix.py
+          python3 -m py_compile Tools/apply_v11743_roundtrip_continuity_compat.py Tools/apply_v11747_pc_cognition_diagnostics.py Tools/apply_v11748_pc_cognition_timeout_recovery.py Tools/apply_v11749_pc_cognition_current_word_hotfix.py
           python3 Tools/test_v11747_pc_cognition_diagnostics.py
           python3 Tools/test_v11748_pc_cognition_timeout_recovery.py
           python3 Tools/test_v11749_pc_cognition_current_word_hotfix.py
           python3 - <<'PY'
           from pathlib import Path
-          files = {
-              'transport': Path('VexNative/VexNativeApp.swift').read_text(encoding='utf-8'),
-              'content': Path('VexNative/ContentView.swift').read_text(encoding='utf-8'),
-              'app': Path('VexNative/AppModel.swift').read_text(encoding='utf-8'),
+          t=Path('VexNative/VexNativeApp.swift').read_text()
+          c=Path('VexNative/ContentView.swift').read_text()
+          a=Path('VexNative/AppModel.swift').read_text()
+          p=Path('VexNative/Core/PromptComposer.swift').read_text()
+          checks={
+            'pinned private LAN':'final class VexBridgeTrustDelegate' in t,
+            'PC cognition':'PCCognitionOverlay' in c and 'parts.path = "/llm/chat"' in c,
+            'multi-node race':'await withTaskGroup(of: CognitionResult.self)' in c,
+            'last-good routing':'vex.pc.cognition.lastGoodEndpoint.v1' in c,
+            'memory sync':'/memory/sync' in c,
+            'self-learning':'SelfLearning' in c or 'selfLearning' in c,
+            'tools':'PhoneToolRouter' in c,
+            'continuity':'shouldUseNativeGrounding' in a and "STAR'S NEWEST MESSAGE (verbatim)" in p,
+            'startup-safe fallback':"I couldn't use the PC cognition path for that turn" in a,
           }
-          checks = [
-              ('certificate-pinned LAN transport', 'final class VexBridgeTrustDelegate' in files['transport']),
-              ('PC cognition overlay', 'PCCognitionOverlay' in files['content']),
-              ('PC /llm/chat route', 'parts.path = "/llm/chat"' in files['content']),
-              ('endpoint race', 'await withTaskGroup(of: CognitionResult.self)' in files['content']),
-              ('last-good endpoint', 'vex.pc.cognition.lastGoodEndpoint.v1' in files['content']),
-              ('memory sync', '/memory/sync' in files['content']),
-              ('startup-safe fallback', "I couldn't use the PC cognition path for that turn" in files['app']),
-          ]
-          missing = [name for name, ok in checks if not ok]
-          for name, ok in checks:
-              print(('PASS ' if ok else 'FAIL ') + name)
-          if missing:
-              raise SystemExit('Missing v0.11.7.49 markers: ' + ', '.join(missing))
+          for k,v in checks.items(): print(('PASS ' if v else 'FAIL ')+k)
+          bad=[k for k,v in checks.items() if not v]
+          if bad: raise SystemExit('Missing: '+', '.join(bad))
           PY
-
-      - name: Show Apple toolchain
-        run: |
-          xcodebuild -version
-          swift --version
-
-      - name: Resolve Swift package dependencies
-        run: |
-          xcodebuild \
-            -project VexNative.xcodeproj \
-            -scheme VexNative \
-            -resolvePackageDependencies
-
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
       - name: Build unsigned iPhone app
         shell: bash
         run: |
           set -o pipefail
           rm -rf "$RUNNER_TEMP/VexDerivedData"
-          xcodebuild \
-            -project VexNative.xcodeproj \
-            -scheme VexNative \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=11749 \
-            MARKETING_VERSION=0.11.7.49 \
-            build | tee "$RUNNER_TEMP/xcodebuild-v11749.log"
-
-      - name: Preserve device permissions
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=11750 MARKETING_VERSION=0.11.7.50 build | tee "$RUNNER_TEMP/xcodebuild-v11750.log"
+      - name: Preserve permissions and verify version
         shell: bash
         run: |
           set -euo pipefail
           APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
-          test -n "$APP_PATH"
           test -d "$APP_PATH"
-          INFO_PLIST="$APP_PATH/Info.plist"
-          test -f "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to your paired Vex Bridge computer and PC Brain." "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera or photo features." "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.11.7.49"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "11749"
-
-      - name: Package unsigned IPA
+          INFO="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers and PC Brain." "$INFO"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera or photo features." "$INFO"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")" = "0.11.7.50"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")" = "11750"
+      - name: Package IPA
         shell: bash
         run: |
           set -euo pipefail
           APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
-          rm -rf "$RUNNER_TEMP/ipa"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.49-PC-Routing-Hotfix-unsigned.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.49-PC-Routing-Hotfix-unsigned.ipa"
-
-      - name: Write field-test notes
-        shell: bash
-        run: |
-          cat > VexNative-v0.11.7.49-FIELD-TEST.txt <<'EOF'
-          VexNative v0.11.7.49 - iPhone PC Routing Hotfix
-          =================================================
-          - Preserves the field-proven v0.11.7.48 private-LAN PC cognition transport, timeout recovery, endpoint race, memory sync, and startup-safe fallback behavior.
-          - Removes the over-broad bare "current " substring from the PC-cognition exclusion classifier.
-          - Ordinary personal phrases such as "current name", "current outfit", and "current plan" can now reach PC cognition.
-          - Specialized live intents remain protected by their specific markers; current weather/news and latest requests stay on native/live routes.
-          - Regression includes the exact field-failing Nyx correction sentence.
-          - No private endpoint, token, certificate pin, profile, memory, or chat data is included in the artifact.
+          zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain-unsigned.ipa" Payload
+          unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain-unsigned.ipa"
+          cat > "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-GREEN-LIT.txt" <<'EOF'
+          VexNative v0.11.7.50
+          Preserves PC-first cognition, multi-node endpoint racing, last-good routing, persistent memory sync, self-learning/tool routing, natural continuity, secure pinned LAN transport, live/web/photo/media/device routes, and startup-safe phone fallback.
+          Private pairing credentials and personal profile data are not included in the public artifact.
           EOF
-
-      - name: Upload v0.11.7.49 IPA
+      - name: Upload install artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.49-PC-Routing-Hotfix
+          name: VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain
           path: |
-            VexNative-v0.11.7.49-PC-Routing-Hotfix-unsigned.ipa
-            VexNative-v0.11.7.49-FIELD-TEST.txt
+            VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain-unsigned.ipa
+            VexNative-v0.11.7.50-GREEN-LIT.txt
           if-no-files-found: error
           retention-days: 14
-
-      - name: Upload build log on failure
+      - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: VexNative-v0.11.7.49-xcodebuild-log
-          path: ${{ runner.temp }}/xcodebuild-v11749.log
+          name: VexNative-v0.11.7.50-build-log
+          path: ${{ runner.temp }}/xcodebuild-v11750.log
           if-no-files-found: ignore
           retention-days: 7
