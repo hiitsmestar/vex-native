@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import tempfile
 import types
 from pathlib import Path
@@ -72,7 +73,9 @@ with tempfile.TemporaryDirectory(prefix="Vex11756Doctor-") as td:
     }
     exec(compile(latest_function_source(remote, "doctor_path"), "<v11756-doctor-path>", "exec"), ns)
     found = ns["doctor_path"]()
-    if found != doctor:
+    # Windows may spell the same Temp path using an 8.3 short-name component
+    # (RUNNER~1 vs runneradmin). Compare file identity, not path-string spelling.
+    if found is None or not found.exists() or not os.path.samefile(str(found), str(doctor)):
         raise SystemExit(f"v0.11.7.56 Doctor parent lookup failed: expected {doctor}, got {found}")
 
 
