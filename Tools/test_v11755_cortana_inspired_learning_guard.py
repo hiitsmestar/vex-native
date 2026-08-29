@@ -143,12 +143,23 @@ if len(rows) != 1 or rows[0].get("hwnd") != 31337 or rows[0].get("pid") != 4242:
 if rows[0].get("title") != "Synthetic field window":
     raise SystemExit(f"v0.11.7.55 local window title parsing failed: {rows}")
 
-# The fixed queue function must short-circuit an existing task instead of calling
-# the legacy base path that reset approval-required -> research overnight.
+# The fixed queue function must short-circuit an existing task before its final
+# legacy fallback. A separate early fallback for malformed/very-short goals is
+# intentional and must not make this regression fail.
 queue_src = latest_function_source(bridge, "_project_queue_task")
-if "deduplicated" not in queue_src or "terminal_preserved" not in queue_src:
-    raise SystemExit("v0.11.7.55 queue dedupe short-circuit missing")
-if queue_src.find("return {\n                \"ok\": True") > queue_src.find("return _v11755_project_queue_task_base(goal, category, detail, source_gap_id)"):
-    raise SystemExit("v0.11.7.55 queue short-circuit ordering is wrong")
+for marker in [
+    "if row is not None:",
+    '"status": status',
+    '"deduplicated": True',
+    '"terminal_preserved": status in PROJECT_TERMINAL_STATUSES',
+]:
+    if marker not in queue_src:
+        raise SystemExit(f"v0.11.7.55 queue dedupe marker missing: {marker}")
+dedupe_pos = queue_src.find('"terminal_preserved": status in PROJECT_TERMINAL_STATUSES')
+final_base_pos = queue_src.rfind("return _v11755_project_queue_task_base(goal, category, detail, source_gap_id)")
+if dedupe_pos < 0 or final_base_pos < 0 or dedupe_pos > final_base_pos:
+    raise SystemExit("v0.11.7.55 existing-task dedupe does not precede the final legacy fallback")
+if "UPDATE project_tasks SET category" in queue_src:
+    raise SystemExit("v0.11.7.55 wrapper still mutates existing task status through legacy queue SQL")
 
 print("v0.11.7.55 field regressions passed: proposal anti-spam + Windows interactive fallback + privacy")
