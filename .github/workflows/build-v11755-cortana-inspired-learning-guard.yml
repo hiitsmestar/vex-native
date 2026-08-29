@@ -1,0 +1,49 @@
+name: Build Vex Agent Runtime v0.11.7.55 Cortana Inspired Learning Guard
+
+on:
+  push:
+    branches: [ "feat/vex-agent-runtime-windows-v1" ]
+    paths:
+      - "Tools/apply_v11755_cortana_inspired_learning_guard.py"
+      - "Tools/ci_v11755_cortana_inspired_learning_guard.py"
+      - "Tools/test_v11755_cortana_inspired_learning_guard.py"
+      - ".github/workflows/build-v11755-cortana-inspired-learning-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v11755-cortana-inspired-learning-guard:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build and prove production Agent Runtime
+        run: python Tools/ci_v11755_cortana_inspired_learning_guard.py
+
+      - name: Prove autonomous anti-spam and Windows interactive fallback
+        run: python Tools/test_v11755_cortana_inspired_learning_guard.py
+
+      - name: Preserve installer self-home field hotfix
+        run: python Tools/test_v11754_installer_self_home_hotfix.py
+
+      - name: Prove field memory write correction and recall survived
+        run: python Tools/test_v11754_memory_regression.py
+
+      - name: Upload proven v0.11.7.55 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.55-CortanaInspired-LearningGuard
+          path: Vex-Agent-Runtime-v0.11.7.55-CortanaInspired-LearningGuard.zip
+          if-no-files-found: error
+          retention-days: 14
