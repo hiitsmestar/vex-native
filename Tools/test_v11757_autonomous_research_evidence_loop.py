@@ -5,6 +5,7 @@ import ast
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -38,7 +39,7 @@ required_bridge = [
     "evidence has not materially changed since the existing proposal",
     "per-task proposal cap reached",
     "def _windows_native_powershell_windows(",
-    "_v11756_collect_snapshot_base" if False else "_v11756_windows_native_capabilities_base",
+    "_v11756_windows_native_capabilities_base",
     "CREATE TABLE IF NOT EXISTS project_research_jobs",
     "CREATE TABLE IF NOT EXISTS project_research_notes",
     "_v11757_learning_queue_topic_base = _learning_queue_topic",
@@ -93,7 +94,7 @@ def latest_function_source(text: str, name: str) -> str:
 # .55's material-evidence proposal guard remains underneath .57. Refresh time or
 # URL fragments do not create a new proposal; a genuinely new source does.
 fingerprint_src = latest_function_source(bridge, "_project_v55_evidence_fingerprint_from_receipts")
-fingerprint_ns = {"json": json}
+fingerprint_ns = {"json": json, "re": re}
 exec(compile(fingerprint_src, "<v11757-evidence-fingerprint>", "exec"), fingerprint_ns)
 fingerprint = fingerprint_ns["_project_v55_evidence_fingerprint_from_receipts"]
 a = [
