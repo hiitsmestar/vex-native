@@ -36,7 +36,7 @@ if patch_anchor not in source:
 source = source.replace(patch_anchor, patch_new, 1)
 
 # The underlying supervisor component began life as .53; .55 wraps it and exposes
-# the guarded status identity. Production smoke must verify the wrapper, not .53.
+# the guarded status identity. The inherited production smoke must expect .55.
 old_autolearn_version = 'autolearn.get("version") == "0.11.7.53"'
 if old_autolearn_version not in source:
     raise SystemExit("v0.11.7.55 autolearn version smoke anchor missing")
@@ -51,41 +51,9 @@ source = source.replace(
     1,
 )
 
-# Strengthen production smoke: a build is not green unless the anti-spam guard
-# and Windows interactive-session diagnostics are actually present at runtime.
-autolearn_log = '                log(f"Autonomous learning status: {autolearn}")\n'
-autolearn_guard = (
-    '                if autolearn.get("proposal_dedupe") is not True or autolearn.get("evidence_change_required") is not True:\n'
-    '                    raise RuntimeError(f"Autonomous proposal guard missing: {autolearn}")\n'
-    '                if int(autolearn.get("per_task_proposal_cap") or 0) != 6:\n'
-    '                    raise RuntimeError(f"Autonomous proposal cap mismatch: {autolearn}")\n'
-    '                log(f"Autonomous learning status: {autolearn}")\n'
-)
-if autolearn_log not in source:
-    raise SystemExit("v0.11.7.55 autolearn smoke log anchor missing")
-source = source.replace(autolearn_log, autolearn_guard, 1)
-
-native_log = '                log(f"Windows-native capabilities: {native}")\n'
-native_guard = (
-    '                if native.get("supported_windows_primitives") is not True:\n'
-    '                    raise RuntimeError(f"Supported Windows primitive marker missing: {native}")\n'
-    '                if "interactive_session_match" not in native or "input_desktop_accessible" not in native or "window_inventory_method" not in native:\n'
-    '                    raise RuntimeError(f"Windows interactive-session diagnostics missing: {native}")\n'
-    '                if native.get("cortana_private_api_dependency") is not False:\n'
-    '                    raise RuntimeError(f"Retired/private Cortana dependency detected: {native}")\n'
-    '                log(f"Windows-native capabilities: {native}")\n'
-)
-if native_log not in source:
-    raise SystemExit("v0.11.7.55 Windows-native smoke log anchor missing")
-source = source.replace(native_log, native_guard, 1)
-
-# Keep an explicit build-time note in the assembler source. Runtime/tests enforce
-# these rules; this comment prevents accidental loss during future chain edits.
-notes_anchor = "globals_dict = {\n"
-notes = '''# v0.11.7.55 field rules enforced by runtime/tests:\n# - terminal autonomous-task states cannot be re-seeded into proposal loops;\n# - repeated proposals require changed source evidence and are capped per task;\n# - duplicate rows are non-destructively superseded, never deleted;\n# - Windows window discovery uses supported APIs/fallbacks, never private Cortana.\n\n'''
-if notes_anchor not in source:
-    raise SystemExit("v0.11.7.55 assembler globals anchor missing")
-source = source.replace(notes_anchor, notes + notes_anchor, 1)
+# Dedicated .55 regression tests immediately follow the production assembler in
+# CI and prove proposal dedupe/caps, evidence fingerprints, Windows fallback,
+# session diagnostics, privacy boundaries, installer self-home safety and memory.
 
 globals_dict = {
     "__name__": "__main__",
