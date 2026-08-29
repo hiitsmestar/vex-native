@@ -1,0 +1,48 @@
+name: Diagnose v0.11.7.59 Remote Support startup
+
+on:
+  push:
+    branches: [ "fix/v11760-remote-startup-nameerror" ]
+    paths:
+      - ".github/workflows/diagnose-v11760-remote-startup.yml"
+      - "Tools/trigger_v11760_diagnose.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Reassemble proven v0.11.7.57 source
+        run: python Tools/ci_v11757_autonomous_research_evidence_loop.py
+      - name: Apply v0.11.7.58 relay fix
+        run: python Tools/apply_v11758_remote_relay_tail_pagination.py
+      - name: Apply v0.11.7.59 command ledger
+        run: python Tools/apply_v11759_remote_command_ledger.py
+      - name: Launch patched source and require it to stay alive
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'vex59-source-out.txt'
+          $err = Join-Path $env:RUNNER_TEMP 'vex59-source-err.txt'
+          $p = Start-Process python -ArgumentList 'Tools/VexRemoteSupport.py' -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) {
+            Write-Host '=== STDOUT ==='
+            if (Test-Path $out) { Get-Content $out }
+            Write-Host '=== STDERR ==='
+            if (Test-Path $err) { Get-Content $err }
+            throw "Patched v0.11.7.59 source exited during startup with code $($p.ExitCode)"
+          }
+          Stop-Process -Id $p.Id -Force
+          Write-Host 'Patched v0.11.7.59 source remained alive for 8 seconds'
