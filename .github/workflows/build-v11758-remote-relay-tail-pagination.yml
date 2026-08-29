@@ -1,0 +1,89 @@
+name: Build Vex Remote Support v0.11.7.58 Relay Tail Fix
+
+on:
+  push:
+    branches: [ "fix/v11758-remote-relay-tail" ]
+    paths:
+      - "Tools/apply_v11758_remote_relay_tail_pagination.py"
+      - "Tools/test_v11758_remote_relay_tail_pagination.py"
+      - ".github/workflows/build-v11758-remote-relay-tail-pagination.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-remote-support:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Reassemble exact proven v0.11.7.57 runtime source
+        run: python Tools/ci_v11757_autonomous_research_evidence_loop.py
+
+      - name: Apply bounded newest-page Remote Support relay fix
+        run: python Tools/apply_v11758_remote_relay_tail_pagination.py
+
+      - name: Prove relay pagination regression
+        run: python Tools/test_v11758_remote_relay_tail_pagination.py
+
+      - name: Build Remote Support v0.11.7.58
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force build/remote58,dist/remote58 -ErrorAction SilentlyContinue
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --distpath dist/remote58 `
+            --workpath build/remote58 `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/remote58/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Build matching Doctor companion
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexDoctor `
+            --distpath dist/remote58 `
+            --workpath build/doctor58 `
+            --collect-all requests `
+            Tools/VexDoctor.py
+          if (!(Test-Path dist/remote58/VexDoctor.exe)) { throw "VexDoctor.exe missing" }
+
+      - name: Package install-ready Remote Support
+        shell: pwsh
+        run: |
+          @'
+          Vex Remote Support v0.11.7.58 Relay Tail Fix
+          =============================================
+
+          This hotfix is built forward from the proven v0.11.7.57 Agent Runtime source.
+          It fixes the GitHub issue relay poller so long-lived issue #52 reads the newest
+          command pages instead of becoming stuck on the oldest 100 comments.
+
+          Install:
+          1. Close the currently running VexRemoteSupport.
+          2. Replace VexRemoteSupport.exe with this build (keep the companion VexDoctor.exe beside the runtime as before).
+          3. Start VexRemoteSupport and start the support session.
+
+          No Bridge tokens, local paths, chat contents, or personal data are packaged.
+          '@ | Set-Content -Encoding UTF8 dist/remote58/README-VexRemoteSupport-v0.11.7.58.txt
+          Compress-Archive -Path dist/remote58/VexRemoteSupport.exe,dist/remote58/VexDoctor.exe,dist/remote58/README-VexRemoteSupport-v0.11.7.58.txt -DestinationPath VexRemoteSupport-v0.11.7.58-RelayTailFix.zip -Force
+          if (!(Test-Path VexRemoteSupport-v0.11.7.58-RelayTailFix.zip)) { throw "Remote Support zip missing" }
+
+      - name: Upload install artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexRemoteSupport-v0.11.7.58-RelayTailFix
+          path: VexRemoteSupport-v0.11.7.58-RelayTailFix.zip
+          if-no-files-found: error
+          retention-days: 14
