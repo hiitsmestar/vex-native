@@ -25,15 +25,14 @@ source = source.replace(
     'Vex Agent Runtime v0.11.7.55 Cortana-Inspired Windows + Learning Guard',
 )
 
-# Insert the .55 patch after every field-proven .54 patch/hotfix in the generated
-# Greenline patch list.
-patch_anchor = '        "Tools/apply_v11754_installer_self_home_hotfix.py",\n'
-patch_new = (
-    '        "Tools/apply_v11754_installer_self_home_hotfix.py",\n'
-    '        "Tools/apply_v11755_cortana_inspired_learning_guard.py",\n'
-)
+# Insert the .55 patch into the nested Greenline patch-list string used by the
+# .54 assembler. This anchor includes the outer Python string literal itself.
+patch_anchor = """        '        \"Tools/apply_v11754_installer_self_home_hotfix.py\",\\n'
+"""
+patch_new = patch_anchor + """        '        \"Tools/apply_v11755_cortana_inspired_learning_guard.py\",\\n'
+"""
 if patch_anchor not in source:
-    raise SystemExit("v0.11.7.55 .54 hotfix patch-list anchor missing")
+    raise SystemExit("v0.11.7.55 nested .54 hotfix patch-list anchor missing")
 source = source.replace(patch_anchor, patch_new, 1)
 
 # The underlying supervisor component began life as .53; .55 wraps it and exposes
@@ -80,10 +79,10 @@ if native_log not in source:
     raise SystemExit("v0.11.7.55 Windows-native smoke log anchor missing")
 source = source.replace(native_log, native_guard, 1)
 
-# Keep README mutation deliberately simple and anchor-independent: append the .55
-# field rules to the generated package notes immediately before the globals block.
+# Keep an explicit build-time note in the assembler source. Runtime/tests enforce
+# these rules; this comment prevents accidental loss during future chain edits.
 notes_anchor = "globals_dict = {\n"
-notes = '''# v0.11.7.55 field rules are also enforced by runtime/tests:\n# - terminal autonomous-task states cannot be re-seeded into proposal loops;\n# - repeated proposals require changed source evidence and are capped per task;\n# - duplicate rows are non-destructively superseded, never deleted;\n# - Windows window discovery uses supported APIs/fallbacks, never private Cortana.\n\n'''
+notes = '''# v0.11.7.55 field rules enforced by runtime/tests:\n# - terminal autonomous-task states cannot be re-seeded into proposal loops;\n# - repeated proposals require changed source evidence and are capped per task;\n# - duplicate rows are non-destructively superseded, never deleted;\n# - Windows window discovery uses supported APIs/fallbacks, never private Cortana.\n\n'''
 if notes_anchor not in source:
     raise SystemExit("v0.11.7.55 assembler globals anchor missing")
 source = source.replace(notes_anchor, notes + notes_anchor, 1)
