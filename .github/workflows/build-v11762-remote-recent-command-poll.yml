@@ -39,7 +39,14 @@ jobs:
       - name: Prove relay polls page ahead
         shell: pwsh
         run: |
-          python -c "import pathlib; s=pathlib.Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.11.7.62\"' in s; assert 'last_page + 1' in s; assert 'processed_command_ids_v59' in s; print('v0.11.7.62 relay structure verified')"
+          @'
+          from pathlib import Path
+          s = Path("Tools/VexRemoteSupport.py").read_text(encoding="utf-8")
+          assert 'VERSION = "0.11.7.62"' in s
+          assert 'last_page + 1' in s
+          assert 'processed_command_ids_v59' in s
+          print("v0.11.7.62 relay structure verified")
+          '@ | python -
       - name: Prove source startup
         shell: pwsh
         run: |
