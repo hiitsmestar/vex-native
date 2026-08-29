@@ -5,6 +5,7 @@ on:
     branches: [ "fix/v11760-remote-startup-ondir" ]
     paths:
       - "Tools/apply_v11760_remote_startup_ondir.py"
+      - "Tools/trigger_v11760_build.txt"
       - ".github/workflows/build-v11760-remote-startup-ondir.yml"
   workflow_dispatch:
 
@@ -57,7 +58,7 @@ jobs:
           $p = Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
           Start-Sleep -Seconds 10
           if ($p.HasExited) {
-            $err = Join-Path $env:APPDATA 'VexRemoteSupport/startup-error-v11760.txt'
+            $err = Join-Path $env:APPDATA 'VexRemoteSupport/startup-crash.log'
             if (Test-Path $err) { Write-Host '=== STARTUP ERROR ==='; Get-Content $err }
             throw "Packaged v0.11.7.60 exited during startup with code $($p.ExitCode)"
           }
