@@ -1,0 +1,120 @@
+name: Build Vex Downstairs Node v0.11.7.63 Upgrade
+
+on:
+  push:
+    branches: [ "build/v11763-downstairs-node-upgrade" ]
+    paths:
+      - "Tools/Install-VexDownstairsNode-v0.11.7.63.ps1"
+      - ".github/workflows/build-v11763-downstairs-node-upgrade.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-downstairs-node:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography yt-dlp pillow
+
+      - name: Verify current mesh sources
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          node = Path("Tools/VexNodeAgent.py").read_text(encoding="utf-8")
+          assert 'VERSION = "0.11.7.39"' in bridge
+          assert 'VERSION = "0.11.7.33"' in node
+          assert '/brain/context' in bridge
+          assert '/llm/chat' in bridge
+          assert '/status' in node
+          print('Current Bridge + NodeAgent mesh sources verified')
+          '@ | python -
+
+      - name: Build current Vex Bridge
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --contents-directory VexBridgeRuntime --noupx --windowed `
+            --name VexBridge `
+            --distpath dist/downstairs `
+            --workpath build/downstairs-bridge `
+            --collect-all requests `
+            --collect-all bs4 `
+            --collect-all pypdf `
+            --collect-all cryptography `
+            Bridge/vex_bridge.py
+          if (!(Test-Path dist/downstairs/VexBridge/VexBridge.exe)) { throw 'VexBridge.exe missing' }
+
+      - name: Build current Vex Node Agent
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed `
+            --name VexNodeAgent `
+            --distpath dist/downstairs `
+            --workpath build/downstairs-node `
+            Tools/VexNodeAgent.py
+          if (!(Test-Path dist/downstairs/VexNodeAgent/VexNodeAgent.exe)) { throw 'VexNodeAgent.exe missing' }
+
+      - name: Prove packaged processes start
+        shell: pwsh
+        run: |
+          $bridge = Resolve-Path 'dist/downstairs/VexBridge/VexBridge.exe'
+          $bp = Start-Process $bridge -WorkingDirectory (Split-Path $bridge) -PassThru
+          Start-Sleep -Seconds 8
+          if ($bp.HasExited) { throw "Bridge exited during startup with code $($bp.ExitCode)" }
+          Stop-Process -Id $bp.Id -Force
+
+          $node = Resolve-Path 'dist/downstairs/VexNodeAgent/VexNodeAgent.exe'
+          $np = Start-Process $node -WorkingDirectory (Split-Path $node) -PassThru
+          Start-Sleep -Seconds 5
+          if ($np.HasExited) { throw "NodeAgent exited during startup with code $($np.ExitCode)" }
+          Stop-Process -Id $np.Id -Force
+          Write-Host 'Both packaged node processes remained alive during startup proof'
+
+      - name: Package upgrade bundle
+        shell: pwsh
+        run: |
+          $pkg = 'VexDownstairsNode-v0.11.7.63-Upgrade'
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse dist/downstairs/VexBridge "$pkg/VexBridge"
+          Copy-Item -Recurse dist/downstairs/VexNodeAgent "$pkg/VexNodeAgent"
+          Copy-Item Tools/Install-VexDownstairsNode-v0.11.7.63.ps1 "$pkg/Install-VexDownstairsNode-v0.11.7.63.ps1"
+          @'
+          VexNative Downstairs Node v0.11.7.63 Upgrade
+          =============================================
+
+          Purpose:
+          - Upgrade the older downstairs node to the current Vex mesh components.
+          - Current Vex Bridge component: 0.11.7.39
+          - Current Vex Node Agent component: 0.11.7.33
+          - Preserve existing AppData configuration and node identity.
+          - Install side-by-side under LocalAppData\VexNative\DownstairsNode.
+          - Add Bridge and NodeAgent to Windows Startup.
+
+          INSTALL:
+          1. Extract this entire ZIP to a normal folder.
+          2. Right-click Install-VexDownstairsNode-v0.11.7.63.ps1 and run with PowerShell.
+          3. Keep the VexBridge and VexNodeAgent folders intact.
+          4. The installer starts both processes automatically.
+
+          Do not delete the old node installation until the new node is field-verified.
+          '@ | Set-Content -Encoding UTF8 "$pkg/README.txt"
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip" -Force
+
+      - name: Upload install artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexDownstairsNode-v0.11.7.63-Upgrade
+          path: VexDownstairsNode-v0.11.7.63-Upgrade.zip
+          if-no-files-found: error
+          retention-days: 14
