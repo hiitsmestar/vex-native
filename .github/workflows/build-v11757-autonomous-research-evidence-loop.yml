@@ -1,0 +1,50 @@
+name: Build Vex Agent Runtime v0.11.7.57 Autonomous Research Evidence Loop
+
+on:
+  push:
+    branches: [ "feat/vex-agent-runtime-windows-v1" ]
+    paths:
+      - "Tools/apply_v11757_autonomous_research_evidence_loop.py"
+      - "Tools/ci_v11757_autonomous_research_evidence_loop.py"
+      - "Tools/test_v11757_autonomous_research_evidence_loop.py"
+      - "Tools/test_v11757_memory_regression.py"
+      - ".github/workflows/build-v11757-autonomous-research-evidence-loop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v11757-autonomous-research-evidence-loop:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build and prove production Agent Runtime
+        run: python Tools/ci_v11757_autonomous_research_evidence_loop.py
+
+      - name: Prove autonomous research evidence handoff and preserve Doctor recovery
+        run: python Tools/test_v11757_autonomous_research_evidence_loop.py
+
+      - name: Preserve installer self-home field hotfix
+        run: python Tools/test_v11754_installer_self_home_hotfix.py
+
+      - name: Prove memory write correction and fresh recall survived
+        run: python Tools/test_v11757_memory_regression.py
+
+      - name: Upload proven v0.11.7.57 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.57-AutonomousResearch-EvidenceLoop
+          path: Vex-Agent-Runtime-v0.11.7.57-AutonomousResearch-EvidenceLoop.zip
+          if-no-files-found: error
+          retention-days: 14
