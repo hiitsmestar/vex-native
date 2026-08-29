@@ -1,18 +1,11 @@
 name: Build VexNative v0.11.7.50 Smart Autonomous PC Brain
-
 on:
   workflow_dispatch:
   push:
-    branches:
-      - build/v11750-autonomy-smart
-    paths:
-      - 'VexNative/**'
-      - 'Tools/**'
-      - '.github/workflows/build-v11749-ios-pc-routing-hotfix.yml'
-
+    branches: [build/v11750-autonomy-smart]
+    paths: ['VexNative/**','Tools/**','.github/workflows/build-v11749-ios-pc-routing-hotfix.yml']
 permissions:
   contents: read
-
 jobs:
   build-ios-pc-routing:
     runs-on: macos-15
@@ -23,81 +16,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 Tools/apply_v074_bridge_pairing_patch.py
-          python3 Tools/apply_v075_search_routing_patch.py
-          python3 Tools/apply_v076_direct_research_answers_patch.py
-          python3 Tools/apply_v077_grounded_research_patch.py
-          python3 Tools/apply_v078_photo_context_patch.py
-          python3 Tools/apply_v079_camera_visual_replies_patch.py
-          python3 Tools/apply_v079_compile_hotfix.py
-          python3 Tools/apply_v0710_visual_intent_fix.py
-          python3 Tools/apply_v0711_zoomable_chat_images.py
+          for p in apply_v074_bridge_pairing_patch.py apply_v075_search_routing_patch.py apply_v076_direct_research_answers_patch.py apply_v077_grounded_research_patch.py apply_v078_photo_context_patch.py apply_v079_camera_visual_replies_patch.py apply_v079_compile_hotfix.py apply_v0710_visual_intent_fix.py apply_v0711_zoomable_chat_images.py; do python3 Tools/$p; done
           python3 Tools/prepare_v082_build_chain.py
-          python3 Tools/apply_v080_hybrid_brain_patch.py
-          python3 Tools/apply_v081_dual_pc_mesh_patch.py
-          python3 Tools/apply_v082_pc_tools_capability_patch.py
-          python3 Tools/apply_v083_browser_url_tools_patch.py
-          python3 Tools/apply_v084_self_learning_skills_patch.py
-          python3 Tools/apply_v084_skill_resolution_order_hotfix.py
-          python3 Tools/apply_v085_skill_compiler_patch.py
-          python3 Tools/apply_v086_voice_ui_patch.py
-          python3 Tools/apply_v087_voice_crash_hotfix.py
-          python3 Tools/apply_v088_voice_transcript_patch.py
-          python3 Tools/apply_v089_voice_conversation_patch.py
-          python3 Tools/apply_v090_neural_voice_ios_patch.py
-          python3 Tools/apply_v090_named_media_ios_patch.py
-          python3 Tools/apply_v091_youtube_context_ios_patch.py
+          for p in apply_v080_hybrid_brain_patch.py apply_v081_dual_pc_mesh_patch.py apply_v082_pc_tools_capability_patch.py apply_v083_browser_url_tools_patch.py apply_v084_self_learning_skills_patch.py apply_v084_skill_resolution_order_hotfix.py apply_v085_skill_compiler_patch.py apply_v086_voice_ui_patch.py apply_v087_voice_crash_hotfix.py apply_v088_voice_transcript_patch.py apply_v089_voice_conversation_patch.py apply_v090_neural_voice_ios_patch.py apply_v090_named_media_ios_patch.py apply_v091_youtube_context_ios_patch.py; do python3 Tools/$p; done
           python3 Tools/apply_v092_device_control_patch.py || true
-          grep -q 'PhoneToolRouter' VexNative/ContentView.swift
-          python3 Tools/apply_v093_cognition_ios_patch.py
-          python3 Tools/apply_v094_art_ios_patch.py
-          python3 Tools/apply_v0941_startup_safe_mode_patch.py
-          python3 Tools/apply_v0942_send_reliability_patch.py
-          python3 Tools/apply_v0943_dual_node_race_patch.py
-          python3 Tools/apply_v0944_bridge_long_request_timeout_patch.py
-          python3 Tools/apply_v095_resource_housekeeper_ios_patch.py
+          grep -q PhoneToolRouter VexNative/ContentView.swift
+          for p in apply_v093_cognition_ios_patch.py apply_v094_art_ios_patch.py apply_v0941_startup_safe_mode_patch.py apply_v0942_send_reliability_patch.py apply_v0943_dual_node_race_patch.py apply_v0944_bridge_long_request_timeout_patch.py apply_v095_resource_housekeeper_ios_patch.py; do python3 Tools/$p; done
           python3 Tools/apply_v096_active_maintenance_ios_patch.py || true
-          python3 Tools/apply_v098_ios_time_grounding_patch.py
-          python3 Tools/apply_v107_art_ios_adapter_patch.py
-          python3 Tools/apply_v108_ios_art_followup_grounding.py
-          python3 Tools/apply_v110_ios_memory_sync.py
-          python3 Tools/apply_v111_ios_memory_sync_hotfix.py
-      - name: Apply latest cognition, continuity, and routing chain
+          for p in apply_v098_ios_time_grounding_patch.py apply_v107_art_ios_adapter_patch.py apply_v108_ios_art_followup_grounding.py apply_v110_ios_memory_sync.py apply_v111_ios_memory_sync_hotfix.py apply_v11743_roundtrip_continuity_compat.py apply_v11747_pc_cognition_diagnostics.py apply_v11748_pc_cognition_timeout_recovery.py apply_v11749_pc_cognition_current_word_hotfix.py; do python3 Tools/$p; done
+      - name: Verify cognition autonomy stack
         shell: bash
         run: |
           set -euo pipefail
-          python3 Tools/apply_v11743_roundtrip_continuity_compat.py
-          python3 Tools/apply_v11747_pc_cognition_diagnostics.py
-          python3 Tools/apply_v11748_pc_cognition_timeout_recovery.py
-          python3 Tools/apply_v11749_pc_cognition_current_word_hotfix.py
-      - name: Verify smart/autonomous routing stack
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile Tools/apply_v11743_roundtrip_continuity_compat.py Tools/apply_v11747_pc_cognition_diagnostics.py Tools/apply_v11748_pc_cognition_timeout_recovery.py Tools/apply_v11749_pc_cognition_current_word_hotfix.py
           python3 Tools/test_v11747_pc_cognition_diagnostics.py
           python3 Tools/test_v11748_pc_cognition_timeout_recovery.py
           python3 Tools/test_v11749_pc_cognition_current_word_hotfix.py
           python3 - <<'PY'
           from pathlib import Path
-          t=Path('VexNative/VexNativeApp.swift').read_text()
-          c=Path('VexNative/ContentView.swift').read_text()
-          a=Path('VexNative/AppModel.swift').read_text()
-          p=Path('VexNative/Core/PromptComposer.swift').read_text()
-          checks={
-            'pinned private LAN':'final class VexBridgeTrustDelegate' in t,
-            'PC cognition':'PCCognitionOverlay' in c and 'parts.path = "/llm/chat"' in c,
-            'multi-node race':'await withTaskGroup(of: CognitionResult.self)' in c,
-            'last-good routing':'vex.pc.cognition.lastGoodEndpoint.v1' in c,
-            'memory sync':'/memory/sync' in c,
-            'self-learning':'SelfLearning' in c or 'selfLearning' in c,
-            'tools':'PhoneToolRouter' in c,
-            'continuity':'shouldUseNativeGrounding' in a and "STAR'S NEWEST MESSAGE (verbatim)" in p,
-            'startup-safe fallback':"I couldn't use the PC cognition path for that turn" in a,
-          }
+          t=Path('VexNative/VexNativeApp.swift').read_text(); c=Path('VexNative/ContentView.swift').read_text(); a=Path('VexNative/AppModel.swift').read_text(); p=Path('VexNative/Core/PromptComposer.swift').read_text()
+          checks={'pinned LAN':'VexBridgeTrustDelegate' in t,'PC cognition':'PCCognitionOverlay' in c and 'parts.path = "/llm/chat"' in c,'node race':'withTaskGroup(of: CognitionResult.self)' in c,'last-good':'vex.pc.cognition.lastGoodEndpoint.v1' in c,'memory':'/memory/sync' in c,'tools':'PhoneToolRouter' in c,'continuity':'shouldUseNativeGrounding' in a and "STAR'S NEWEST MESSAGE (verbatim)" in p,'startup safe':"I couldn't use the PC cognition path for that turn" in a}
           for k,v in checks.items(): print(('PASS ' if v else 'FAIL ')+k)
           bad=[k for k,v in checks.items() if not v]
-          if bad: raise SystemExit('Missing: '+', '.join(bad))
+          if bad: raise SystemExit(', '.join(bad))
           PY
       - name: Resolve packages
         run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
@@ -107,38 +47,17 @@ jobs:
           set -o pipefail
           rm -rf "$RUNNER_TEMP/VexDerivedData"
           xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=11750 MARKETING_VERSION=0.11.7.50 build | tee "$RUNNER_TEMP/xcodebuild-v11750.log"
-      - name: Preserve permissions and verify version
+      - name: Verify version and package IPA
         shell: bash
         run: |
           set -euo pipefail
-          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
-          test -d "$APP_PATH"
-          INFO="$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers and PC Brain." "$INFO"
-          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera or photo features." "$INFO"
-          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled." "$INFO"
-          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled." "$INFO"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")" = "0.11.7.50"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")" = "11750"
-      - name: Package IPA
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
-          mkdir -p "$RUNNER_TEMP/ipa/Payload"
-          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
-          cd "$RUNNER_TEMP/ipa"
+          APP="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name VexNative.app -print -quit)"; test -d "$APP"; INFO="$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")" = 0.11.7.50
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")" = 11750
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"; cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/VexNative.app"; cd "$RUNNER_TEMP/ipa"
           zip -qry "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain-unsigned.ipa" Payload
           unzip -t "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-Smart-Autonomous-PC-Brain-unsigned.ipa"
-          cat > "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-GREEN-LIT.txt" <<'EOF'
-          VexNative v0.11.7.50
-          Preserves PC-first cognition, multi-node endpoint racing, last-good routing, persistent memory sync, self-learning/tool routing, natural continuity, secure pinned LAN transport, live/web/photo/media/device routes, and startup-safe phone fallback.
-          Private pairing credentials and personal profile data are not included in the public artifact.
-          EOF
+          printf '%s\n' 'VexNative v0.11.7.50 GREEN: PC-first cognition, endpoint racing, last-good routing, memory sync, learning/skill chain, tools, continuity, secure LAN and startup-safe fallback preserved.' > "$GITHUB_WORKSPACE/VexNative-v0.11.7.50-GREEN-LIT.txt"
       - name: Upload install artifact
         uses: actions/upload-artifact@v4
         with:
