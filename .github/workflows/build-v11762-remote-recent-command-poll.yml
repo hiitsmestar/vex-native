@@ -1,0 +1,107 @@
+name: Build Vex Remote Support v0.11.7.62 Fresh Command Poll Fix
+
+on:
+  push:
+    branches: [ "fix/v11762-remote-recent-command-poll" ]
+    paths:
+      - "Tools/apply_v11762_remote_recent_command_poll.py"
+      - ".github/workflows/build-v11762-remote-recent-command-poll.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-remote-support:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Reassemble proven v0.11.7.57 source
+        run: python Tools/ci_v11757_autonomous_research_evidence_loop.py
+      - name: Apply v0.11.7.58 relay tail pagination
+        run: python Tools/apply_v11758_remote_relay_tail_pagination.py
+      - name: Apply v0.11.7.59 command ledger and worklog
+        run: python Tools/apply_v11759_remote_command_ledger.py
+      - name: Apply v0.11.7.60 startup packaging fix
+        run: python Tools/apply_v11760_remote_startup_ondir.py
+      - name: Apply v0.11.7.61 single-instance definition repair
+        run: python Tools/apply_v11761_remote_single_instance_definition.py
+      - name: Apply v0.11.7.62 fresh-command polling fix
+        run: python Tools/apply_v11762_remote_recent_command_poll.py
+      - name: Prove relay polls page ahead
+        shell: pwsh
+        run: |
+          python -c "import pathlib; s=pathlib.Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8'); assert 'VERSION = \"0.11.7.62\"' in s; assert 'last_page + 1' in s; assert 'processed_command_ids_v59' in s; print('v0.11.7.62 relay structure verified')"
+      - name: Prove source startup
+        shell: pwsh
+        run: |
+          $p = Start-Process python -ArgumentList 'Tools/VexRemoteSupport.py' -PassThru
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) { throw "v0.11.7.62 source exited during startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Build Defender-safe one-folder Remote Support
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force build/remote62,dist/remote62 -ErrorAction SilentlyContinue
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed `
+            --name VexRemoteSupport `
+            --distpath dist/remote62 `
+            --workpath build/remote62 `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/remote62/VexRemoteSupport/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+      - name: Prove exact packaged executable startup
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/remote62/VexRemoteSupport/VexRemoteSupport.exe'
+          $p = Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Start-Sleep -Seconds 12
+          if ($p.HasExited) { throw "Packaged v0.11.7.62 exited during startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+          Write-Host 'Packaged v0.11.7.62 remained alive for 12 seconds'
+      - name: Build matching Doctor companion
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console `
+            --name VexDoctor `
+            --distpath dist/remote62 `
+            --workpath build/doctor62 `
+            --collect-all requests `
+            Tools/VexDoctor.py
+          if (!(Test-Path dist/remote62/VexDoctor.exe)) { throw "VexDoctor.exe missing" }
+      - name: Package install-ready Remote Support
+        shell: pwsh
+        run: |
+          @'
+          Vex Remote Support v0.11.7.62 Fresh Command Poll Fix
+          ====================================================
+
+          Fixes a page-boundary relay blind spot by polling the calculated tail plus
+          one page ahead. This preserves the durable command ledger/worklog from .59,
+          the one-folder startup packaging from .60, and the single-instance repair
+          from .61.
+
+          Run VexRemoteSupport.exe inside the VexRemoteSupport folder and keep the
+          _internal folder beside it.
+          '@ | Set-Content -Encoding UTF8 dist/remote62/README-VexRemoteSupport-v0.11.7.62.txt
+          $pkg='VexRemoteSupport-v0.11.7.62-FreshCommandPollFix'
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse dist/remote62/VexRemoteSupport "$pkg/VexRemoteSupport"
+          Copy-Item dist/remote62/VexDoctor.exe "$pkg/VexDoctor.exe"
+          Copy-Item dist/remote62/README-VexRemoteSupport-v0.11.7.62.txt "$pkg/README-VexRemoteSupport-v0.11.7.62.txt"
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip" -Force
+      - name: Upload install artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexRemoteSupport-v0.11.7.62-FreshCommandPollFix
+          path: VexRemoteSupport-v0.11.7.62-FreshCommandPollFix.zip
+          if-no-files-found: error
+          retention-days: 14
