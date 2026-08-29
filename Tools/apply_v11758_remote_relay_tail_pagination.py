@@ -10,15 +10,24 @@ remote = REMOTE.read_text(encoding="utf-8")
 if 'VERSION = "0.11.7.57"' not in remote:
     raise SystemExit("v0.11.7.58 expected v0.11.7.57 Remote Support identity")
 
-old = '''def fetch_comments() -> list[dict]:
-    data = gh_api([f"repos/{REPO}/issues/{ISSUE_NUMBER}/comments?per_page=100"], timeout=30)
-    return data if isinstance(data, list) else []
-'''
+# v0.11.7.5 fixed the original 100-comment blindness by walking pages 1..100.
+# Issue #52 has now grown large enough that replaying its whole history every 15s
+# is wasteful and can delay fresh command handling. Replace the current assembled
+# function by bounds, not by an obsolete exact-text anchor, so this patch applies
+# cleanly after every carried .57 layer.
+start = remote.find("def fetch_comments() -> list[dict]:")
+if start < 0:
+    raise SystemExit("v0.11.7.58 fetch_comments function missing")
+end = remote.find("\n\ndef ", start + 5)
+if end < 0:
+    raise SystemExit("v0.11.7.58 could not bound fetch_comments function")
+current = remote[start:end]
+if "comments?per_page=100&page={page}" not in current:
+    raise SystemExit("v0.11.7.58 expected paged relay source marker missing")
+
 new = '''def fetch_comments() -> list[dict]:
-    # Issue #52 is a long-lived relay. GitHub returns the *oldest* 100 comments
-    # when page is omitted, which eventually makes a healthy agent blind to new
-    # VEXCMD messages. Read only the newest two pages: enough overlap for races,
-    # bounded work every poll, and no full-history download.
+    # Read only the newest two issue-comment pages. That keeps the relay bounded
+    # while retaining overlap for commands posted during a page rollover.
     issue = gh_api([f"repos/{REPO}/issues/{ISSUE_NUMBER}"], timeout=30)
     total = integer(issue.get("comments")) if isinstance(issue, dict) else 0
     last_page = max(1, (total + 99) // 100)
@@ -44,9 +53,7 @@ new = '''def fetch_comments() -> list[dict]:
     comments.sort(key=lambda item: integer(item.get("id")))
     return comments
 '''
-if old not in remote:
-    raise SystemExit("v0.11.7.58 first-page-only fetch_comments anchor missing")
-remote = remote.replace(old, new, 1)
+remote = remote[:start] + new.rstrip() + remote[end:]
 remote = re.sub(r'^VERSION = "0\.11\.7\.57"', 'VERSION = "0.11.7.58"', remote, count=1, flags=re.M)
 
 REMOTE.write_text(remote, encoding="utf-8")
@@ -55,13 +62,15 @@ compile(remote, str(REMOTE), "exec")
 for marker in [
     'VERSION = "0.11.7.58"',
     'last_page = max(1, (total + 99) // 100)',
-    'max(1, last_page - 1)',
+    'pages = sorted({max(1, last_page - 1), last_page})',
     'comments?per_page=100&page={page}',
+    'comments.sort(key=lambda item: integer(item.get("id")))',
 ]:
     if marker not in remote:
         raise SystemExit(f"v0.11.7.58 relay marker missing: {marker}")
 
-if 'comments?per_page=100"], timeout=30)' in remote:
-    raise SystemExit("v0.11.7.58 regression: unpaged first-page relay poll survived")
+# The old full-history loop is the regression we are removing.
+if "for page in range(1, 101)" in remote[start:remote.find("\n\ndef ", start + 5)]:
+    raise SystemExit("v0.11.7.58 regression: full-history relay loop survived")
 
-print("Applied v0.11.7.58 Remote Support newest-page relay polling fix")
+print("Applied v0.11.7.58 bounded newest-page Remote Support relay fix")
