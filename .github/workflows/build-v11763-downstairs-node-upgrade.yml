@@ -14,7 +14,7 @@ permissions:
 jobs:
   build-downstairs-node:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,7 +24,18 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography yt-dlp pillow
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Reconstruct proven v0.11.7.39 Bridge source
+        shell: pwsh
+        run: |
+          python Tools/build_v11728_chain.py
+          python Tools/apply_v11729_windows_defender_safe.py
+          python Tools/apply_v11729_bridge_onedir_hotfix.py
+          python Tools/apply_v11734_bridge_responsive_boot.py
+          python Tools/apply_v11737_ollama_recovery.py
+          python Tools/apply_v11738_cognition_capacity_hotfix.py
+          python Tools/apply_v11739_cognition_helper_bundle.py
 
       - name: Verify current mesh sources
         shell: pwsh
@@ -33,13 +44,16 @@ jobs:
           from pathlib import Path
           bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
           node = Path("Tools/VexNodeAgent.py").read_text(encoding="utf-8")
-          assert 'VERSION = "0.11.7.39"' in bridge
+          assert '"version": "0.11.7.39"' in bridge
           assert 'VERSION = "0.11.7.33"' in node
           assert '/brain/context' in bridge
           assert '/llm/chat' in bridge
           assert '/status' in node
+          assert 'def _model_billions(name: str)' in bridge
+          assert 'def _cognition_model_rank(name: str' in bridge
           print('Current Bridge + NodeAgent mesh sources verified')
           '@ | python -
+          python -m py_compile Bridge/vex_bridge.py Tools/VexNodeAgent.py
 
       - name: Build current Vex Bridge
         shell: pwsh
@@ -68,17 +82,23 @@ jobs:
       - name: Prove packaged processes start
         shell: pwsh
         run: |
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           $bridge = Resolve-Path 'dist/downstairs/VexBridge/VexBridge.exe'
           $bp = Start-Process $bridge -WorkingDirectory (Split-Path $bridge) -PassThru
           Start-Sleep -Seconds 8
+          $bp.Refresh()
           if ($bp.HasExited) { throw "Bridge exited during startup with code $($bp.ExitCode)" }
-          Stop-Process -Id $bp.Id -Force
+          python Tools/test_v11734_responsive_bridge.py
+          python Tools/test_v11739_cognition_route.py
+          Stop-Process -Id $bp.Id -Force -ErrorAction SilentlyContinue
+          Get-Process VexBridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
           $node = Resolve-Path 'dist/downstairs/VexNodeAgent/VexNodeAgent.exe'
           $np = Start-Process $node -WorkingDirectory (Split-Path $node) -PassThru
           Start-Sleep -Seconds 5
+          $np.Refresh()
           if ($np.HasExited) { throw "NodeAgent exited during startup with code $($np.ExitCode)" }
-          Stop-Process -Id $np.Id -Force
+          Stop-Process -Id $np.Id -Force -ErrorAction SilentlyContinue
           Write-Host 'Both packaged node processes remained alive during startup proof'
 
       - name: Package upgrade bundle
