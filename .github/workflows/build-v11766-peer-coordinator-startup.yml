@@ -1,0 +1,85 @@
+name: Build Vex Peer Coordinator v0.11.7.66 Startup Repair
+
+on:
+  push:
+    branches: [ "fix/v11766-peer-coordinator-startup" ]
+    paths:
+      - "Tools/VexPeerCoordinator_v66.py"
+      - "Tools/Install-VexPeerCoordinator-v0.11.7.66.ps1"
+      - ".github/workflows/build-v11766-peer-coordinator-startup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependency
+        run: python -m pip install --upgrade pyinstaller
+      - name: Verify source self-test
+        run: python Tools/VexPeerCoordinator_v66.py --self-test
+      - name: Verify startup repair invariants
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          s = Path("Tools/VexPeerCoordinator_v66.py").read_text(encoding="utf-8")
+          assert 'VERSION = "0.11.7.66"' in s
+          assert 'log_event("process_started")' in s
+          assert 'peer-v11766-' in s
+          assert 'last_page + 1' in s
+          i = Path("Tools/Install-VexPeerCoordinator-v0.11.7.66.ps1").read_text(encoding="utf-8")
+          assert "$p.HasExited" in i
+          assert "coordinator.log" in i
+          print("v0.11.7.66 startup repair invariants verified")
+          '@ | python -
+      - name: Build coordinator onedir executable
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed --noupx `
+            --name VexPeerCoordinator `
+            --distpath dist/peer66 `
+            --workpath build/peer66 `
+            Tools/VexPeerCoordinator_v66.py
+          if (!(Test-Path dist/peer66/VexPeerCoordinator/VexPeerCoordinator.exe)) { throw "VexPeerCoordinator.exe missing" }
+      - name: Smoke test packaged self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process 'dist/peer66/VexPeerCoordinator/VexPeerCoordinator.exe' -ArgumentList '--self-test' -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Packaged coordinator self-test failed with code $($p.ExitCode)" }
+      - name: Smoke test packaged long-running startup
+        shell: pwsh
+        run: |
+          $p = Start-Process 'dist/peer66/VexPeerCoordinator/VexPeerCoordinator.exe' -PassThru
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) { throw "Packaged coordinator exited during 10-second startup smoke test" }
+          Stop-Process -Id $p.Id -Force
+      - name: Package install-ready artifact
+        shell: pwsh
+        run: |
+          $pkg='VexDualPC-v0.11.7.66-StartupRepair'
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse dist/peer66/VexPeerCoordinator "$pkg/VexPeerCoordinator"
+          Copy-Item Tools/Install-VexPeerCoordinator-v0.11.7.66.ps1 "$pkg/Install-VexPeerCoordinator-v0.11.7.66.ps1"
+          @'
+          VexNative Dual-PC Coordinator v0.11.7.66 Startup Repair
+          =======================================================
+          Install on the UPSTAIRS primary PC only.
+          This replaces only the peer coordinator, not Bridge, Remote Support, NodeAgent, memory, or WindowsHost.
+          v0.11.7.66 uses one-folder packaging, writes local startup diagnostics, and the installer verifies the process remains alive before reporting success.
+          Run Install-VexPeerCoordinator-v0.11.7.66.ps1 with PowerShell.
+          '@ | Set-Content -Encoding UTF8 "$pkg/README.txt"
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexDualPC-v0.11.7.66-StartupRepair
+          path: VexDualPC-v0.11.7.66-StartupRepair.zip
+          if-no-files-found: error
+          retention-days: 14
