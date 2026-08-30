@@ -1,0 +1,84 @@
+name: Build Vex Downstairs Link Stability v0.11.7.67
+
+on:
+  push:
+    branches: [ "fix/v11766-peer-coordinator-startup" ]
+    paths:
+      - "Tools/apply_v11767_remote_long_session.py"
+      - "Tools/Install-VexDownstairsRelay-v0.11.7.67.ps1"
+      - ".github/workflows/build-v11767-downstairs-link-stability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Reassemble proven Remote Support source
+        run: |
+          python Tools/ci_v11757_autonomous_research_evidence_loop.py
+          python Tools/apply_v11758_remote_relay_tail_pagination.py
+          python Tools/apply_v11759_remote_command_ledger.py
+          python Tools/apply_v11760_remote_startup_ondir.py
+          python Tools/apply_v11761_remote_single_instance_definition.py
+          python Tools/apply_v11762_remote_recent_command_poll.py
+          python Tools/apply_v11767_remote_long_session.py
+      - name: Verify source
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          s=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8')
+          assert 'VERSION = "0.11.7.67"' in s
+          assert 'SESSION_SECONDS = 24 * 60 * 60' in s
+          assert 'last_page + 1' in s
+          assert 'processed_command_ids_v59' in s
+          print('v0.11.7.67 source verified')
+          '@ | python -
+      - name: Build relay
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --distpath dist/relay67 --workpath build/relay67 --collect-all requests Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/relay67/VexRemoteSupport/VexRemoteSupport.exe)) { throw 'missing relay exe' }
+      - name: Smoke test relay
+        shell: pwsh
+        run: |
+          $exe=Resolve-Path 'dist/relay67/VexRemoteSupport/VexRemoteSupport.exe'
+          $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Start-Sleep -Seconds 12
+          if ($p.HasExited) { throw "relay exited: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $pkg='VexDownstairs-v0.11.7.67-LinkStability'
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse dist/relay67/VexRemoteSupport "$pkg/VexRemoteSupport"
+          Copy-Item Tools/Install-VexDownstairsRelay-v0.11.7.67.ps1 "$pkg/Install-VexDownstairsRelay-v0.11.7.67.ps1"
+          @'
+          VexNative Downstairs Link Stability v0.11.7.67
+          =================================================
+          Install on the DOWNSTAIRS PC only.
+          - preserves existing Remote Support node identity/state
+          - extends the explicitly started support session from 2 hours to 24 hours
+          - keeps AC sleep and AC hibernate disabled so the secondary node remains reachable
+          - leaves Bridge and NodeAgent untouched
+          '@ | Set-Content -Encoding UTF8 "$pkg/README.txt"
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexDownstairs-v0.11.7.67-LinkStability
+          path: VexDownstairs-v0.11.7.67-LinkStability.zip
+          if-no-files-found: error
+          retention-days: 14
