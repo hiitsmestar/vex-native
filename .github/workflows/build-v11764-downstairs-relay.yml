@@ -1,0 +1,68 @@
+name: Build Vex Downstairs Relay v0.11.7.64 Repair
+
+on:
+  push:
+    branches: [ "fix/v11764-downstairs-relay" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Reassemble Remote Support source
+        run: |
+          python Tools/ci_v11757_autonomous_research_evidence_loop.py
+          python Tools/apply_v11758_remote_relay_tail_pagination.py
+          python Tools/apply_v11759_remote_command_ledger.py
+          python Tools/apply_v11760_remote_startup_ondir.py
+          python Tools/apply_v11761_remote_single_instance_definition.py
+          python Tools/apply_v11762_remote_recent_command_poll.py
+      - name: Verify source
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          s=Path('Tools/VexRemoteSupport.py').read_text(encoding='utf-8')
+          assert 'VERSION = "0.11.7.62"' in s
+          assert 'last_page + 1' in s
+          print('relay source verified')
+          '@ | python -
+      - name: Build relay
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx --windowed --name VexRemoteSupport --distpath dist/relay64 --workpath build/relay64 --collect-all requests Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/relay64/VexRemoteSupport/VexRemoteSupport.exe)) { throw 'missing relay exe' }
+      - name: Smoke test relay
+        shell: pwsh
+        run: |
+          $exe=Resolve-Path 'dist/relay64/VexRemoteSupport/VexRemoteSupport.exe'
+          $p=Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          Start-Sleep -Seconds 12
+          if ($p.HasExited) { throw "relay exited: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Package artifact
+        shell: pwsh
+        run: |
+          $pkg='VexDownstairsRelay-v0.11.7.64-Repair'
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse dist/relay64/VexRemoteSupport "$pkg/VexRemoteSupport"
+          Copy-Item Tools/Install-VexDownstairsRelay-v0.11.7.64.ps1 "$pkg/Install-VexDownstairsRelay-v0.11.7.64.ps1"
+          Compress-Archive -Path "$pkg/*" -DestinationPath "$pkg.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexDownstairsRelay-v0.11.7.64-Repair
+          path: VexDownstairsRelay-v0.11.7.64-Repair.zip
+          if-no-files-found: error
+          retention-days: 14
