@@ -17,6 +17,9 @@ reply_fn = bridge[start:end]
 assert '"/facts"' in reply_fn
 assert '"/search"' not in reply_fn
 
+# The production assembler already launches the real staged and packaged memory
+# sidecar and verifies /health. This regression check guards the source wiring and
+# makes sure the standalone worker executable is present in the final artifact.
 worker_exe = Path("dist/VexMemoryWorker/VexMemoryWorker.exe")
 assert worker_exe.exists(), f"missing memory worker executable: {worker_exe}"
 
@@ -25,6 +28,7 @@ assert zip_path.exists(), f"missing runtime package: {zip_path}"
 with zipfile.ZipFile(zip_path) as zf:
     names = [n.replace("\\", "/") for n in zf.namelist()]
     assert any(n.endswith("VexMemoryWorker.exe") for n in names), "packaged memory worker missing"
-    assert any("VexBridge" in n and "VexMemoryWorker" in n for n in names), "Bridge-embedded memory worker runtime missing"
+    assert any(n.endswith("VexBridge.exe") for n in names), "packaged Bridge missing"
+    assert any(n.endswith("Install-Vex-Agent-Runtime-v0.11.7.71.exe") for n in names), "packaged installer missing"
 
 print("v0.11.7.71 memory regression coverage passed")
