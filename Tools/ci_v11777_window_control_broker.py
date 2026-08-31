@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+# Build trigger after workflow registration.
 source_path = Path("Tools/ci_v11771_self_repair_natural_recall.py")
 source = source_path.read_text(encoding="utf-8")
 
