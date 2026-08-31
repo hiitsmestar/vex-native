@@ -5,33 +5,22 @@ path = Path("VexNative/ContentView.swift")
 text = path.read_text(encoding="utf-8")
 
 # v0.11.1 intentionally moved the full archive backfill into the background so
-# conversation stayed responsive. Keep that behavior, but synchronously send the
-# compact profile/persona/rules snapshot before each PC cognition request. This
-# guarantees the Windows MemoryWorker can materialize core:star:profile before a
-# broad recall question reaches /llm/chat -> /facts.
-primary_old = '''            Task { await syncPersonalMemory(endpoint: primary, app: app) }
-            winner = await requestReply(
-'''
-primary_new = '''            await syncPersonalMetadata(endpoint: primary, app: app)
-            Task { await syncPersonalMemory(endpoint: primary, app: app) }
-            winner = await requestReply(
-'''
-if primary_old in text:
-    text = text.replace(primary_old, primary_new, 1)
-elif "await syncPersonalMetadata(endpoint: primary, app: app)" not in text:
-    raise SystemExit("v0.11.7.51 primary cognition sync anchor missing")
+# conversation stayed responsive. Later PC-cognition hardening renamed the
+# endpoint objects to primary.value/fallback.value, so patch the actual sync call
+# itself rather than depending on brittle adjacency to requestReply().
+primary_line = "                Task { await syncPersonalMemory(endpoint: primary.value, app: app) }\n"
+primary_sync = "                await syncPersonalMetadata(endpoint: primary.value, app: app)\n"
+if primary_sync not in text:
+    if primary_line not in text:
+        raise SystemExit("v0.11.7.51 primary cognition sync anchor missing")
+    text = text.replace(primary_line, primary_sync + primary_line, 1)
 
-fallback_old = '''                Task { await syncPersonalMemory(endpoint: fallback, app: app) }
-                if let candidate = await requestReply(
-'''
-fallback_new = '''                await syncPersonalMetadata(endpoint: fallback, app: app)
-                Task { await syncPersonalMemory(endpoint: fallback, app: app) }
-                if let candidate = await requestReply(
-'''
-if fallback_old in text:
-    text = text.replace(fallback_old, fallback_new, 1)
-elif "await syncPersonalMetadata(endpoint: fallback, app: app)" not in text:
-    raise SystemExit("v0.11.7.51 fallback cognition sync anchor missing")
+fallback_line = "                    Task { await syncPersonalMemory(endpoint: fallback.value, app: app) }\n"
+fallback_sync = "                    await syncPersonalMetadata(endpoint: fallback.value, app: app)\n"
+if fallback_sync not in text:
+    if fallback_line not in text:
+        raise SystemExit("v0.11.7.51 fallback cognition sync anchor missing")
+    text = text.replace(fallback_line, fallback_sync + fallback_line, 1)
 
 helper_anchor = '''    private static func syncPersonalMemory(endpoint: String, app: AppModel) async {
 '''
@@ -60,22 +49,19 @@ elif "private static func syncPersonalMetadata(endpoint: String, app: AppModel)"
     raise SystemExit("v0.11.7.51 metadata helper anchor missing")
 
 # A recall miss must not be followed by the raw model inventing a fake memory.
-# Catch the immediate explanation follow-up in the PC cognition overlay and give
-# a deterministic provenance-safe answer instead.
+# Insert immediately after the overlay function declaration so later diagnostics
+# can freely reshape the rest of tryHandle without breaking this guard.
 overlay_marker = "private enum PCCognitionOverlay {"
 overlay_pos = text.find(overlay_marker)
 if overlay_pos < 0:
     raise SystemExit("PCCognitionOverlay marker missing")
-func_anchor = '''    static func tryHandle(_ original: String, app: AppModel) async -> Bool {
-        guard shouldUse(original) else { return false }
-'''
-func_pos = text.find(func_anchor, overlay_pos)
-if func_pos < 0:
-    if "isRecallMissExplanationFollowup(original, app: app)" not in text:
-        raise SystemExit("PCCognitionOverlay tryHandle anchor missing")
-else:
-    replacement = '''    static func tryHandle(_ original: String, app: AppModel) async -> Bool {
-        if isRecallMissExplanationFollowup(original, app: app) {
+
+decl = "    static func tryHandle(_ original: String, app: AppModel) async -> Bool {\n"
+decl_pos = text.find(decl, overlay_pos)
+if decl_pos < 0:
+    raise SystemExit("PCCognitionOverlay tryHandle declaration missing")
+if "isRecallMissExplanationFollowup(original, app: app)" not in text[decl_pos:decl_pos + 2200]:
+    guard_block = '''        if isRecallMissExplanationFollowup(original, app: app) {
             app.draft = ""
             app.isGenerating = true
             defer { app.isGenerating = false }
@@ -87,9 +73,9 @@ else:
             app.persist()
             return true
         }
-        guard shouldUse(original) else { return false }
 '''
-    text = text[:func_pos] + text[func_pos:].replace(func_anchor, replacement, 1)
+    insert_at = decl_pos + len(decl)
+    text = text[:insert_at] + guard_block + text[insert_at:]
 
 should_anchor = '''    private static func shouldUse(_ text: String) -> Bool {
 '''
@@ -122,13 +108,13 @@ elif "private static func isRecallMissExplanationFollowup(" not in text[overlay_
 path.write_text(text, encoding="utf-8")
 
 required = [
-    "await syncPersonalMetadata(endpoint: primary, app: app)",
-    "await syncPersonalMetadata(endpoint: fallback, app: app)",
+    "await syncPersonalMetadata(endpoint: primary.value, app: app)",
+    "await syncPersonalMetadata(endpoint: fallback.value, app: app)",
     "private static func syncPersonalMetadata(endpoint: String, app: AppModel) async",
     '"source": "vexnative-iphone-v0.11.7.51"',
     "isRecallMissExplanationFollowup(original, app: app)",
     "verified-memory lookup returned no trusted fact",
-    "Task { await syncPersonalMemory(endpoint: primary, app: app) }",
+    "Task { await syncPersonalMemory(endpoint: primary.value, app: app) }",
 ]
 missing = [m for m in required if m not in text]
 if missing:
