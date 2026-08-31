@@ -1,0 +1,56 @@
+name: Build Vex Agent Runtime v0.11.7.73 Recall Routing Hardening
+
+on:
+  push:
+    branches: [ "fix/v11773-recall-routing-hardening" ]
+    paths:
+      - "Tools/apply_v11773_recall_routing_hardening.py"
+      - "Tools/ci_v11773_recall_routing_hardening.py"
+      - ".github/workflows/build-v11773-recall-routing-hardening.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build production Agent Runtime
+        run: python Tools/ci_v11773_recall_routing_hardening.py
+
+      - name: Verify v0.11.7.73 recall guards
+        shell: python
+        run: |
+          from pathlib import Path
+          b = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          i = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          assert '"agent_runtime_bundle": "0.11.7.73"' in b
+          assert "def _v11773_is_prompt_like_fact(" in b
+          assert "def _v11773_is_broad_recall(" in b
+          assert 'queries = [""]' in b
+          assert 'fact.endswith("?")' in b
+          assert 'pc-memory-facts-v11773' in b
+          assert 'BUNDLE_VERSION = "0.11.7.73"' in i
+          assert "standalone_remote.exists()" in i
+          compile(b, "Bridge/vex_bridge.py", "exec")
+          print("v0.11.7.73 recall routing guards verified")
+
+      - name: Upload v0.11.7.73 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.73-RecallRoutingHardening
+          path: Vex-Agent-Runtime-v0.11.7.73-RecallRoutingHardening.zip
+          if-no-files-found: error
+          retention-days: 14
