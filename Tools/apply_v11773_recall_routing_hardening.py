@@ -117,6 +117,7 @@ def _verified_personal_memory_reply(message: str) -> tuple[str, str] | None:
 '''
 
 text = replace_function(text, "_verified_personal_memory_reply", replacement)
+text = text.replace('"agent_runtime_bundle": "0.11.7.72"', '"agent_runtime_bundle": "0.11.7.73"')
 text = text.replace('"agent_runtime_bundle": "0.11.7.71"', '"agent_runtime_bundle": "0.11.7.73"')
 installer = installer.replace('BUNDLE_VERSION = "0.11.7.72"', 'BUNDLE_VERSION = "0.11.7.73"')
 installer = installer.replace('Vex Agent Runtime v0.11.7.72', 'Vex Agent Runtime v0.11.7.73')
