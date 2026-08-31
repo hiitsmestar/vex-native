@@ -41,8 +41,8 @@ if patch_anchor not in source:
     raise SystemExit("v0.11.7.71 nested patch-list anchor missing")
 source = source.replace(patch_anchor, patch_new, 1)
 
-# .57 remains the project-learning engine identity; .71 changes the surrounding
-# runtime repair/rendering behavior, not the evidence-loop protocol itself.
+# .57 remains the autonomous project-learning and Windows-native capability
+# identity. .71 advances the runtime bundle and repair/renderer behavior only.
 old_autolearn_version = 'autolearn.get("version") == "0.11.7.53"'
 if old_autolearn_version not in source:
     raise SystemExit("v0.11.7.71 autolearn version smoke anchor missing")
@@ -56,6 +56,11 @@ source = source.replace(
     'autolearn.get("mode") != "autonomous-source-grounded-project-learning-evidence-loop"',
     1,
 )
+
+native_smoke = 'native.get("version") == "0.11.7.71"'
+if native_smoke not in source:
+    raise SystemExit("v0.11.7.71 Windows-native version smoke anchor missing")
+source = source.replace(native_smoke, 'native.get("version") == "0.11.7.57"', 1)
 
 globals_dict = {
     "__name__": "__main__",
