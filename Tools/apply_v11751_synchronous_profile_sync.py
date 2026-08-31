@@ -4,23 +4,30 @@ from pathlib import Path
 path = Path("VexNative/ContentView.swift")
 text = path.read_text(encoding="utf-8")
 
-# v0.11.1 intentionally moved the full archive backfill into the background so
-# conversation stayed responsive. Later PC-cognition hardening renamed the
-# endpoint objects to primary.value/fallback.value, so patch the actual sync call
-# itself rather than depending on brittle adjacency to requestReply().
-primary_line = "                Task { await syncPersonalMemory(endpoint: primary.value, app: app) }\n"
-primary_sync = "                await syncPersonalMetadata(endpoint: primary.value, app: app)\n"
-if primary_sync not in text:
-    if primary_line not in text:
-        raise SystemExit("v0.11.7.51 primary cognition sync anchor missing")
-    text = text.replace(primary_line, primary_sync + primary_line, 1)
+# v0.11.1 moved the large archive backfill into a delayed background task.
+# v0.11.7.48 then changed PC cognition from serial primary/fallback requests to a
+# concurrent endpoint race. Repair the actual raced-endpoint loop: every private
+# Bridge receives the compact profile snapshot before any /llm/chat task starts,
+# while the potentially large chat archive remains asynchronous.
+race_old = '''        for endpoint in endpoints where isBridgeEndpoint(endpoint.value) {
+            Task { await syncPersonalMemory(endpoint: endpoint.value, app: app) }
+        }
 
-fallback_line = "                    Task { await syncPersonalMemory(endpoint: fallback.value, app: app) }\n"
-fallback_sync = "                    await syncPersonalMetadata(endpoint: fallback.value, app: app)\n"
-if fallback_sync not in text:
-    if fallback_line not in text:
-        raise SystemExit("v0.11.7.51 fallback cognition sync anchor missing")
-    text = text.replace(fallback_line, fallback_sync + fallback_line, 1)
+        var winner: CognitionAttempt?
+        await withTaskGroup(of: CognitionResult.self) { group in
+'''
+race_new = '''        for endpoint in endpoints where isBridgeEndpoint(endpoint.value) {
+            await syncPersonalMetadata(endpoint: endpoint.value, app: app)
+            Task { await syncPersonalMemory(endpoint: endpoint.value, app: app) }
+        }
+
+        var winner: CognitionAttempt?
+        await withTaskGroup(of: CognitionResult.self) { group in
+'''
+if "await syncPersonalMetadata(endpoint: endpoint.value, app: app)" not in text:
+    if race_old not in text:
+        raise SystemExit("v0.11.7.51 raced cognition sync anchor missing")
+    text = text.replace(race_old, race_new, 1)
 
 helper_anchor = '''    private static func syncPersonalMemory(endpoint: String, app: AppModel) async {
 '''
@@ -31,8 +38,8 @@ helper = r'''    private static func syncPersonalMetadata(endpoint: String, app:
               var profileObject = (try? JSONSerialization.jsonObject(with: encoded)) as? [String: Any]
         else { return }
 
-        // Chat is copied by the existing bounded background backfill. Keep this
-        // foreground payload compact enough to safely await on every PC turn.
+        // Raw chat is copied by the existing bounded background backfill. Keep this
+        // foreground payload compact enough to await before every PC cognition race.
         profileObject.removeValue(forKey: "messages")
         let payload: [String: Any] = [
             "source": "vexnative-iphone-v0.11.7.51",
@@ -48,9 +55,9 @@ if helper_anchor in text and "private static func syncPersonalMetadata(endpoint:
 elif "private static func syncPersonalMetadata(endpoint: String, app: AppModel)" not in text:
     raise SystemExit("v0.11.7.51 metadata helper anchor missing")
 
-# A recall miss must not be followed by the raw model inventing a fake memory.
-# Insert immediately after the overlay function declaration so later diagnostics
-# can freely reshape the rest of tryHandle without breaking this guard.
+# A verified-memory miss followed by "why?" must never escape to the raw model,
+# which can manufacture autobiographical details. Insert this deterministic guard
+# immediately after PCCognitionOverlay.tryHandle's declaration.
 overlay_marker = "private enum PCCognitionOverlay {"
 overlay_pos = text.find(overlay_marker)
 if overlay_pos < 0:
@@ -108,13 +115,13 @@ elif "private static func isRecallMissExplanationFollowup(" not in text[overlay_
 path.write_text(text, encoding="utf-8")
 
 required = [
-    "await syncPersonalMetadata(endpoint: primary.value, app: app)",
-    "await syncPersonalMetadata(endpoint: fallback.value, app: app)",
+    "await syncPersonalMetadata(endpoint: endpoint.value, app: app)",
     "private static func syncPersonalMetadata(endpoint: String, app: AppModel) async",
     '"source": "vexnative-iphone-v0.11.7.51"',
     "isRecallMissExplanationFollowup(original, app: app)",
     "verified-memory lookup returned no trusted fact",
-    "Task { await syncPersonalMemory(endpoint: primary.value, app: app) }",
+    "Task { await syncPersonalMemory(endpoint: endpoint.value, app: app) }",
+    "await withTaskGroup(of: CognitionResult.self)",
 ]
 missing = [m for m in required if m not in text]
 if missing:
