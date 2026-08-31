@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-source_path = Path("Tools/ci_v11778_memory_facts_path.py")
+source_path = Path("Tools/ci_v11771_self_repair_natural_recall.py")
 source = source_path.read_text(encoding="utf-8")
 
-if "0.11.7.78" not in source:
-    raise SystemExit("v0.11.7.79 expected .78 build identity missing")
-source = source.replace("0.11.7.78", "0.11.7.79")
+if "0.11.7.71" not in source:
+    raise SystemExit("v0.11.7.79 expected .71 build identity missing")
+source = source.replace("0.11.7.71", "0.11.7.79")
 source = source.replace(
-    'Vex-Agent-Runtime-v0.11.7.79-MemoryFactsPath',
+    'Vex-Agent-Runtime-v0.11.7.79-SelfRepair-NaturalRecall',
     'Vex-Agent-Runtime-v0.11.7.79-InlineProfileRecall',
 )
 source = source.replace(
-    'Vex Agent Runtime v0.11.7.79 Memory Facts Path Repair',
+    'Vex Agent Runtime v0.11.7.79 Self Repair + Natural Grounded Recall',
     'Vex Agent Runtime v0.11.7.79 Inline Profile Recall',
 )
 
-anchor = '''        '        \\\"Tools/apply_v11778_memory_facts_path.py\\\",\\\\n'\n'''
-addition = anchor + '''        '        \\\"Tools/apply_v11779_inline_profile_recall.py\\\",\\\\n'\n'''
+anchor = '''        '        \\\"Tools/apply_v11771_self_repair_natural_recall.py\\\",\\\\n'\n'''
+addition = anchor + '''        '        \\\"Tools/apply_v11772_installer_remote_handoff.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11773_recall_routing_hardening.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11774_star_recall_synthesis.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11775_star_memory_query.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11776_windows_app_broker.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11777_window_control_broker.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11778_memory_facts_path.py\\\",\\\\n'\n        '        \\\"Tools/apply_v11779_inline_profile_recall.py\\\",\\\\n'\n'''
 if anchor not in source:
-    raise SystemExit("v0.11.7.79 nested .78 patch anchor missing")
+    raise SystemExit("v0.11.7.79 nested .71 patch anchor missing")
 source = source.replace(anchor, addition, 1)
 
 globals_dict = {
