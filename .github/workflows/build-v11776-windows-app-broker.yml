@@ -1,0 +1,52 @@
+name: Build Vex Agent Runtime v0.11.7.76 Windows App Broker
+
+on:
+  push:
+    branches: [ "build/v11776-windows-app-broker" ]
+    paths:
+      - "Tools/apply_v11776_windows_app_broker.py"
+      - "Tools/ci_v11776_windows_app_broker.py"
+      - ".github/workflows/build-v11776-windows-app-broker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build production Agent Runtime
+        run: python Tools/ci_v11776_windows_app_broker.py
+      - name: Verify v0.11.7.76 Windows app broker
+        shell: python
+        run: |
+          from pathlib import Path
+          b = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          i = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          assert '"agent_runtime_bundle": "0.11.7.76"' in b
+          assert 'def _v11776_app_catalog(' in b
+          assert 'def _v11776_launch_app(' in b
+          assert 'parsed.path == "/windows/apps"' in b
+          assert 'parsed.path == "/windows/launch"' in b
+          assert 'pc-memory-star-query-v11775' in b
+          assert 'BUNDLE_VERSION = "0.11.7.76"' in i
+          assert "standalone_remote.exists()" in i
+          compile(b, "Bridge/vex_bridge.py", "exec")
+          print("v0.11.7.76 Windows app broker verified")
+      - name: Upload v0.11.7.76 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.76-WindowsAppBroker
+          path: Vex-Agent-Runtime-v0.11.7.76-WindowsAppBroker.zip
+          if-no-files-found: error
+          retention-days: 14
