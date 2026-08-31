@@ -31,8 +31,15 @@ jobs:
         run: python Tools/ci_v11772_installer_remote_handoff.py
 
       - name: Verify installer handoff markers
+        shell: python
         run: |
-          python -c "from pathlib import Path; t=Path('Tools/VexAgentRuntimeInstall.py').read_text(encoding='utf-8'); assert 'BUNDLE_VERSION = \"0.11.7.72\"' in t; assert 'standalone_remote' in t; assert 'VexRemoteSupportRuntime\" and standalone_remote.exists()' in t"
+          from pathlib import Path
+          t = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          assert 'BUNDLE_VERSION = "0.11.7.72"' in t
+          assert "standalone_remote" in t
+          assert "VexRemoteSupportRuntime" in t
+          assert "standalone_remote.exists()" in t
+          print("installer handoff markers verified")
 
       - name: Upload v0.11.7.72 runtime
         uses: actions/upload-artifact@v4
