@@ -20,18 +20,24 @@ source = source.replace(
     'Vex Agent Runtime v0.11.7.74 Star Recall Synthesis',
 )
 
-anchor = """        '        \\"Tools/apply_v11774_self_repair_natural_recall.py\\",\\n'
-"""
-# The global version replacement above renames the .71 patch reference inside
-# the embedded patch list. Restore the actual .71 patch file and append .72-.74.
-replacement = """        '        \\"Tools/apply_v11771_self_repair_natural_recall.py\\",\\n'
-        '        \\"Tools/apply_v11772_installer_remote_handoff.py\\",\\n'
-        '        \\"Tools/apply_v11773_recall_routing_hardening.py\\",\\n'
-        '        \\"Tools/apply_v11774_star_recall_synthesis.py\\",\\n'
-"""
-if anchor not in source:
-    raise SystemExit("v0.11.7.74 embedded .71 patch anchor missing")
-source = source.replace(anchor, replacement, 1)
+# Global version replacement also renames the embedded .71 patch filename.
+# Repair that line by content rather than fragile quote/backslash matching, then
+# append .72-.74 using the exact same embedded-line representation.
+lines = source.splitlines(keepends=True)
+needle = "Tools/apply_v11774_self_repair_natural_recall.py"
+patched = False
+for idx, line in enumerate(lines):
+    if needle in line:
+        original = line.replace(needle, "Tools/apply_v11771_self_repair_natural_recall.py")
+        extra72 = original.replace("Tools/apply_v11771_self_repair_natural_recall.py", "Tools/apply_v11772_installer_remote_handoff.py")
+        extra73 = original.replace("Tools/apply_v11771_self_repair_natural_recall.py", "Tools/apply_v11773_recall_routing_hardening.py")
+        extra74 = original.replace("Tools/apply_v11771_self_repair_natural_recall.py", "Tools/apply_v11774_star_recall_synthesis.py")
+        lines[idx:idx + 1] = [original, extra72, extra73, extra74]
+        patched = True
+        break
+if not patched:
+    raise SystemExit("v0.11.7.74 embedded .71 patch line missing")
+source = "".join(lines)
 
 # .57 remains the Windows-native/autolearn implementation identity.
 source = source.replace('native.get("version") == "0.11.7.74"', 'native.get("version") == "0.11.7.57"')
