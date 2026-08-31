@@ -72,6 +72,7 @@ jobs:
               assert facts[0]["subject"] == "star"
               assert facts[0]["text"] == "Star likes neon fox-kitty aesthetics."
               healed.conn.close()
+              mod.DB.conn.close()
           print("v0.11.7.78 memory facts path verified")
       - name: Upload v0.11.7.78 runtime
         uses: actions/upload-artifact@v4
