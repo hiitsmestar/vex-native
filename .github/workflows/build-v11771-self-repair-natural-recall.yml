@@ -7,6 +7,7 @@ on:
       - "Tools/apply_v11771_self_repair_natural_recall.py"
       - "Tools/ci_v11771_self_repair_natural_recall.py"
       - "Tools/test_v11771_self_repair_natural_recall.py"
+      - "Tools/test_v11771_memory_regression.py"
       - ".github/workflows/build-v11771-self-repair-natural-recall.yml"
   workflow_dispatch:
 
@@ -35,7 +36,7 @@ jobs:
         run: python Tools/test_v11771_self_repair_natural_recall.py
 
       - name: Preserve memory regression coverage
-        run: python Tools/test_v11757_memory_regression.py
+        run: python Tools/test_v11771_memory_regression.py
 
       - name: Upload proven v0.11.7.71 runtime
         uses: actions/upload-artifact@v4
