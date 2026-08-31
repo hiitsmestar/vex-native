@@ -17,6 +17,7 @@ installer = INSTALLER.read_text(encoding="utf-8")
 # chars, and (for subject=star) required every returned sentence to literally
 # contain the word "star". Real private profiles are commonly line-oriented and
 # do not repeat the owner's name on every line.
+# Workflow registration trigger: authoritative-memory field repair.
 
 if 'VERSION = "0.11.2"' in mem:
     mem = mem.replace('VERSION = "0.11.2"', 'VERSION = "0.11.2.1"', 1)
