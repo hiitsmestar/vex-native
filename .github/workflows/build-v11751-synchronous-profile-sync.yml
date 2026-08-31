@@ -89,12 +89,12 @@ jobs:
           from pathlib import Path
           c = Path('VexNative/ContentView.swift').read_text(encoding='utf-8')
           required = [
-              'await syncPersonalMetadata(endpoint: primary.value, app: app)',
-              'await syncPersonalMetadata(endpoint: fallback.value, app: app)',
+              'await syncPersonalMetadata(endpoint: endpoint.value, app: app)',
               '"source": "vexnative-iphone-v0.11.7.51"',
-              'Task { await syncPersonalMemory(endpoint: primary.value, app: app) }',
+              'Task { await syncPersonalMemory(endpoint: endpoint.value, app: app) }',
               'isRecallMissExplanationFollowup(original, app: app)',
               'verified-memory lookup returned no trusted fact',
+              'await withTaskGroup(of: CognitionResult.self)',
               'request.timeoutInterval = 125',
               'let failureReason = failureSummary',
           ]
@@ -102,14 +102,10 @@ jobs:
           if missing:
               raise SystemExit('Missing v0.11.7.51 markers: ' + ' | '.join(missing))
 
-          p_sync = c.index('await syncPersonalMetadata(endpoint: primary.value, app: app)')
-          p_request = c.index('let result = await requestReply(', p_sync)
-          if p_sync > p_request:
-              raise SystemExit('primary metadata sync does not precede cognition')
-          f_sync = c.index('await syncPersonalMetadata(endpoint: fallback.value, app: app)')
-          f_request = c.index('let result = await requestReply(', f_sync)
-          if f_sync > f_request:
-              raise SystemExit('fallback metadata sync does not precede cognition')
+          sync_pos = c.index('await syncPersonalMetadata(endpoint: endpoint.value, app: app)')
+          race_pos = c.index('await withTaskGroup(of: CognitionResult.self)', sync_pos)
+          if sync_pos > race_pos:
+              raise SystemExit('profile sync does not precede cognition race')
           print('PASS v0.11.7.51 synchronous profile ordering')
           print('PASS recall-miss hallucination guard')
           PY
@@ -173,7 +169,7 @@ jobs:
           cat > VexNative-v0.11.7.51-FIELD-TEST.txt <<'EOF'
           VexNative v0.11.7.51 - Synchronous Profile Sync
           =================================================
-          - Sends the compact local BrainProfile snapshot to the selected PC MemoryWorker before /llm/chat.
+          - Sends the compact local BrainProfile snapshot to each raced PC MemoryWorker before /llm/chat.
           - Keeps the large chat-history archive backfill asynchronous.
           - Prevents an immediate "why didn't it?" follow-up after a trusted-memory miss from escaping to the raw model and inventing memories.
           - Preserves v0.11.7.50 PC-owned fallback and prior tool/media/device routes.
