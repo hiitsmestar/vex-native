@@ -1,0 +1,46 @@
+name: Build Vex Agent Runtime v0.11.7.71 Self Repair Natural Recall
+
+on:
+  push:
+    branches: [ "build/v11771-self-repair-natural-recall" ]
+    paths:
+      - "Tools/apply_v11771_self_repair_natural_recall.py"
+      - "Tools/ci_v11771_self_repair_natural_recall.py"
+      - "Tools/test_v11771_self_repair_natural_recall.py"
+      - ".github/workflows/build-v11771-self-repair-natural-recall.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build production Agent Runtime
+        run: python Tools/ci_v11771_self_repair_natural_recall.py
+
+      - name: Prove self-repair and grounded recall acceptance
+        run: python Tools/test_v11771_self_repair_natural_recall.py
+
+      - name: Preserve memory regression coverage
+        run: python Tools/test_v11757_memory_regression.py
+
+      - name: Upload proven v0.11.7.71 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.71-SelfRepair-NaturalRecall
+          path: Vex-Agent-Runtime-v0.11.7.71-SelfRepair-NaturalRecall.zip
+          if-no-files-found: error
+          retention-days: 14
