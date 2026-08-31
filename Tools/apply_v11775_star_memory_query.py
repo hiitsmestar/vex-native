@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# Build trigger: 2026-08-31 field recall repair.
 bridge_path = Path("Bridge/vex_bridge.py")
 installer_path = Path("Tools/VexAgentRuntimeInstall.py")
 text = bridge_path.read_text(encoding="utf-8")
