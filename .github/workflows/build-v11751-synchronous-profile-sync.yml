@@ -89,10 +89,10 @@ jobs:
           from pathlib import Path
           c = Path('VexNative/ContentView.swift').read_text(encoding='utf-8')
           required = [
-              'await syncPersonalMetadata(endpoint: primary, app: app)',
-              'await syncPersonalMetadata(endpoint: fallback, app: app)',
+              'await syncPersonalMetadata(endpoint: primary.value, app: app)',
+              'await syncPersonalMetadata(endpoint: fallback.value, app: app)',
               '"source": "vexnative-iphone-v0.11.7.51"',
-              'Task { await syncPersonalMemory(endpoint: primary, app: app) }',
+              'Task { await syncPersonalMemory(endpoint: primary.value, app: app) }',
               'isRecallMissExplanationFollowup(original, app: app)',
               'verified-memory lookup returned no trusted fact',
               'request.timeoutInterval = 125',
@@ -102,13 +102,12 @@ jobs:
           if missing:
               raise SystemExit('Missing v0.11.7.51 markers: ' + ' | '.join(missing))
 
-          # Foreground metadata sync must precede both cognition requests.
-          p_sync = c.index('await syncPersonalMetadata(endpoint: primary, app: app)')
-          p_request = c.index('winner = await requestReply(', p_sync)
+          p_sync = c.index('await syncPersonalMetadata(endpoint: primary.value, app: app)')
+          p_request = c.index('let result = await requestReply(', p_sync)
           if p_sync > p_request:
               raise SystemExit('primary metadata sync does not precede cognition')
-          f_sync = c.index('await syncPersonalMetadata(endpoint: fallback, app: app)')
-          f_request = c.index('if let candidate = await requestReply(', f_sync)
+          f_sync = c.index('await syncPersonalMetadata(endpoint: fallback.value, app: app)')
+          f_request = c.index('let result = await requestReply(', f_sync)
           if f_sync > f_request:
               raise SystemExit('fallback metadata sync does not precede cognition')
           print('PASS v0.11.7.51 synchronous profile ordering')
