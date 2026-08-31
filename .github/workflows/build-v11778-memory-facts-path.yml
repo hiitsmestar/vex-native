@@ -1,0 +1,86 @@
+name: Build Vex Agent Runtime v0.11.7.78 Memory Facts Path Repair
+
+on:
+  push:
+    branches: [ "fix/v11778-memory-facts-path" ]
+    paths:
+      - "Tools/apply_v11778_memory_facts_path.py"
+      - "Tools/ci_v11778_memory_facts_path.py"
+      - ".github/workflows/build-v11778-memory-facts-path.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build production Agent Runtime
+        run: python Tools/ci_v11778_memory_facts_path.py
+      - name: Verify v0.11.7.78 memory facts contract
+        shell: python
+        run: |
+          import importlib.util
+          import os
+          import sqlite3
+          import tempfile
+          from pathlib import Path
+
+          b = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          i = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          w = Path("Tools/VexMemoryWorker.py").read_text(encoding="utf-8")
+          assert '"agent_runtime_bundle": "0.11.7.78"' in b
+          assert 'pc-memory-star-query-v11775' in b
+          assert 'def _v11777_window_action(' in b
+          assert 'BUNDLE_VERSION = "0.11.7.78"' in i
+          assert 'VERSION = "0.11.1"' in w
+          assert 'def facts(self, query: str, limit: int = 8)' in w
+          assert 'if path == "/facts":' in w
+          assert 'INSERT INTO memories_fts(memory_id, text, tags, subject)' in w
+          compile(b, "Bridge/vex_bridge.py", "exec")
+          compile(i, "Tools/VexAgentRuntimeInstall.py", "exec")
+          compile(w, "Tools/VexMemoryWorker.py", "exec")
+
+          # Reproduce a legacy database where the authoritative Star profile exists
+          # but its FTS shadow row is missing, then verify startup repair + /facts
+          # backing logic can retrieve it without reimporting private data.
+          with tempfile.TemporaryDirectory() as td:
+              os.environ["LOCALAPPDATA"] = td
+              spec = importlib.util.spec_from_file_location("vex_memory_v11778", "Tools/VexMemoryWorker.py")
+              mod = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(mod)
+              db_path = Path(td) / "legacy.sqlite3"
+              db = mod.MemoryDB(db_path)
+              now = mod._now()
+              mem_id = "legacy-star-profile"
+              db.conn.execute(
+                  "INSERT INTO memories(id,canonical_key,subject,kind,text,tags,source_type,source_ref,authority,confidence,importance,created_at,updated_at,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                  (mem_id, "core:star:profile", "star", "profile", "Star likes neon fox-kitty aesthetics.", "profile preference", "test", "", 100, 1.0, 1.0, now, now),
+              )
+              db.conn.execute("DELETE FROM memories_fts WHERE memory_id=?", (mem_id,))
+              db.conn.commit()
+              db.conn.close()
+              healed = mod.MemoryDB(db_path)
+              facts = healed.facts("star", limit=8)
+              assert facts, "legacy Star profile was not recovered through facts()"
+              assert facts[0]["subject"] == "star"
+              assert facts[0]["text"] == "Star likes neon fox-kitty aesthetics."
+              healed.conn.close()
+          print("v0.11.7.78 memory facts path verified")
+      - name: Upload v0.11.7.78 runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.11.7.78-MemoryFactsPath
+          path: Vex-Agent-Runtime-v0.11.7.78-MemoryFactsPath.zip
+          if-no-files-found: error
+          retention-days: 14
