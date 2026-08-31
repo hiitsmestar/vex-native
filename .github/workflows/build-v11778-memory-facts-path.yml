@@ -50,7 +50,9 @@ jobs:
           compile(i, "Tools/VexAgentRuntimeInstall.py", "exec")
           compile(w, "Tools/VexMemoryWorker.py", "exec")
 
-          with tempfile.TemporaryDirectory() as td:
+          # Windows runners can briefly retain SQLite handles after a successful
+          # verifier. Do not turn that runner cleanup race into a product failure.
+          with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
               os.environ["LOCALAPPDATA"] = td
               spec = importlib.util.spec_from_file_location("vex_memory_v11778", "Tools/VexMemoryWorker.py")
               mod = importlib.util.module_from_spec(spec)
