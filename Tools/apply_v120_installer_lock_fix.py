@@ -6,8 +6,12 @@ from pathlib import Path
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
 installer = INSTALLER.read_text(encoding="utf-8")
 
-if 'BUNDLE_VERSION = "0.12.0"' not in installer:
-    raise SystemExit("v0.12 installer lock fix expected v0.12.0 installer")
+# The cumulative assembler can apply this field-hardening immediately before the
+# v0.12 conversation/bootstrap layer.  Accept either the proven .80 baseline or
+# an already-bumped v0.12 installer; this patch is version-neutral and only
+# strengthens live-directory replacement behavior.
+if 'BUNDLE_VERSION = "0.12.0"' not in installer and 'BUNDLE_VERSION = "0.11.7.80"' not in installer:
+    raise SystemExit("v0.12 installer lock fix expected .80 or v0.12.0 installer")
 
 replace_file_anchor = "\n\ndef replace_file(src: Path, dst: Path) -> None:\n"
 if replace_file_anchor not in installer:
