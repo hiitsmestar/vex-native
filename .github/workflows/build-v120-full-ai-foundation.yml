@@ -9,6 +9,7 @@ on:
       - "Tools/apply_v120_conversation_route_fix.py"
       - "Tools/apply_v120_conversation_route_entry.py"
       - "Tools/apply_v120_installer_lock_fix.py"
+      - "Tools/apply_v120_cognition_model_resilience.py"
       - "Tools/ci_v120_full_ai_foundation.py"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
@@ -63,6 +64,8 @@ jobs:
               'def _v11776_launch_app(',
               'def _v11777_window_action(',
               'pc-memory-star-query-v11775',
+              '_OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0',
+              'One bounded second-chance selection',
           ]:
               assert marker in bridge, marker
           assert 'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION' in installer
@@ -71,7 +74,7 @@ jobs:
           names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
           for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat", "_v120_agent_owns_turn"]:
               assert name in names, name
-          print("PASS v0.12.0 cumulative agent orchestration + compound routing contract")
+          print("PASS v0.12.0 cumulative agent orchestration + cognition resilience contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
