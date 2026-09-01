@@ -7,10 +7,6 @@ from pathlib import Path
 BRIDGE = Path("Bridge/vex_bridge.py")
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
 
-# This gate can be reached from deeply source-generated cumulative CI where patch
-# ordering is not stable. Make it self-sufficient: promote the Bridge/installer to
-# v0.12, preserve the installer lock repair, then preserve cognition resilience
-# before adding the final live-readiness verification.
 bridge = BRIDGE.read_text(encoding="utf-8")
 installer = INSTALLER.read_text(encoding="utf-8")
 if (
@@ -51,26 +47,53 @@ for marker in [
 anchor = "\n\ndef wait_direct_memory(seconds: int = 30) -> dict:\n"
 helper = r'''
 
-def wait_cognition(seconds: int = 150) -> dict:
-    """Do not report a successful v0.12 install until the deployed PC model is usable."""
+def recover_bridge_for_cognition(home: Path) -> None:
+    """Bounded recovery for a Bridge that passed startup and then disappeared during cognition warmup."""
+    script = "Stop-Process -Name 'VexBridge' -Force -ErrorAction SilentlyContinue"
+    try:
+        run_powershell(script, timeout=10)
+    except Exception:
+        pass
+    time.sleep(0.8)
+    launch(home / "VexBridge.exe", home)
+    wait_bridge(seconds=35)
+
+
+def wait_cognition(home: Path, seconds: int = 150) -> dict:
+    """Require a live deployed PC model, recovering a dropped Bridge instead of retrying a dead endpoint."""
     deadline = time.time() + seconds
     last = "no response"
+    failures = 0
+    recoveries = 0
     while time.time() < deadline:
         try:
             status = local_bridge_get("/status", timeout=3.0)
             bundle = str(status.get("agent_runtime_bundle") or "")
             if bundle != BUNDLE_VERSION:
                 last = f"runtime bundle is {bundle or 'missing'}, expected {BUNDLE_VERSION}"
-                time.sleep(1.0)
-                continue
-            value = local_bridge_get("/llm/status", timeout=5.0)
-            model = str(value.get("model") or "").strip()
-            count = int(value.get("available_model_count") or 0)
-            if bool(value.get("ok")) and model and count > 0:
-                return value
-            last = str(value.get("error") or f"model={model or 'none'} count={count}")
+                failures += 1
+            else:
+                value = local_bridge_get("/llm/status", timeout=5.0)
+                model = str(value.get("model") or "").strip()
+                count = int(value.get("available_model_count") or 0)
+                if bool(value.get("ok")) and model and count > 0:
+                    return value
+                last = str(value.get("error") or f"model={model or 'none'} count={count}")
+                failures += 1
         except Exception as exc:
             last = f"{exc.__class__.__name__}: {exc}"
+            failures += 1
+
+        if failures >= 4 and recoveries < 3 and time.time() < deadline:
+            try:
+                recover_bridge_for_cognition(home)
+                recoveries += 1
+                failures = 0
+                continue
+            except Exception as exc:
+                last = f"Bridge cognition recovery failed: {exc}"
+                recoveries += 1
+                failures = 0
         time.sleep(1.0)
     raise RuntimeError(f"PC cognition did not become ready after v0.12 install: {last}")
 '''
@@ -79,11 +102,21 @@ if "def wait_cognition(" not in installer:
         raise SystemExit("v0.12 readiness gate could not find memory-wait anchor")
     installer = installer.replace(anchor, helper + anchor, 1)
 
+# Keep Remote Support alive before cognition verification so a failed warmup still
+# leaves the machine diagnosable instead of cutting off the only remote telemetry.
+remote_launch = '        launch(home / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe", home / "VexRemoteSupportRuntime")\n'
+bridge_launch = '        launch(home / "VexBridge.exe", home)\n'
+if remote_launch in installer and installer.find(remote_launch) > installer.find("cognition = wait_cognition"):
+    installer = installer.replace(remote_launch, "", 1)
+    if bridge_launch not in installer:
+        raise SystemExit("v0.12 readiness gate could not find Bridge launch anchor")
+    installer = installer.replace(bridge_launch, remote_launch + bridge_launch, 1)
+
 main_anchor = "        launch(home / \"VexBridge.exe\", home)\n        wait_bridge()\n        memory = wait_memory()\n"
-main_replacement = "        launch(home / \"VexBridge.exe\", home)\n        wait_bridge()\n        cognition = wait_cognition()\n        memory = wait_memory()\n"
+main_replacement = "        launch(home / \"VexBridge.exe\", home)\n        wait_bridge()\n        cognition = wait_cognition(home)\n        memory = wait_memory()\n"
 if main_anchor in installer:
     installer = installer.replace(main_anchor, main_replacement, 1)
-elif "        cognition = wait_cognition()\n" not in installer:
+elif "        cognition = wait_cognition(home)\n" not in installer:
     raise SystemExit("v0.12 readiness gate could not attach cognition check")
 
 old = '            "Vex Agent Runtime v0.12.0 installed.\\n\\n"\n'
@@ -107,14 +140,20 @@ INSTALLER.write_text(installer, encoding="utf-8")
 compile(installer, str(INSTALLER), "exec")
 
 for marker in [
-    "def wait_cognition(seconds: int = 150)",
+    "def recover_bridge_for_cognition(home: Path)",
+    "def wait_cognition(home: Path, seconds: int = 150)",
     'status.get("agent_runtime_bundle")',
     'local_bridge_get("/llm/status"',
-    "cognition = wait_cognition()",
+    "cognition = wait_cognition(home)",
+    "recover_bridge_for_cognition(home)",
     "installed and verified",
     "PC cognition: ready",
     "def stop_processes_using_install_path(",
 ]:
     if marker not in installer:
         raise SystemExit(f"v0.12 readiness gate missing marker: {marker}")
-print("Applied self-bootstrapping v0.12 live cognition install-readiness gate")
+
+if installer.find(remote_launch) > installer.find("cognition = wait_cognition(home)"):
+    raise SystemExit("v0.12 readiness gate failed to move Remote Support before cognition verification")
+
+print("Applied v0.12 cognition startup recovery + pre-gate Remote Support diagnostics")
