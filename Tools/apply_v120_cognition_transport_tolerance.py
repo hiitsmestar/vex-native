@@ -46,11 +46,10 @@ elif '"warming": True' not in installer:
     raise SystemExit("v0.12 transport tolerance could not convert cognition timeout to warm-up state")
 
 old_line = '            f"PC cognition: ready ({cognition.get(\'model\') or \'local model\'})\\n"\n'
-new_line = '''            (f"PC cognition: ready ({cognition.get('model') or 'local model'})\\n" if cognition.get("ok") else f"PC cognition: warming (Ollama model verified: {ollama.get('model') or 'local model'})\\n")
-'''
+new_line = '            f"PC cognition: {\'ready\' if cognition.get(\'ok\') else \'warming\'} ({cognition.get(\'model\') or ollama.get(\'model\') or \'local model\'})\\n"\n'
 if old_line in installer:
     installer = installer.replace(old_line, new_line, 1)
-elif "PC cognition: warming (Ollama model verified:" not in installer:
+elif "PC cognition: {'ready' if cognition.get('ok') else 'warming'}" not in installer:
     raise SystemExit("v0.12 transport tolerance could not update cognition status dialog")
 
 INSTALLER.write_text(installer, encoding="utf-8")
@@ -60,7 +59,7 @@ for marker in [
     "def wait_cognition(home: Path, seconds: int = 25) -> dict:",
     "if failures >= 999999",
     '"warming": True',
-    "PC cognition: warming (Ollama model verified:",
+    "PC cognition: {'ready' if cognition.get('ok') else 'warming'}",
     "ollama = wait_ollama_model()",
 ]:
     if marker not in installer:
