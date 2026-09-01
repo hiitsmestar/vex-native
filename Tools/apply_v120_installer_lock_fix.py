@@ -7,11 +7,15 @@ INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
 installer = INSTALLER.read_text(encoding="utf-8")
 
 # The cumulative assembler can apply this field-hardening immediately before the
-# v0.12 conversation/bootstrap layer.  Accept either the proven .80 baseline or
-# an already-bumped v0.12 installer; this patch is version-neutral and only
-# strengthens live-directory replacement behavior.
-if 'BUNDLE_VERSION = "0.12.0"' not in installer and 'BUNDLE_VERSION = "0.11.7.80"' not in installer:
-    raise SystemExit("v0.12 installer lock fix expected .80 or v0.12.0 installer")
+# v0.12 conversation/bootstrap layer. The current chain can hand this patch a
+# .79 or .80 installer; an already-bumped v0.12 installer is also valid. This
+# patch is version-neutral and only strengthens live-directory replacement.
+if (
+    'BUNDLE_VERSION = "0.12.0"' not in installer
+    and 'BUNDLE_VERSION = "0.11.7.80"' not in installer
+    and 'BUNDLE_VERSION = "0.11.7.79"' not in installer
+):
+    raise SystemExit("v0.12 installer lock fix expected .79, .80, or v0.12.0 installer")
 
 replace_file_anchor = "\n\ndef replace_file(src: Path, dst: Path) -> None:\n"
 if replace_file_anchor not in installer:
@@ -43,7 +47,7 @@ do {{
     try:
         run_powershell(script, timeout=20)
     except Exception:
-        # The directory-swap retry loop is the final authority.  This helper is
+        # The directory-swap retry loop is the final authority. This helper is
         # best-effort because a just-exited child can disappear between CIM reads.
         pass
 '''
@@ -83,7 +87,7 @@ new_replace_dir = r'''def replace_dir(src: Path, dst: Path) -> None:
             if not isinstance(exc, PermissionError) and winerror not in (5, 32):
                 raise
             # A persistent support/watchdog race may relaunch a process between
-            # the first stop and the rename.  Re-quiesce and retry instead of
+            # the first stop and the rename. Re-quiesce and retry instead of
             # deleting the destination with errors ignored.
             stop_known_vex_processes()
             stop_processes_using_install_path(dst.parent)
