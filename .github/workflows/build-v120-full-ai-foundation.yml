@@ -71,19 +71,26 @@ jobs:
               assert marker in bridge, marker
           for marker in [
               'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION',
-              'def wait_cognition(seconds: int = 150)',
+              'def recover_bridge_for_cognition(home: Path)',
+              'def wait_cognition(home: Path, seconds: int = 150)',
               'local_bridge_get("/llm/status"',
-              'cognition = wait_cognition()',
+              'recover_bridge_for_cognition(home)',
+              'cognition = wait_cognition(home)',
               'installed and verified',
               'PC cognition: ready',
           ]:
               assert marker in installer, marker
+          remote_launch = 'launch(home / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe"'
+          cognition_call = 'cognition = wait_cognition(home)'
+          assert installer.find(remote_launch) != -1
+          assert installer.find(cognition_call) != -1
+          assert installer.find(remote_launch) < installer.find(cognition_call)
 
           tree = ast.parse(bridge)
           names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
           for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat", "_v120_agent_owns_turn"]:
               assert name in names, name
-          print("PASS v0.12.0 cumulative agent orchestration + cognition resilience + install readiness contract")
+          print("PASS v0.12.0 cumulative agent orchestration + cognition recovery + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
