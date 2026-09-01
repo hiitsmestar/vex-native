@@ -5,6 +5,7 @@ on:
     branches: [ "build/v120-full-ai-foundation" ]
     paths:
       - "Tools/apply_v120_full_ai_foundation.py"
+      - "Tools/apply_v120_full_ai_bootstrap.py"
       - "Tools/ci_v120_full_ai_foundation.py"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
@@ -48,7 +49,9 @@ jobs:
               'parsed.path == "/agent/capabilities"',
               'parsed.path == "/agent/plan"',
               'parsed.path == "/agent/execute"',
-              'result = _v120_agent_chat(history, message)',
+              'result = _v120_agent_chat(history, message, context)',
+              'STAR / RELATIONSHIP CONTEXT',
+              'CURRENT VEX STATE',
               'def _v11776_launch_app(',
               'def _v11777_window_action(',
               'pc-memory-star-query-v11775',
