@@ -86,6 +86,9 @@ def _v1200_extract_app_name(message: str) -> str | None:
         match = re.match(pattern, text, flags=re.I)
         if match:
             name = match.group(1).strip(" \"'.,!?-")
+            # Conversational wrappers such as "Could you launch Calculator please?"
+            # belong to the request, not to the Windows app name.
+            name = re.sub(r"\s+(?:please|for me)\s*$", "", name, flags=re.I).strip(" \"'.,!?-")
             if name and len(name) <= 180 and not any(x in name for x in ("http://", "https://", "\\", "/")):
                 return name
     return None
