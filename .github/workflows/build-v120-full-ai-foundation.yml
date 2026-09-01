@@ -1,0 +1,79 @@
+name: Build Vex Agent Runtime v0.12.0 Full AI Foundation
+
+on:
+  push:
+    branches: [ "build/v120-full-ai-foundation" ]
+    paths:
+      - "Tools/apply_v120_full_ai_foundation.py"
+      - "Tools/ci_v120_full_ai_foundation.py"
+      - ".github/workflows/build-v120-full-ai-foundation.yml"
+      - "VEXNATIVE_FULL_AI_RUNTIME.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build cumulative Full AI Runtime
+        run: python Tools/ci_v120_full_ai_foundation.py
+      - name: Verify full AI orchestration contract
+        shell: python
+        run: |
+          import ast
+          from pathlib import Path
+
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          installer = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          worker = Path("Tools/VexMemoryWorker.py").read_text(encoding="utf-8")
+          assert '"agent_runtime_bundle": "0.12.0"' in bridge
+          assert 'BUNDLE_VERSION = "0.12.0"' in installer
+          assert 'VERSION = "0.11.4"' in worker
+          for marker in [
+              'def _v120_capability_registry(',
+              'def _v120_plan(',
+              'def _v120_execute_tool(',
+              'def _v120_agent_chat(',
+              'parsed.path == "/agent/capabilities"',
+              'parsed.path == "/agent/plan"',
+              'parsed.path == "/agent/execute"',
+              'result = _v120_agent_chat(history, message)',
+              'def _v11776_launch_app(',
+              'def _v11777_window_action(',
+              'pc-memory-star-query-v11775',
+          ]:
+              assert marker in bridge, marker
+
+          tree = ast.parse(bridge)
+          names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+          for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat"]:
+              assert name in names, name
+          print("PASS v0.12.0 cumulative agent orchestration contract")
+      - name: Verify bounded safety contract
+        shell: python
+        run: |
+          from pathlib import Path
+          b = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          assert 'close requires explicit confirmation' in b
+          assert 'tool is not in the v0.12.0 capability registry' in b
+          assert 'Never claim a tool action happened unless a confirmed tool result says it did' in b
+          assert 'Do not invent memories, sources, files, device state, or completed actions' in b
+          print("PASS v0.12.0 bounded tool and provenance guards")
+      - name: Upload v0.12.0 Full AI Runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-FullAIFoundation
+          path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
+          if-no-files-found: error
+          retention-days: 14
