@@ -8,8 +8,8 @@ if "0.11.7.80" not in source:
     raise SystemExit("v0.12.0 expected .80 build identity missing")
 
 # The .80 harness is source-generating source and mentions its patch more than once.
-# Clone the LAST occurrence, which is the actual cumulative patch list entry, so .80
-# executes before the v0.12.0 layer.
+# Clone the final cumulative patch-list entry, but route it through a bootstrap that
+# guarantees the proven .80 layer actually executes before v0.12.0.
 lines = source.splitlines(keepends=True)
 indices = [i for i, line in enumerate(lines) if "Tools/apply_v11780_memory_route_punctuation_fix.py" in line]
 if not indices:
@@ -17,7 +17,7 @@ if not indices:
 index = indices[-1]
 lines.insert(index + 1, lines[index].replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_full_ai_foundation.py",
+    "Tools/apply_v120_full_ai_bootstrap.py",
 ))
 source = "".join(lines)
 
