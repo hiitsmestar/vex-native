@@ -8,8 +8,8 @@ if "0.11.7.80" not in source:
     raise SystemExit("v0.12.0 expected .80 build identity missing")
 
 # The .80 harness is source-generating source and mentions its patch more than once.
-# Add the v0.12 conversation/bootstrap entry, installer hardening, then the transient
-# cognition-model resilience patch to the final cumulative patch list.
+# Add the v0.12 conversation/bootstrap entry, installer hardening, transient
+# cognition-model resilience, and final live install-readiness gate to the cumulative patch list.
 lines = source.splitlines(keepends=True)
 indices = [i for i, line in enumerate(lines) if "Tools/apply_v11780_memory_route_punctuation_fix.py" in line]
 if not indices:
@@ -27,9 +27,14 @@ resilience_line = lines[index].replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_model_resilience.py",
 )
+readiness_line = lines[index].replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_install_readiness_gate.py",
+)
 lines.insert(index + 1, entry_line)
 lines.insert(index + 2, lock_line)
 lines.insert(index + 3, resilience_line)
+lines.insert(index + 4, readiness_line)
 source = "".join(lines)
 
 source = source.replace("0.11.7.80", "0.12.0")
