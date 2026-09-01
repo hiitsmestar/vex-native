@@ -40,7 +40,18 @@ readiness_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_install_readiness_gate.py",
 )
-lines[index + 1:index + 1] = [entry_line, lock_line, resilience_line, preflight_line, readiness_line]
+tolerance_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_cognition_transport_tolerance.py",
+)
+lines[index + 1:index + 1] = [
+    entry_line,
+    lock_line,
+    resilience_line,
+    preflight_line,
+    readiness_line,
+    tolerance_line,
+]
 source = "".join(lines)
 
 source = source.replace("0.11.7.80", "0.12.0")
