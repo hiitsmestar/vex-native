@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
+BRIDGE = Path("Bridge/vex_bridge.py")
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
-installer = INSTALLER.read_text(encoding="utf-8")
 
-# The cumulative assembler can apply this field-hardening immediately before the
-# v0.12 conversation/bootstrap layer. The current chain can hand this patch a
-# .79 or .80 installer; an already-bumped v0.12 installer is also valid. This
-# patch is version-neutral and only strengthens live-directory replacement.
-if (
-    'BUNDLE_VERSION = "0.12.0"' not in installer
-    and 'BUNDLE_VERSION = "0.11.7.80"' not in installer
-    and 'BUNDLE_VERSION = "0.11.7.79"' not in installer
-):
-    raise SystemExit("v0.12 installer lock fix expected .79, .80, or v0.12.0 installer")
+# This stage is guaranteed to run in the inherited cumulative assembler. Promote
+# the .79/.80 Bridge and installer to the complete v0.12 runtime here so the
+# inherited Greenline marker verifier sees the final identity before packaging.
+bridge = BRIDGE.read_text(encoding="utf-8")
+if '"agent_runtime_bundle": "0.12.0"' not in bridge:
+    runpy.run_path("Tools/apply_v120_conversation_route_entry.py", run_name="__main__")
+
+installer = INSTALLER.read_text(encoding="utf-8")
+if 'BUNDLE_VERSION = "0.12.0"' not in installer:
+    raise SystemExit("v0.12 installer lock fix failed to bootstrap v0.12 installer")
 
 replace_file_anchor = "\n\ndef replace_file(src: Path, dst: Path) -> None:\n"
 if replace_file_anchor not in installer:
