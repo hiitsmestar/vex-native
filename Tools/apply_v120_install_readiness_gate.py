@@ -44,8 +44,51 @@ for marker in [
     if marker not in bridge:
         raise SystemExit(f"v0.12 readiness gate missing Bridge prerequisite: {marker}")
 
+if "\nimport ssl\n" not in installer:
+    if "\nimport os\n" not in installer:
+        raise SystemExit("v0.12 readiness gate could not add TLS import")
+    installer = installer.replace("\nimport os\n", "\nimport os\nimport ssl\n", 1)
+
 anchor = "\n\ndef wait_direct_memory(seconds: int = 30) -> dict:\n"
 helper = r'''
+
+def full_bridge_get(path: str, timeout: float = 5.0) -> dict:
+    """Query the full authenticated TLS Bridge API used by Remote Support/iPhone."""
+    cfg = bridge_config()
+    token = str(cfg.get("token") or "").strip()
+    port = int(cfg.get("port") or 8765)
+    if not token:
+        raise RuntimeError("Bridge token is unavailable in the existing local configuration.")
+    url = f"https://127.0.0.1:{port}{path}?" + urllib.parse.urlencode({"token": token})
+    context = ssl._create_unverified_context()
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPSHandler(context=context),
+    )
+    try:
+        with opener.open(url, timeout=timeout) as response:
+            value = json.loads(response.read().decode("utf-8"))
+        if isinstance(value, dict):
+            return value
+    except Exception as exc:
+        raise RuntimeError(f"Full Bridge request {path} failed: {exc.__class__.__name__}") from exc
+    raise RuntimeError(f"Full Bridge request {path} returned an invalid response")
+
+
+def cognition_bridge_get(path: str, timeout: float = 5.0) -> dict:
+    """Prefer the real TLS API; local-control is a bounded fallback only."""
+    primary_error = None
+    try:
+        return full_bridge_get(path, timeout=timeout)
+    except Exception as exc:
+        primary_error = exc
+    try:
+        return local_bridge_get(path, timeout=timeout)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Bridge cognition request {path} failed on full API ({primary_error}) and local fallback ({exc})"
+        ) from exc
+
 
 def recover_bridge_for_cognition(home: Path) -> None:
     """Bounded recovery for a Bridge that passed startup and then disappeared during cognition warmup."""
@@ -73,9 +116,11 @@ def wait_cognition(home: Path, seconds: int = 150) -> dict:
                 last = f"runtime bundle is {bundle or 'missing'}, expected {BUNDLE_VERSION}"
                 failures += 1
             else:
-                value = local_bridge_get("/llm/status", timeout=5.0)
+                value = cognition_bridge_get("/llm/status", timeout=5.0)
                 model = str(value.get("model") or "").strip()
                 count = int(value.get("available_model_count") or 0)
+                if not count and isinstance(value.get("available_models"), list):
+                    count = len(value.get("available_models") or [])
                 if bool(value.get("ok")) and model and count > 0:
                     return value
                 last = str(value.get("error") or f"model={model or 'none'} count={count}")
@@ -140,10 +185,12 @@ INSTALLER.write_text(installer, encoding="utf-8")
 compile(installer, str(INSTALLER), "exec")
 
 for marker in [
+    "def full_bridge_get(path: str, timeout: float = 5.0)",
+    "def cognition_bridge_get(path: str, timeout: float = 5.0)",
     "def recover_bridge_for_cognition(home: Path)",
     "def wait_cognition(home: Path, seconds: int = 150)",
     'status.get("agent_runtime_bundle")',
-    'local_bridge_get("/llm/status"',
+    'cognition_bridge_get("/llm/status"',
     "cognition = wait_cognition(home)",
     "recover_bridge_for_cognition(home)",
     "installed and verified",
@@ -156,4 +203,4 @@ for marker in [
 if installer.find(remote_launch) > installer.find("cognition = wait_cognition(home)"):
     raise SystemExit("v0.12 readiness gate failed to move Remote Support before cognition verification")
 
-print("Applied v0.12 cognition startup recovery + pre-gate Remote Support diagnostics")
+print("Applied v0.12 full-API cognition readiness + Bridge recovery + pre-gate Remote Support diagnostics")
