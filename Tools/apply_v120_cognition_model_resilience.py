@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
 
+# The cumulative source-generating harness can invoke this patch while the Bridge
+# is still at the .79/.80 intermediate stage. Promote through the proven v0.12
+# bootstrap first, then harden model discovery. This mirrors the conversation entry
+# and keeps the patch safe regardless of inherited patch-list ordering.
 if '"agent_runtime_bundle": "0.12.0"' not in text:
-    raise SystemExit("v0.12 cognition resilience expected Full AI Foundation")
+    runpy.run_path("Tools/apply_v120_full_ai_bootstrap.py", run_name="__main__")
+    text = BRIDGE.read_text(encoding="utf-8")
+
+if '"agent_runtime_bundle": "0.12.0"' not in text:
+    raise SystemExit("v0.12 cognition resilience failed to bootstrap Full AI Foundation")
 
 start = text.find("def _ollama_models() -> list[str]:\n")
 end = text.find("\n\ndef _choose_ollama_model()", start)
