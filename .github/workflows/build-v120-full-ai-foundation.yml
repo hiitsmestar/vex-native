@@ -7,6 +7,8 @@ on:
       - "Tools/apply_v120_full_ai_foundation.py"
       - "Tools/apply_v120_full_ai_bootstrap.py"
       - "Tools/apply_v120_conversation_route_fix.py"
+      - "Tools/apply_v120_conversation_route_entry.py"
+      - "Tools/apply_v120_installer_lock_fix.py"
       - "Tools/ci_v120_full_ai_foundation.py"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
