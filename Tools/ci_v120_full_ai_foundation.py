@@ -10,6 +10,8 @@ if "0.11.7.80" not in source:
 # The .80 harness is source-generating source and mentions its patch more than once.
 # Clone the final cumulative patch-list entry and route it through one self-bootstrapping
 # v0.12 entry point so assembler ordering cannot run conversation repair too early.
+# Then apply the field installer hardening after v0.12 has been bootstrapped so the
+# packaged installer can safely replace a live persistent Remote Support runtime.
 lines = source.splitlines(keepends=True)
 indices = [i for i, line in enumerate(lines) if "Tools/apply_v11780_memory_route_punctuation_fix.py" in line]
 if not indices:
@@ -19,7 +21,12 @@ entry_line = lines[index].replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_conversation_route_entry.py",
 )
+lock_line = lines[index].replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_installer_lock_fix.py",
+)
 lines.insert(index + 1, entry_line)
+lines.insert(index + 2, lock_line)
 source = "".join(lines)
 
 source = source.replace("0.11.7.80", "0.12.0")
