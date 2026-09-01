@@ -12,6 +12,7 @@ on:
       - "Tools/apply_v120_cognition_model_resilience.py"
       - "Tools/apply_v120_ollama_preflight.py"
       - "Tools/apply_v120_install_readiness_gate.py"
+      - "Tools/apply_v120_cognition_transport_tolerance.py"
       - "Tools/ci_v120_full_ai_foundation.py"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
@@ -80,12 +81,12 @@ jobs:
               'def full_bridge_get(path: str, timeout: float = 5.0)',
               'def cognition_bridge_get(path: str, timeout: float = 5.0)',
               'def recover_bridge_for_cognition(home: Path)',
-              'def wait_cognition(home: Path, seconds: int = 150)',
+              'def wait_cognition(home: Path, seconds: int = 25)',
               'cognition_bridge_get("/llm/status"',
-              'recover_bridge_for_cognition(home)',
               'cognition = wait_cognition(home)',
+              '"warming": True',
+              'PC cognition: warming (Ollama model verified:',
               'installed and verified',
-              'PC cognition: ready',
           ]:
               assert marker in installer, marker
           remote_launch = 'launch(home / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe"'
@@ -98,7 +99,7 @@ jobs:
           names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
           for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat", "_v120_agent_owns_turn"]:
               assert name in names, name
-          print("PASS v0.12.0 cumulative agent orchestration + Ollama preflight + full-API cognition recovery + install readiness contract")
+          print("PASS v0.12.0 cumulative agent orchestration + Ollama preflight + stable cognition warm-up + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
