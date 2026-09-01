@@ -1,0 +1,87 @@
+name: Build Vex Agent Runtime v0.12.0 Full AI
+
+on:
+  push:
+    branches: [ "build/v1200-full-ai-runtime" ]
+    paths:
+      - "Tools/apply_v1200_full_ai_runtime.py"
+      - "Tools/ci_v1200_full_ai_runtime.py"
+      - ".github/workflows/build-v1200-full-ai-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build cumulative Full AI runtime
+        run: python Tools/ci_v1200_full_ai_runtime.py
+
+      - name: Verify full AI capability contract
+        shell: python
+        run: |
+          import ast
+          from pathlib import Path
+
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          installer = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
+          worker = Path("Tools/VexMemoryWorker.py").read_text(encoding="utf-8")
+
+          required = [
+              '"agent_runtime_bundle": "0.12.0"',
+              'BUNDLE_VERSION = "0.12.0"',
+              'VERSION = "0.11.4"',
+              'def _v1200_capability_registry(',
+              'def _v1200_plan(',
+              'def _v1200_execute_plan(',
+              'def _v1200_agent_try_handle(',
+              'parsed.path == "/agent/capabilities"',
+              'parsed.path == "/agent/plan"',
+              'parsed.path == "/agent/run"',
+              'agent_result = _v1200_agent_try_handle(message)',
+              'def _v11776_launch_app(',
+              'def _v11777_window_action(',
+              'pc-memory-star-query-v11775',
+              'subject=\'star\' OR canonical_key=\'core:star:profile\'',
+              'VEX_AGENT_ACTION_LOG',
+          ]
+          corpus = bridge + "\n" + installer + "\n" + worker
+          missing = [x for x in required if x not in corpus]
+          if missing:
+              raise SystemExit("Missing Full AI contract markers: " + " | ".join(missing))
+
+          # Exercise the deterministic intent helpers exactly as shipped.
+          tree = ast.parse(bridge)
+          wanted = {"_v1200_clean_request", "_v1200_extract_app_name", "_v1200_research_query"}
+          body = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+          if {n.name for n in body} != wanted:
+              raise SystemExit("Could not extract Full AI intent helpers")
+          module = ast.Module(body=body, type_ignores=[])
+          ast.fix_missing_locations(module)
+          ns = {"re": __import__("re")}
+          exec(compile(module, "v1200-agent-test", "exec"), ns)
+          assert ns["_v1200_extract_app_name"]("Open Notepad") == "Notepad"
+          assert ns["_v1200_extract_app_name"]("Could you launch Calculator please?") == "Calculator"
+          assert ns["_v1200_research_query"]("search the web for local AI models")[0] == "web"
+          assert ns["_v1200_research_query"]("search my files for VexNative roadmap")[0] == "files"
+          print("PASS v0.12.0 capability registry + planner intent contract")
+
+      - name: Upload v0.12.0 Full AI runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-FullAI
+          path: Vex-Agent-Runtime-v0.12.0-FullAI.zip
+          if-no-files-found: error
+          retention-days: 14
