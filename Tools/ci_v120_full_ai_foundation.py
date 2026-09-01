@@ -7,35 +7,14 @@ source = source_path.read_text(encoding="utf-8")
 if "0.11.7.80" not in source:
     raise SystemExit("v0.12.0 expected .80 build identity missing")
 
-# The .80 harness is source-generating source and mentions its patch more than once.
-# Add the v0.12 conversation/bootstrap entry, installer hardening, transient
-# cognition-model resilience, and final live install-readiness gate to the cumulative patch list.
-lines = source.splitlines(keepends=True)
-indices = [i for i, line in enumerate(lines) if "Tools/apply_v11780_memory_route_punctuation_fix.py" in line]
-if not indices:
-    raise SystemExit("v0.12.0 nested .80 patch line missing")
-index = indices[-1]
-entry_line = lines[index].replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_conversation_route_entry.py",
-)
-lock_line = lines[index].replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_installer_lock_fix.py",
-)
-resilience_line = lines[index].replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_cognition_model_resilience.py",
-)
-readiness_line = lines[index].replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_install_readiness_gate.py",
-)
-lines.insert(index + 1, entry_line)
-lines.insert(index + 2, lock_line)
-lines.insert(index + 3, resilience_line)
-lines.insert(index + 4, readiness_line)
-source = "".join(lines)
+# ci_v11780 is source-generating source. Extend its final nested cumulative patch
+# list directly, preserving the escaping shape it expects, so the v0.12 bootstrap
+# runs before installer hardening/resilience/readiness verification.
+anchor = '''        '        \\\"Tools/apply_v11780_memory_route_punctuation_fix.py\\\",\\\\n'\n'''
+addition = anchor + '''        '        \\\"Tools/apply_v120_conversation_route_entry.py\\\",\\\\n'\n        '        \\\"Tools/apply_v120_installer_lock_fix.py\\\",\\\\n'\n        '        \\\"Tools/apply_v120_cognition_model_resilience.py\\\",\\\\n'\n        '        \\\"Tools/apply_v120_install_readiness_gate.py\\\",\\\\n'\n'''
+if anchor not in source:
+    raise SystemExit("v0.12.0 nested .80 patch anchor missing")
+source = source.replace(anchor, addition, 1)
 
 source = source.replace("0.11.7.80", "0.12.0")
 source = source.replace(
