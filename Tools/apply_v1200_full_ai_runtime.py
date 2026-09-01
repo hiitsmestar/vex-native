@@ -58,12 +58,9 @@ def _v1200_capability_registry() -> list[dict]:
 def _v1200_audit(action: str, result: dict) -> None:
     try:
         record = {
-            "time": time.time(),
-            "version": VEX_AGENT_VERSION,
-            "action": str(action or "")[:100],
-            "ok": bool(result.get("ok")),
-            "tool": str(result.get("tool") or "")[:80],
-            "error": str(result.get("error") or "")[:160],
+            "time": time.time(), "version": VEX_AGENT_VERSION,
+            "action": str(action or "")[:100], "ok": bool(result.get("ok")),
+            "tool": str(result.get("tool") or "")[:80], "error": str(result.get("error") or "")[:160],
         }
         VEX_AGENT_ACTION_LOG.parent.mkdir(parents=True, exist_ok=True)
         with VEX_AGENT_ACTION_LOG.open("a", encoding="utf-8") as fh:
@@ -86,8 +83,6 @@ def _v1200_extract_app_name(message: str) -> str | None:
         match = re.match(pattern, text, flags=re.I)
         if match:
             name = match.group(1).strip(" \"'.,!?-")
-            # Conversational wrappers such as "Could you launch Calculator please?"
-            # belong to the request, not to the Windows app name.
             name = re.sub(r"\s+(?:please|for me)\s*$", "", name, flags=re.I).strip(" \"'.,!?-")
             if name and len(name) <= 180 and not any(x in name for x in ("http://", "https://", "\\", "/")):
                 return name
@@ -153,7 +148,6 @@ def _v1200_execute_plan(plan: dict, dry_run: bool = False) -> dict:
     step = steps[0] if isinstance(steps[0], dict) else {}
     tool = str(step.get("tool") or "")
     args = step.get("args") if isinstance(step.get("args"), dict) else {}
-
     if tool == "agent.capabilities":
         caps = _v1200_capability_registry()
         return {"ok": True, "version": VEX_AGENT_VERSION, "tool": tool, "capabilities": caps,
@@ -219,7 +213,17 @@ installer = installer.replace('Vex Agent Runtime v0.11.7.80', 'Vex Agent Runtime
 
 BRIDGE.write_text(bridge, encoding="utf-8")
 INSTALLER.write_text(installer, encoding="utf-8")
-compile(bridge, str(BRIDGE), "exec")
+try:
+    compile(bridge, str(BRIDGE), "exec")
+except SyntaxError as exc:
+    lines = bridge.splitlines()
+    lo = max(0, int(exc.lineno or 1) - 12)
+    hi = min(len(lines), int(exc.lineno or 1) + 12)
+    print("V1200_SYNTAX_CONTEXT_START")
+    for i in range(lo, hi):
+        print(f"{i+1:05d}: {lines[i]}")
+    print("V1200_SYNTAX_CONTEXT_END")
+    raise
 compile(installer, str(INSTALLER), "exec")
 
 required = [
