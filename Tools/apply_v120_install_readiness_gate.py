@@ -27,11 +27,29 @@ if (
 ):
     runpy.run_path("Tools/apply_v120_cognition_model_resilience.py", run_name="__main__")
 
+# Field CI showed the source-generating composition can skip the standalone
+# preflight patch even when it appears in the requested layer list. Make the
+# readiness gate self-bootstrap it so the generated installer always proves the
+# real Ollama API and an installed model before Bridge cognition verification.
+installer = INSTALLER.read_text(encoding="utf-8")
+if (
+    "def ollama_executable() -> str | None:" not in installer
+    or "def ollama_models(timeout: float = 4.0) -> list[str]:" not in installer
+    or "def wait_ollama_model(seconds: int = 90) -> dict:" not in installer
+    or "ollama = wait_ollama_model()" not in installer
+):
+    runpy.run_path("Tools/apply_v120_ollama_preflight.py", run_name="__main__")
+
 installer = INSTALLER.read_text(encoding="utf-8")
 bridge = BRIDGE.read_text(encoding="utf-8")
 for marker in [
     'BUNDLE_VERSION = "0.12.0"',
     "def stop_processes_using_install_path(",
+    "def ollama_executable() -> str | None:",
+    "def ollama_models(timeout: float = 4.0) -> list[str]:",
+    "def wait_ollama_model(seconds: int = 90) -> dict:",
+    'http://127.0.0.1:11434/api/tags',
+    "ollama = wait_ollama_model()",
 ]:
     if marker not in installer:
         raise SystemExit(f"v0.12 readiness gate missing installer prerequisite: {marker}")
@@ -196,6 +214,8 @@ for marker in [
     "installed and verified",
     "PC cognition: ready",
     "def stop_processes_using_install_path(",
+    "def wait_ollama_model(seconds: int = 90) -> dict:",
+    "ollama = wait_ollama_model()",
 ]:
     if marker not in installer:
         raise SystemExit(f"v0.12 readiness gate missing marker: {marker}")
@@ -203,4 +223,4 @@ for marker in [
 if installer.find(remote_launch) > installer.find("cognition = wait_cognition(home)"):
     raise SystemExit("v0.12 readiness gate failed to move Remote Support before cognition verification")
 
-print("Applied v0.12 full-API cognition readiness + Bridge recovery + pre-gate Remote Support diagnostics")
+print("Applied v0.12 Ollama-preflight + full-API cognition readiness + Bridge recovery + pre-gate Remote Support diagnostics")
