@@ -1,13 +1,52 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
+BRIDGE = Path("Bridge/vex_bridge.py")
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
-installer = INSTALLER.read_text(encoding="utf-8")
 
-if 'BUNDLE_VERSION = "0.12.0"' not in installer:
-    raise SystemExit("v0.12 readiness gate requires bootstrapped v0.12 installer")
+# This gate can be reached from deeply source-generated cumulative CI where patch
+# ordering is not stable. Make it self-sufficient: promote the Bridge/installer to
+# v0.12, preserve the installer lock repair, then preserve cognition resilience
+# before adding the final live-readiness verification.
+bridge = BRIDGE.read_text(encoding="utf-8")
+installer = INSTALLER.read_text(encoding="utf-8")
+if (
+    '"agent_runtime_bundle": "0.12.0"' not in bridge
+    or 'BUNDLE_VERSION = "0.12.0"' not in installer
+    or 'def _v120_agent_owns_turn(message: str) -> bool:' not in bridge
+):
+    runpy.run_path("Tools/apply_v120_conversation_route_entry.py", run_name="__main__")
+
+installer = INSTALLER.read_text(encoding="utf-8")
+if "def stop_processes_using_install_path(" not in installer:
+    runpy.run_path("Tools/apply_v120_installer_lock_fix.py", run_name="__main__")
+
+bridge = BRIDGE.read_text(encoding="utf-8")
+if (
+    "_OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0" not in bridge
+    or "One bounded second-chance selection" not in bridge
+):
+    runpy.run_path("Tools/apply_v120_cognition_model_resilience.py", run_name="__main__")
+
+installer = INSTALLER.read_text(encoding="utf-8")
+bridge = BRIDGE.read_text(encoding="utf-8")
+for marker in [
+    'BUNDLE_VERSION = "0.12.0"',
+    "def stop_processes_using_install_path(",
+]:
+    if marker not in installer:
+        raise SystemExit(f"v0.12 readiness gate missing installer prerequisite: {marker}")
+for marker in [
+    '"agent_runtime_bundle": "0.12.0"',
+    'def _v120_agent_owns_turn(message: str) -> bool:',
+    "_OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0",
+    "One bounded second-chance selection",
+]:
+    if marker not in bridge:
+        raise SystemExit(f"v0.12 readiness gate missing Bridge prerequisite: {marker}")
 
 anchor = "\n\ndef wait_direct_memory(seconds: int = 30) -> dict:\n"
 helper = r'''
@@ -47,15 +86,11 @@ if main_anchor in installer:
 elif "        cognition = wait_cognition()\n" not in installer:
     raise SystemExit("v0.12 readiness gate could not attach cognition check")
 
-# The component executables intentionally retain their own component versions.
-# Make the success dialog explicit about the aggregate v0.12 agent bundle and
-# prove which local model is actually serving before telling Star install succeeded.
 old = '            "Vex Agent Runtime v0.12.0 installed.\\n\\n"\n'
 new = '            f"Vex Agent Runtime {BUNDLE_VERSION} installed and verified.\\n\\n"\n'
 if old in installer:
     installer = installer.replace(old, new, 1)
 elif "installed and verified" not in installer:
-    # Older generated source can still carry a pre-v0.12 literal at this point.
     import re
     installer, n = re.subn(r'            "Vex Agent Runtime v[^"\\n]+ installed\\.\\n\\n"\\n', new, installer, count=1)
     if n == 0:
@@ -78,7 +113,8 @@ for marker in [
     "cognition = wait_cognition()",
     "installed and verified",
     "PC cognition: ready",
+    "def stop_processes_using_install_path(",
 ]:
     if marker not in installer:
         raise SystemExit(f"v0.12 readiness gate missing marker: {marker}")
-print("Applied v0.12 live cognition install-readiness gate")
+print("Applied self-bootstrapping v0.12 live cognition install-readiness gate")
