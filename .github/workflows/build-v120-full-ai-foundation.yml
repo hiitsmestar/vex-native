@@ -6,6 +6,7 @@ on:
     paths:
       - "Tools/apply_v120_full_ai_foundation.py"
       - "Tools/apply_v120_full_ai_bootstrap.py"
+      - "Tools/apply_v120_conversation_route_fix.py"
       - "Tools/ci_v120_full_ai_foundation.py"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
@@ -46,10 +47,15 @@ jobs:
               'def _v120_plan(',
               'def _v120_execute_tool(',
               'def _v120_agent_chat(',
+              'def _v120_agent_owns_turn(message: str) -> bool:',
               'parsed.path == "/agent/capabilities"',
               'parsed.path == "/agent/plan"',
               'parsed.path == "/agent/execute"',
               'result = _v120_agent_chat(history, message, context)',
+              'if _personal_memory_fact_question(message) and not _v120_agent_owns_turn(message):',
+              'if _runtime_fact_question(message) and not _v120_agent_owns_turn(message):',
+              'RESPONSE CONTRACT FOR THIS TURN',
+              'RUNTIME IDENTITY',
               'STAR / RELATIONSHIP CONTEXT',
               'CURRENT VEX STATE',
               'def _v11776_launch_app(',
@@ -57,12 +63,13 @@ jobs:
               'pc-memory-star-query-v11775',
           ]:
               assert marker in bridge, marker
+          assert 'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION' in installer
 
           tree = ast.parse(bridge)
           names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-          for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat"]:
+          for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat", "_v120_agent_owns_turn"]:
               assert name in names, name
-          print("PASS v0.12.0 cumulative agent orchestration contract")
+          print("PASS v0.12.0 cumulative agent orchestration + compound routing contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
