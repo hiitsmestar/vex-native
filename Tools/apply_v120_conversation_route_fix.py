@@ -22,6 +22,31 @@ for marker in [
 if 'BUNDLE_VERSION = "0.12.0"' not in installer:
     raise SystemExit("v0.12.0 conversation-route fix expected installer bundle identity")
 
+# v0.11.7.49 originally stamped the Agent Runtime identity into only the first
+# status payload containing local_control_protocol. The installer probes the
+# dedicated local-control listener, whose /status payload can therefore have the
+# correct Bridge core version but no bundle identity. Stamp every status payload
+# that advertises vex-local-v1, without duplicating an already-correct marker.
+status_protocol = '"local_control_protocol": "vex-local-v1",'
+bundle_marker = '"agent_runtime_bundle": "0.12.0",'
+protocol_count = bridge.count(status_protocol)
+if protocol_count < 1:
+    raise SystemExit("v0.12.0 local-control status protocol marker missing")
+lines = bridge.splitlines(keepends=True)
+rebuilt: list[str] = []
+for index, line in enumerate(lines):
+    rebuilt.append(line)
+    if status_protocol not in line:
+        continue
+    next_line = lines[index + 1] if index + 1 < len(lines) else ""
+    if bundle_marker in next_line:
+        continue
+    indent = line[: len(line) - len(line.lstrip())]
+    rebuilt.append(f'{indent}{bundle_marker}\n')
+bridge = "".join(rebuilt)
+if bridge.count(bundle_marker) < protocol_count:
+    raise SystemExit("v0.12.0 could not stamp every local-control status payload with bundle identity")
+
 helper = r'''def _v120_agent_owns_turn(message: str) -> bool:
     """Keep legacy verified shortcuts narrow; give compound/broad conversation to v0.12."""
     text = re.sub(r"\s+", " ", str(message or "")).strip().lower().replace("’", "'")
@@ -105,6 +130,13 @@ if old_ready in installer:
 elif 'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION' not in installer:
     raise SystemExit("v0.12.0 installer bundle-liveness anchor missing")
 
+old_last = '            last = f"unexpected identity {value.get(\'version\')}"\n'
+new_last = '            last = f"unexpected identity bridge={value.get(\'version\')} bundle={value.get(\'agent_runtime_bundle\')}"\n'
+if old_last in installer:
+    installer = installer.replace(old_last, new_last, 1)
+elif 'bundle={value.get(\'agent_runtime_bundle\')}' not in installer:
+    raise SystemExit("v0.12.0 installer detailed identity diagnostic anchor missing")
+
 # Stop naming a stale phone build in the success dialog. Pairing is what matters.
 installer = re.sub(
     r'"Keep VexNative v0\.11\.7\.\d+ on the iPhone; its working PC-routing\\n"\s*\n\s*"pairing is preserved\."',
@@ -126,7 +158,9 @@ for marker in [
 ]:
     if marker not in bridge:
         raise SystemExit(f"v0.12.0 conversation-route final verifier missing: {marker}")
+if bridge.count(bundle_marker) < bridge.count(status_protocol):
+    raise SystemExit("v0.12.0 local-control status bundle identity coverage regressed")
 if 'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION' not in installer:
     raise SystemExit("v0.12.0 installer no longer proves agent bundle liveness")
 
-print("Applied v0.12.0 conversational routing + installed-bundle liveness verification")
+print("Applied v0.12.0 conversational routing + local status bundle identity verification")
