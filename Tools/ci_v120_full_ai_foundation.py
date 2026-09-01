@@ -8,22 +8,18 @@ if "0.11.7.80" not in source:
     raise SystemExit("v0.12.0 expected .80 build identity missing")
 
 # The .80 harness is source-generating source and mentions its patch more than once.
-# Clone the final cumulative patch-list entry, then run the v0.12 bootstrap followed
-# by the conversational-routing/liveness repair before packaging.
+# Clone the final cumulative patch-list entry and route it through one self-bootstrapping
+# v0.12 entry point so assembler ordering cannot run conversation repair too early.
 lines = source.splitlines(keepends=True)
 indices = [i for i, line in enumerate(lines) if "Tools/apply_v11780_memory_route_punctuation_fix.py" in line]
 if not indices:
     raise SystemExit("v0.12.0 nested .80 patch line missing")
 index = indices[-1]
-bootstrap_line = lines[index].replace(
+entry_line = lines[index].replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_full_ai_bootstrap.py",
+    "Tools/apply_v120_conversation_route_entry.py",
 )
-conversation_line = lines[index].replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_conversation_route_fix.py",
-)
-lines[index + 1:index + 1] = [bootstrap_line, conversation_line]
+lines.insert(index + 1, entry_line)
 source = "".join(lines)
 
 source = source.replace("0.11.7.80", "0.12.0")
