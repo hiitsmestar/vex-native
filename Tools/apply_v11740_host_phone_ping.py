@@ -3,7 +3,7 @@ from pathlib import Path
 
 src = Path("Tools/VexWindowsHost-v11736.py").read_text(encoding="utf-8")
 
-if 'VERSION = "0.11.7.40"' in src and 'def ping_phone(' in src:
+if 'VERSION = "0.11.7.40"' in src and 'def ping_phone(' in src and 'CHAT_HISTORY' in src:
     Path("Tools/VexWindowsHost-v11740.py").write_text(src, encoding="utf-8")
     raise SystemExit(0)
 
@@ -23,6 +23,20 @@ if helper_anchor not in src:
     raise SystemExit("bridge_post helper anchor missing")
 src = src.replace(helper_anchor, helper_replacement, 1)
 
+# The original Host sent history=[] for every request, which made second-turn
+# continuity impossible no matter how good the Bridge recall logic was.
+history_anchor = 'LOCK = threading.Lock()\nBRIDGE_SESSION = requests.Session()\n'
+history_replacement = 'LOCK = threading.Lock()\nCHAT_HISTORY: list[dict] = []\nBRIDGE_SESSION = requests.Session()\n'
+if history_anchor not in src:
+    raise SystemExit("Host history state anchor missing")
+src = src.replace(history_anchor, history_replacement, 1)
+
+route_old = '''def route_chat(text: str, source: str) -> None:\n    result = bridge_post("/llm/chat", {"message": text, "history": []}, timeout=190)\n    reply = str(result.get("reply") or "").strip()\n    if reply:\n        add_event(\n            "assistant",\n            reply,\n            "vex",\n            {\n                "model": result.get("model"),\n                "grounding": result.get("grounding"),\n                "transport": result.get("transport"),\n                "reply_to": source,\n            },\n        )\n    else:\n        err = str(result.get("error") or result.get("error_class") or "PC Brain did not return a reply")\n        add_event("system", f"PC Brain error: {err}", "vex-host", {"reply_to": source})\n\n\n'''
+route_new = '''def route_chat(text: str, source: str) -> None:\n    # Send bounded real conversation history to Bridge. The newest user message\n    # stays in the dedicated message field so history contains only prior turns.\n    with LOCK:\n        history = [dict(row) for row in CHAT_HISTORY[-12:]]\n        CHAT_HISTORY.append({"role": "user", "content": str(text)[:4000]})\n        del CHAT_HISTORY[:-12]\n    result = bridge_post("/llm/chat", {"message": text, "history": history}, timeout=190)\n    reply = str(result.get("reply") or "").strip()\n    if reply:\n        with LOCK:\n            CHAT_HISTORY.append({"role": "assistant", "content": reply[:6000]})\n            del CHAT_HISTORY[:-12]\n        add_event(\n            "assistant",\n            reply,\n            "vex",\n            {\n                "model": result.get("model"),\n                "grounding": result.get("grounding"),\n                "transport": result.get("transport"),\n                "reply_to": source,\n            },\n        )\n    else:\n        err = str(result.get("error") or result.get("error_class") or "PC Brain did not return a reply")\n        add_event("system", f"PC Brain error: {err}", "vex-host", {"reply_to": source})\n\n\n'''
+if route_old not in src:
+    raise SystemExit("Host route_chat history anchor missing")
+src = src.replace(route_old, route_new, 1)
+
 button_old = '        ttk.Button(row, text="Ping phone", command=lambda: self.local_event("ping", "Windows ping")).pack(side="left", padx=(8, 0))\n'
 button_new = '        ttk.Button(row, text="Ping phone", command=self.ping_phone).pack(side="left", padx=(8, 0))\n'
 if button_old not in src:
@@ -41,6 +55,9 @@ for marker in [
     'NTFY_SERVER = "https://ntfy.sh"',
     'def phone_notify_settings(',
     'def send_phone_notification(',
+    'CHAT_HISTORY: list[dict] = []',
+    'history = [dict(row) for row in CHAT_HISTORY[-12:]]',
+    '"history": history',
     'text="Ping phone", command=self.ping_phone',
     'def ping_phone(',
     'text="Copy reply"',
@@ -49,6 +66,9 @@ for marker in [
     if marker not in src:
         raise SystemExit(f"missing marker: {marker}")
 
+if '{"message": text, "history": []}' in src:
+    raise SystemExit("Host still sends empty chat history")
+
 Path("Tools/VexWindowsHost-v11740.py").write_text(src, encoding="utf-8")
 compile(src, "Tools/VexWindowsHost-v11740.py", "exec")
-print("Built v0.11.7.40 Host with real ntfy phone ping while preserving PC Brain and clipboard support")
+print("Built v0.11.7.40 Host with bounded conversation history + phone ping + clipboard support")
