@@ -77,9 +77,15 @@ jobs:
               'One bounded second-chance selection',
               'V120_LOOPBACK_CHAT_PROXY_BYPASS',
               'session.trust_env = False',
-              'v120_num_ctx = 2048',
+              'v120_num_ctx = 1024',
+              'v120_num_predict = 160',
+              'v120_system_limit = 6000',
               '"num_ctx": v120_num_ctx,',
-              'timeout=90,',
+              '"num_predict": v120_num_predict,',
+              'timeout=v120_timeout,',
+              '[agent] lite fallback failed:',
+              '"num_ctx": 1024,',
+              'timeout=240,',
               '"error": "local cognition request failed",',
           ]:
               assert marker in bridge, marker
@@ -142,9 +148,15 @@ jobs:
           assert "response = session.post(" in agent_source
           assert "requests.post(" not in agent_source
           assert '"num_ctx": v120_num_ctx,' in agent_source
-          assert "v120_num_ctx = 2048" in agent_source
-          assert "timeout=90," in agent_source
-          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe low-memory active Host cognition + CLI/cache fallback + install readiness contract")
+          assert '"num_predict": v120_num_predict,' in agent_source
+          assert "v120_num_ctx = 1024" in agent_source
+          assert "v120_num_predict = 160" in agent_source
+          assert "v120_system_limit = 6000" in agent_source
+          assert "timeout=v120_timeout," in agent_source
+          assert "[agent] lite fallback failed:" in agent_source
+          assert '"num_ctx": 1024,' in agent_source
+          assert "timeout=240," in agent_source
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe 8GB active Host cognition + bounded lite fallback + CLI/cache + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
