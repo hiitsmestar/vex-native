@@ -11,6 +11,7 @@ on:
       - "Tools/apply_v120_installer_lock_fix.py"
       - "Tools/apply_v120_cognition_model_resilience.py"
       - "Tools/apply_v120_cognition_capacity_integrity.py"
+      - "Tools/apply_v120_ollama_chat_transport.py"
       - "Tools/apply_v120_ollama_preflight.py"
       - "Tools/apply_v120_install_readiness_gate.py"
       - "Tools/apply_v120_cognition_transport_tolerance.py"
@@ -75,6 +76,10 @@ jobs:
               'session.trust_env = False',
               '[exe, "list"]',
               'One bounded second-chance selection',
+              'response = session.post(',
+              'timeout=180',
+              'local cognition generation failed',
+              'visible_model = _choose_ollama_model()',
           ]:
               assert marker in bridge, marker
           for marker in [
@@ -115,6 +120,7 @@ jobs:
               "_choose_ollama_model",
               "_ollama_models",
               "_start_ollama_if_needed",
+              "_ollama_chat",
           ]:
               assert name in names, name
           chooser = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_choose_ollama_model")
@@ -125,7 +131,14 @@ jobs:
           }
           undefined = sorted(name for name in called if name not in names)
           assert not undefined, f"chooser references undefined helpers: {undefined}"
-          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery + CLI/cache fallback + install readiness contract")
+
+          chat = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_ollama_chat")
+          chat_source = ast.get_source_segment(bridge, chat) or ""
+          assert "session.trust_env = False" in chat_source
+          assert "response = session.post(" in chat_source
+          assert "requests.post(" not in chat_source
+          assert "timeout=180" in chat_source
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery/chat + CLI/cache fallback + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
