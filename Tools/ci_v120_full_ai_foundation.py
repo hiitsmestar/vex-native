@@ -81,3 +81,22 @@ globals_dict = {
     "__package__": None,
 }
 exec(compile(source, str(source_path) + "[v120]", "exec"), globals_dict)
+
+# Field-proof gate: the purple Windows Host must send actual prior turns to
+# Bridge. Empty history made second-turn continuity structurally impossible.
+host_path = Path("Tools/VexWindowsHost-v11740.py")
+if not host_path.exists():
+    raise SystemExit("v0.12 generated Windows Host source missing")
+host = host_path.read_text(encoding="utf-8")
+for marker in [
+    'CHAT_HISTORY: list[dict] = []',
+    'history = [dict(row) for row in CHAT_HISTORY[-12:]]',
+    '"history": history',
+    'CHAT_HISTORY.append({"role": "user"',
+    'CHAT_HISTORY.append({"role": "assistant"',
+]:
+    if marker not in host:
+        raise SystemExit(f"v0.12 Windows Host continuity marker missing: {marker}")
+if '{"message": text, "history": []}' in host:
+    raise SystemExit("v0.12 Windows Host still sends empty conversation history")
+print("PASS v0.12 Windows Host ships bounded real conversation history")
