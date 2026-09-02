@@ -12,6 +12,7 @@ on:
       - "Tools/apply_v120_cognition_model_resilience.py"
       - "Tools/apply_v120_cognition_capacity_integrity.py"
       - "Tools/apply_v120_ollama_chat_transport.py"
+      - "Tools/apply_v120_field_chat_transport.py"
       - "Tools/apply_v120_ollama_preflight.py"
       - "Tools/apply_v120_install_readiness_gate.py"
       - "Tools/apply_v120_cognition_transport_tolerance.py"
@@ -78,7 +79,7 @@ jobs:
               'One bounded second-chance selection',
               'response = session.post(',
               'timeout=180',
-              'visible_model = _choose_ollama_model()',
+              '"error": "local cognition request failed",',
           ]:
               assert marker in bridge, marker
           for marker in [
@@ -137,7 +138,15 @@ jobs:
           assert "response = session.post(" in chat_source
           assert "requests.post(" not in chat_source
           assert "timeout=180" in chat_source
-          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery/chat + CLI/cache fallback + install readiness contract")
+
+          agent_chat = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_v120_agent_chat")
+          agent_source = ast.get_source_segment(bridge, agent_chat) or ""
+          assert "V120_LOOPBACK_CHAT_PROXY_BYPASS" in agent_source
+          assert "session.trust_env = False" in agent_source
+          assert "response = session.post(" in agent_source
+          assert '"num_ctx": v120_num_ctx' in agent_source
+          assert "timeout=90" in agent_source
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery/chat + low-memory field agent transport + CLI/cache fallback + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
