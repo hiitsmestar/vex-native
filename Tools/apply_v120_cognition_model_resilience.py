@@ -96,6 +96,14 @@ elif "One bounded second-chance selection" not in text:
 BRIDGE.write_text(text, encoding="utf-8")
 compile(text, str(BRIDGE), "exec")
 
+# Field validation proved that a later cumulative source layer could leave the
+# chooser call intact while dropping _cognition_capacity after the old .39 check.
+# Run the integrity repair here, after the complete v0.12 bootstrap and resilience
+# rewrite, so the packaged Bridge cannot carry that dangling NameError.
+runpy.run_path("Tools/apply_v120_cognition_capacity_integrity.py", run_name="__main__")
+text = BRIDGE.read_text(encoding="utf-8")
+compile(text, str(BRIDGE), "exec")
+
 checks = [
     "_OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0",
     "return list(_OLLAMA_MODEL_CACHE)",
@@ -103,9 +111,10 @@ checks = [
     "One bounded second-chance selection",
     '"agent_runtime_bundle": "0.12.0"',
     'def _v120_agent_owns_turn(message: str) -> bool:',
+    'def _cognition_capacity() -> dict:',
 ]
 for marker in checks:
     if marker not in text:
         raise SystemExit(f"v0.12 cognition resilience missing marker: {marker}")
 
-print("Applied v0.12 conversation-preserving Ollama discovery resilience + bounded model retry")
+print("Applied v0.12 conversation-preserving Ollama resilience + final cognition helper integrity")
