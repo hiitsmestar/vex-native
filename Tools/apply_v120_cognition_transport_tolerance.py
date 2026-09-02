@@ -4,6 +4,23 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
+# Field validation must be part of the final cumulative composition, not merely a
+# standalone patch file. Apply the real v0.12 chat transport/context fix here so
+# every artifact that reaches the stable-install tolerance gate contains it.
+runpy.run_path("Tools/apply_v120_field_chat_transport.py", run_name="__main__")
+
+BRIDGE = Path("Bridge/vex_bridge.py")
+bridge = BRIDGE.read_text(encoding="utf-8")
+for marker in [
+    "V120_LOOPBACK_CHAT_PROXY_BYPASS",
+    "session.trust_env = False",
+    "v120_num_ctx = 2048",
+    '"num_ctx": v120_num_ctx,',
+    '"error": "local cognition request failed",',
+]:
+    if marker not in bridge:
+        raise SystemExit(f"v0.12 transport tolerance missing field-chat marker: {marker}")
+
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
 installer = INSTALLER.read_text(encoding="utf-8")
 
@@ -65,4 +82,4 @@ for marker in [
     if marker not in installer:
         raise SystemExit(f"v0.12 transport tolerance missing marker: {marker}")
 
-print("Applied v0.12 stable-install cognition transport tolerance")
+print("Applied v0.12 field-chat + stable-install cognition transport tolerance")
