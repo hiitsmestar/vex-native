@@ -3,6 +3,7 @@ from pathlib import Path
 import ast
 import subprocess
 import sys
+import time
 
 source_path = Path("Tools/ci_v11780_memory_route_punctuation_fix.py")
 source = source_path.read_text(encoding="utf-8")
@@ -13,8 +14,7 @@ if "0.11.7.80" not in source:
 # ci_v11780 is source-generating source. Find the actual nested .80 patch line
 # instead of depending on its exact escape spelling, then append the v0.12 layers
 # in the required order. The generated chain executes inserted entries in reverse
-# order, so recent-turn priority is listed first here so it runs last, after the
-# v0.12 conversation/context layer exists.
+# order, so the field fingerprint is listed first and therefore runs last.
 lines = source.splitlines(keepends=True)
 indices = [
     i for i, line in enumerate(lines)
@@ -60,7 +60,12 @@ local_requests_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_local_upgrade_requests.py",
 )
+fingerprint_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_wants_field_fingerprint.py",
+)
 lines[index + 1:index + 1] = [
+    fingerprint_line,
     local_requests_line,
     recent_turn_line,
     entry_line,
@@ -90,20 +95,53 @@ globals_dict = {
 }
 exec(compile(source, str(source_path) + "[v120]", "exec"), globals_dict)
 
-# The nested legacy assembler regenerates VexWindowsHost-v11740.py after the
-# injected v0.12 patch list, which can overwrite a late Host UI patch while still
-# leaving the loose source green. Re-apply the local-only request view after the
-# legacy source generation, then rebuild frozen components and recreate the ZIP.
-# This makes the downloadable artifact itself contain the Vex-wants Host + Bridge.
+# The nested legacy assembler can regenerate VexWindowsHost-v11740.py after
+# injected layers. Apply both local-request patches again at the very end, then
+# rebuild all frozen components and recreate the ZIP.
 subprocess.run([sys.executable, "Tools/apply_v120_local_upgrade_requests.py"], check=True)
-for required_build_fn in ("build_components", "smoke_bridge_agent_runtime", "smoke_user_processes", "package_runtime"):
+subprocess.run([sys.executable, "Tools/apply_v120_wants_field_fingerprint.py"], check=True)
+for required_build_fn in ("build_components", "smoke_bridge_agent_runtime", "smoke_user_processes", "package_runtime", "start_windows_process", "stop_windows_process"):
     if not callable(globals_dict.get(required_build_fn)):
         raise SystemExit(f"v0.12 repack missing legacy build function: {required_build_fn}")
 globals_dict["build_components"]()
 globals_dict["smoke_bridge_agent_runtime"]()
 globals_dict["smoke_user_processes"]()
 globals_dict["package_runtime"]()
-print("PASS v0.12 repacked frozen components after local What Vex Wants patch")
+print("PASS v0.12 repacked frozen components after local What Vex Wants patches")
+
+
+def verify_frozen_host_title(exe: Path) -> None:
+    if not exe.exists():
+        raise SystemExit(f"v0.12 frozen Host missing for title proof: {exe}")
+    pid = globals_dict["start_windows_process"](exe, cwd=exe.parent)
+    try:
+        deadline = time.time() + 15
+        last = ""
+        while time.time() < deadline:
+            probe = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    f"$p=Get-Process -Id {int(pid)} -ErrorAction SilentlyContinue; if ($p) {{ $p.MainWindowTitle }}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            last = probe.stdout.strip()
+            if "wants71" in last:
+                print(f"PASS frozen Host field title: {last}")
+                return
+            time.sleep(0.5)
+        raise SystemExit(f"v0.12 frozen Host lacks wants71 field fingerprint; title={last!r}")
+    finally:
+        globals_dict["stop_windows_process"](pid)
+
+
+# Prove the executable inside the recreated ZIP, not merely dist or loose source.
+verify_frozen_host_title(Path("verify-package/VexWindowsHost/VexWindowsHost.exe"))
 
 # Field-proof gate: the purple Windows Host must send actual prior turns to
 # Bridge. Empty history made second-turn continuity structurally impossible.
@@ -124,10 +162,12 @@ if '{"message": text, "history": []}' in host:
     raise SystemExit("v0.12 Windows Host still sends empty conversation history")
 print("PASS v0.12 Windows Host ships bounded real conversation history")
 
-# Local privacy-preserving self-improvement view: the purple Host must be able
-# to read raw local gaps/proposals without routing them through public GitHub.
+# Local privacy-preserving self-improvement view: the purple Host must expose a
+# dedicated visible bar and raw local report without routing private data through
+# public GitHub.
 for marker in [
-    'text="Vex wants"',
+    'text="Vex wants / upgrade requests"',
+    'wants71',
     'def show_vex_wants(self):',
     'bridge_get("/autonomy/requests", timeout=8)',
     'popup.title("What Vex Wants")',
@@ -135,7 +175,7 @@ for marker in [
 ]:
     if marker not in host:
         raise SystemExit(f"v0.12 local Vex-wants Host marker missing: {marker}")
-print("PASS v0.12 Windows Host ships local What Vex Wants view")
+print("PASS v0.12 Windows Host ships field-visible What Vex Wants view")
 
 # Behavior gate: execute the two functions that decide ownership and exact
 # recent-turn recall. This test reproduces the field failure without Ollama or
@@ -147,10 +187,11 @@ for marker in [
     'parsed.path == "/autonomy/requests"',
     'FROM project_proposals p',
     'raw companion gaps are never emitted by public Remote Support',
+    '"vex_wants_field_build": "71"',
 ]:
     if marker not in bridge_source:
         raise SystemExit(f"v0.12 local Vex-wants Bridge marker missing: {marker}")
-print("PASS v0.12 Bridge ships local-only raw upgrade request endpoint")
+print("PASS v0.12 Bridge ships local-only raw upgrade endpoint + field fingerprint")
 
 tree = ast.parse(bridge_source)
 functions = {
