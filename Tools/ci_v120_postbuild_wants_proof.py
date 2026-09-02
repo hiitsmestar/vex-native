@@ -19,7 +19,7 @@ PKG_NAME = "Vex-Agent-Runtime-v0.12.0-FullAIFoundation"
 PKG = ROOT / PKG_NAME
 ZIP = ROOT / f"{PKG_NAME}.zip"
 VERIFY = ROOT / "verify-package"
-FIELD = "73"
+FIELD = "74"
 
 
 def log(message: str) -> None:
@@ -106,7 +106,7 @@ def prove_bridge_from_zip() -> None:
     exe = VERIFY / "VexBridge.exe"
     if not exe.exists():
         raise RuntimeError(f"rewritten ZIP Bridge missing: {exe}")
-    base = Path(tempfile.mkdtemp(prefix="VexWants73-"))
+    base = Path(tempfile.mkdtemp(prefix="VexWants74-"))
     roaming = base / "Roaming"
     local = base / "Local"
     roaming.mkdir(parents=True, exist_ok=True)
@@ -138,12 +138,12 @@ def prove_bridge_from_zip() -> None:
                     raise RuntimeError("local-control identity incomplete")
                 query = urllib.parse.urlencode({"token": token})
                 status = no_proxy_json(f"http://127.0.0.1:{port}/status?{query}", timeout=3)
-                if str(status.get("vex_wants_field_build") or "") != FIELD:
-                    raise RuntimeError(f"status fingerprint mismatch: {status}")
+                if str(status.get("agent_runtime_bundle") or "") != "0.12.0":
+                    raise RuntimeError(f"runtime bundle mismatch: {status}")
                 requests_view = no_proxy_json(f"http://127.0.0.1:{port}/autonomy/requests?{query}", timeout=5)
                 if requests_view.get("ok") is not True:
                     raise RuntimeError(f"local requests endpoint failed: {requests_view}")
-                log(f"PASS final ZIP Bridge status fingerprint wants{FIELD} + local requests endpoint")
+                log(f"PASS final ZIP Bridge v0.12 + authenticated local requests endpoint")
                 return
             except Exception as exc:
                 last = f"{exc.__class__.__name__}: {exc}"
