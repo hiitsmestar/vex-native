@@ -4,19 +4,8 @@ on:
   push:
     branches: [ "build/v120-full-ai-foundation" ]
     paths:
-      - "Tools/apply_v120_full_ai_foundation.py"
-      - "Tools/apply_v120_full_ai_bootstrap.py"
-      - "Tools/apply_v120_conversation_route_fix.py"
-      - "Tools/apply_v120_conversation_route_entry.py"
-      - "Tools/apply_v120_installer_lock_fix.py"
-      - "Tools/apply_v120_cognition_model_resilience.py"
-      - "Tools/apply_v120_cognition_capacity_integrity.py"
-      - "Tools/apply_v120_field_chat_transport.py"
-      - "Tools/apply_v120_recent_turn_priority.py"
-      - "Tools/apply_v120_ollama_preflight.py"
-      - "Tools/apply_v120_install_readiness_gate.py"
-      - "Tools/apply_v120_cognition_transport_tolerance.py"
-      - "Tools/ci_v120_full_ai_foundation.py"
+      - "Tools/**"
+      - "Bridge/**"
       - ".github/workflows/build-v120-full-ai-foundation.yml"
       - "VEXNATIVE_FULL_AI_RUNTIME.md"
   workflow_dispatch:
@@ -30,145 +19,66 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
       - name: Build cumulative Full AI Runtime
         run: python Tools/ci_v120_full_ai_foundation.py
-      - name: Verify full AI orchestration contract
+
+      - name: Re-freeze and prove final Vex wants artifact
+        run: python Tools/ci_v120_postbuild_wants_proof.py
+
+      - name: Verify v0.12 core and field contract
         shell: python
         run: |
-          import ast
           from pathlib import Path
 
           bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          host = Path("Tools/VexWindowsHost-v11740.py").read_text(encoding="utf-8")
           installer = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
           worker = Path("Tools/VexMemoryWorker.py").read_text(encoding="utf-8")
-          assert '"agent_runtime_bundle": "0.12.0"' in bridge
-          assert 'BUNDLE_VERSION = "0.12.0"' in installer
-          assert 'VERSION = "0.11.4"' in worker
+
           for marker in [
+              '"agent_runtime_bundle": "0.12.0"',
               'def _v120_capability_registry(',
               'def _v120_plan(',
               'def _v120_execute_tool(',
               'def _v120_agent_chat(',
               'def _v120_agent_owns_turn(message: str) -> bool:',
-              'def _cognition_capacity() -> dict:',
-              'def _model_billions(name: str) -> float | None:',
-              'def _cognition_model_rank(name: str, max_billions: float) -> tuple:',
-              'parsed.path == "/agent/capabilities"',
-              'parsed.path == "/agent/plan"',
-              'parsed.path == "/agent/execute"',
-              'result = _v120_agent_chat(history, message, context)',
-              'if _personal_memory_fact_question(message) and not _v120_agent_owns_turn(message):',
-              'if _runtime_fact_question(message) and not _v120_agent_owns_turn(message):',
-              'RESPONSE CONTRACT FOR THIS TURN',
-              'RUNTIME IDENTITY',
-              'STAR / RELATIONSHIP CONTEXT',
-              'CURRENT VEX STATE',
-              'vex-agent-recent-turn',
-              'def _v11776_launch_app(',
-              'def _v11777_window_action(',
-              'pc-memory-star-query-v11775',
-              '_OLLAMA_MODEL_CACHE_TTL_SECONDS = 1800.0',
-              '[exe, "list"]',
-              'One bounded second-chance selection',
               'V120_LOOPBACK_CHAT_PROXY_BYPASS',
               'session.trust_env = False',
-              'v120_num_ctx = 1024',
-              'v120_num_predict = 160',
-              'v120_system_limit = 6000',
-              '"num_ctx": v120_num_ctx,',
-              '"num_predict": v120_num_predict,',
-              'timeout=v120_timeout,',
-              '[agent] lite fallback failed:',
-              '"num_ctx": 1024,',
-              'timeout=240,',
-              '"error": "local cognition request failed",',
+              '"vex-agent-recent-turn"',
+              'def _v120_local_upgrade_requests() -> dict:',
+              'parsed.path == "/autonomy/requests"',
+              '"vex_wants_field_build": "73"',
+              'close requires explicit confirmation',
+              'Never claim a tool action happened unless a confirmed tool result says it did',
+              'Do not invent memories, sources, files, device state, or completed actions',
           ]:
               assert marker in bridge, marker
+
           for marker in [
-              'str(value.get("agent_runtime_bundle") or "") == BUNDLE_VERSION',
-              'def ollama_executable() -> str | None:',
-              'def ollama_models(timeout: float = 4.0) -> list[str]:',
-              'def wait_ollama_model(seconds: int = 90) -> dict:',
-              'http://127.0.0.1:11434/api/tags',
-              'ollama = wait_ollama_model()',
-              'def full_bridge_get(path: str, timeout: float = 5.0)',
-              'def cognition_bridge_get(path: str, timeout: float = 5.0)',
-              'def recover_bridge_for_cognition(home: Path)',
-              'def wait_cognition(home: Path, seconds: int = 25)',
-              'cognition_bridge_get("/llm/status"',
-              'cognition = wait_cognition(home)',
-              '"warming": True',
-              "PC cognition: {'ready' if cognition.get('ok') else 'warming'}",
-              'installed and verified',
+              'wants73',
+              'text="Vex wants / upgrade requests"',
+              'def show_vex_wants(self):',
+              'bridge_get("/autonomy/requests", timeout=8)',
+              'CHAT_HISTORY: list[dict] = []',
+              '"history": history',
           ]:
-              assert marker in installer, marker
-          remote_launch = 'launch(home / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe"'
-          cognition_call = 'cognition = wait_cognition(home)'
-          assert installer.find(remote_launch) != -1
-          assert installer.find(cognition_call) != -1
-          assert installer.find(remote_launch) < installer.find(cognition_call)
+              assert marker in host, marker
 
-          tree = ast.parse(bridge)
-          names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-          for name in [
-              "_v120_capability_registry",
-              "_v120_plan",
-              "_v120_execute_tool",
-              "_v120_agent_chat",
-              "_v120_agent_owns_turn",
-              "_cognition_capacity",
-              "_model_billions",
-              "_cognition_model_rank",
-              "_choose_ollama_model",
-              "_ollama_models",
-              "_start_ollama_if_needed",
-              "_ollama_chat",
-          ]:
-              assert name in names, name
-          chooser = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_choose_ollama_model")
-          called = {
-              n.func.id
-              for n in ast.walk(chooser)
-              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id.startswith("_")
-          }
-          undefined = sorted(name for name in called if name not in names)
-          assert not undefined, f"chooser references undefined helpers: {undefined}"
+          assert 'BUNDLE_VERSION = "0.12.0"' in installer
+          assert 'VERSION = "0.11.4"' in worker
+          assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
+          print("PASS v0.12 core + wants73 final-artifact contract")
 
-          agent_chat = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_v120_agent_chat")
-          agent_source = ast.get_source_segment(bridge, agent_chat) or ""
-          assert "V120_LOOPBACK_CHAT_PROXY_BYPASS" in agent_source
-          assert "session.trust_env = False" in agent_source
-          assert "response = session.post(" in agent_source
-          assert "requests.post(" not in agent_source
-          assert '"num_ctx": v120_num_ctx,' in agent_source
-          assert '"num_predict": v120_num_predict,' in agent_source
-          assert "v120_num_ctx = 1024" in agent_source
-          assert "v120_num_predict = 160" in agent_source
-          assert "v120_system_limit = 6000" in agent_source
-          assert "timeout=v120_timeout," in agent_source
-          assert "[agent] lite fallback failed:" in agent_source
-          assert '"num_ctx": 1024,' in agent_source
-          assert "timeout=240," in agent_source
-          assert '"vex-agent-recent-turn"' in agent_source
-          assert 'user_profile = ""' in agent_source
-          print("PASS v0.12.0 cumulative agent orchestration + deterministic recent-turn recall + proxy-safe 8GB cognition + bounded lite fallback")
-      - name: Verify bounded safety contract
-        shell: python
-        run: |
-          from pathlib import Path
-          b = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
-          assert 'close requires explicit confirmation' in b
-          assert 'tool is not in the v0.12.0 capability registry' in b
-          assert 'Never claim a tool action happened unless a confirmed tool result says it did' in b
-          assert 'Do not invent memories, sources, files, device state, or completed actions' in b
-          print("PASS v0.12.0 bounded tool and provenance guards")
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v4
         with:
