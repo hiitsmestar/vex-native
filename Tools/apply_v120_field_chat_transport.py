@@ -59,6 +59,16 @@ elif '"num_ctx": v120_num_ctx,' in agent and '"num_predict": v120_num_predict,' 
 elif '"num_predict": v120_num_predict,' not in agent:
     raise SystemExit("v0.12 field chat fix could not install bounded output")
 
+# Qwen3 defaults to an internal reasoning phase. On the 8 GB CPU node that can
+# consume the whole interactive request window before final answer tokens appear.
+# Disable that hidden reasoning phase for both normal and compact Host chat paths.
+main_stream = '''                "stream": False,\n                "options": {\n'''
+main_no_think = '''                "stream": False,\n                "think": False,\n                "options": {\n'''
+if main_stream in agent:
+    agent = agent.replace(main_stream, main_no_think, 1)
+elif '"think": False,' not in agent:
+    raise SystemExit("v0.12 field chat fix could not disable Qwen3 thinking on primary request")
+
 if "timeout=55," in agent:
     agent = agent.replace("timeout=55,", "timeout=v120_timeout,", 1)
 elif "timeout=90," in agent:
@@ -67,11 +77,19 @@ elif "timeout=v120_timeout," not in agent:
     raise SystemExit("v0.12 field chat fix could not install hardware-aware timeout")
 
 old_except = '''    except Exception as exc:\n        print(f"[agent] full-AI cognition failed: {exc}", flush=True)\n        return None\n'''
-new_except = '''    except Exception as exc:\n        print(f"[agent] full-AI cognition failed: {exc.__class__.__name__}: {exc}", flush=True)\n        if not v120_lite_mode:\n            return None\n        try:\n            import requests\n            fallback = requests.Session()\n            fallback.trust_env = False\n            compact_system = (\n                "You are VexNative, Star's local assistant. Answer the newest user message directly, "\n                "naturally, briefly, and do not invent actions or memories. " + V120_AGENT_RULES[:1800]\n            )\n            response = fallback.post(\n                f"{OLLAMA_BASE}/api/chat",\n                json={\n                    "model": model,\n                    "messages": [\n                        {"role": "system", "content": compact_system[:2400]},\n                        {"role": "user", "content": str(message or "").strip()[:1400]},\n                    ],\n                    "stream": False,\n                    "options": {\n                        "temperature": 0.55,\n                        "top_p": 0.88,\n                        "num_ctx": 1024,\n                        "num_predict": 128,\n                        "repeat_penalty": 1.08,\n                    },\n                },\n                timeout=240,\n            )\n            response.raise_for_status()\n            payload = response.json()\n            raw = str(((payload.get("message") or {}).get("content")) or "")\n            reply = _strip_reasoning_markup(raw)\n            if reply:\n                return reply[:6000], model\n        except Exception as fallback_exc:\n            print(f"[agent] lite fallback failed: {fallback_exc.__class__.__name__}: {fallback_exc}", flush=True)\n        return None\n'''
+new_except = '''    except Exception as exc:\n        print(f"[agent] full-AI cognition failed: {exc.__class__.__name__}: {exc}", flush=True)\n        if not v120_lite_mode:\n            return None\n        try:\n            import requests\n            fallback = requests.Session()\n            fallback.trust_env = False\n            compact_system = (\n                "You are VexNative, Star's local assistant. Answer the newest user message directly, "\n                "naturally, briefly, and do not invent actions or memories. " + V120_AGENT_RULES[:1800]\n            )\n            response = fallback.post(\n                f"{OLLAMA_BASE}/api/chat",\n                json={\n                    "model": model,\n                    "messages": [\n                        {"role": "system", "content": compact_system[:2400]},\n                        {"role": "user", "content": str(message or "").strip()[:1400]},\n                    ],\n                    "stream": False,\n                    "think": False,\n                    "options": {\n                        "temperature": 0.55,\n                        "top_p": 0.88,\n                        "num_ctx": 1024,\n                        "num_predict": 128,\n                        "repeat_penalty": 1.08,\n                    },\n                },\n                timeout=240,\n            )\n            response.raise_for_status()\n            payload = response.json()\n            raw = str(((payload.get("message") or {}).get("content")) or "")\n            reply = _strip_reasoning_markup(raw)\n            if reply:\n                return reply[:6000], model\n        except Exception as fallback_exc:\n            print(f"[agent] lite fallback failed: {fallback_exc.__class__.__name__}: {fallback_exc}", flush=True)\n        return None\n'''
 if old_except in agent:
     agent = agent.replace(old_except, new_except, 1)
 elif "[agent] lite fallback failed:" not in agent:
     raise SystemExit("v0.12 field chat fix could not install lite generation fallback")
+
+# If an older generated fallback was already present, make sure it also disables
+# Qwen3 thinking instead of silently retaining the old behavior.
+if agent.count('"think": False,') < 2:
+    fallback_stream = '''                    "stream": False,\n                    "options": {\n'''
+    fallback_no_think = '''                    "stream": False,\n                    "think": False,\n                    "options": {\n'''
+    if fallback_stream in agent:
+        agent = agent.replace(fallback_stream, fallback_no_think, 1)
 
 text = text[:start] + agent + text[end:]
 
@@ -98,6 +116,7 @@ for marker in [
     "V120_LOOPBACK_CHAT_PROXY_BYPASS",
     "session.trust_env = False",
     '"num_predict": v120_num_predict,',
+    '"think": False,',
     "timeout=v120_timeout,",
     "[agent] lite fallback failed:",
     '"num_ctx": 1024,',
@@ -105,8 +124,10 @@ for marker in [
 ]:
     if marker not in agent:
         raise SystemExit(f"v0.12 field chat fix missing agent marker: {marker}")
+if agent.count('"think": False,') < 2:
+    raise SystemExit("v0.12 field chat fix did not disable Qwen3 thinking on both generation attempts")
 
 if '"error": "local cognition request failed",' not in text:
     raise SystemExit("v0.12 field chat fix missing truthful route error")
 
-print("Applied v0.12 proxy-blind low-memory agent chat + bounded lite fallback")
+print("Applied v0.12 proxy-blind low-memory no-think agent chat + bounded lite fallback")
