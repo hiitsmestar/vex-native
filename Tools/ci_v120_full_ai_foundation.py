@@ -11,8 +11,8 @@ if "0.11.7.80" not in source:
 # ci_v11780 is source-generating source. Find the actual nested .80 patch line
 # instead of depending on its exact escape spelling, then append the v0.12 layers
 # in the required order. The generated chain executes inserted entries in reverse
-# order, so recent-turn priority is listed first here so it runs last, after the
-# v0.12 conversation/context layer exists.
+# order, so the local requests view is listed first here so it runs last, after
+# the final v0.12 Bridge + Host sources exist.
 lines = source.splitlines(keepends=True)
 indices = [
     i for i, line in enumerate(lines)
@@ -54,7 +54,12 @@ recent_turn_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_recent_turn_priority.py",
 )
+local_requests_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_local_upgrade_requests.py",
+)
 lines[index + 1:index + 1] = [
+    local_requests_line,
     recent_turn_line,
     entry_line,
     lock_line,
@@ -102,11 +107,34 @@ if '{"message": text, "history": []}' in host:
     raise SystemExit("v0.12 Windows Host still sends empty conversation history")
 print("PASS v0.12 Windows Host ships bounded real conversation history")
 
+# Local privacy-preserving self-improvement view: the purple Host must be able
+# to read raw local gaps/proposals without routing them through public GitHub.
+for marker in [
+    'text="Vex wants"',
+    'def show_vex_wants(self):',
+    'bridge_get("/autonomy/requests", timeout=8)',
+    'popup.title("What Vex Wants")',
+    'SOURCE-GROUNDED PROJECT PROPOSALS',
+]:
+    if marker not in host:
+        raise SystemExit(f"v0.12 local Vex-wants Host marker missing: {marker}")
+print("PASS v0.12 Windows Host ships local What Vex Wants view")
+
 # Behavior gate: execute the two functions that decide ownership and exact
 # recent-turn recall. This test reproduces the field failure without Ollama or
 # any profile/memory sidecar. A green build must return the literal phrase.
 bridge_path = Path("Bridge/vex_bridge.py")
 bridge_source = bridge_path.read_text(encoding="utf-8")
+for marker in [
+    'def _v120_local_upgrade_requests() -> dict:',
+    'parsed.path == "/autonomy/requests"',
+    'FROM project_proposals p',
+    'raw companion gaps are never emitted by public Remote Support',
+]:
+    if marker not in bridge_source:
+        raise SystemExit(f"v0.12 local Vex-wants Bridge marker missing: {marker}")
+print("PASS v0.12 Bridge ships local-only raw upgrade request endpoint")
+
 tree = ast.parse(bridge_source)
 functions = {
     node.name: node
