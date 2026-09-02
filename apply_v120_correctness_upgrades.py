@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
 bridge = BRIDGE.read_text(encoding="utf-8")
 
 MARKER = 'V120_CORRECTNESS_UPGRADES = "v0.12-wants-reconcile-renderer-v1"'
+BACKGROUND_MARKER = 'V120_WANTS_BACKGROUND_RECONCILIATION = "v0.12-wants-background-v1"'
 
 
 def replace_function(source: str, name: str, replacement: str) -> str:
@@ -20,9 +23,9 @@ def replace_function(source: str, name: str, replacement: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1) Finish the already-staged fact-preserving conversational renderer.
-#    Facts remain authoritative /facts strings. Only framing, punctuation, and
-#    order vary; no foreground Ollama/model call is introduced.
+# 1) Finish the staged fact-preserving conversational renderer.
+#    Facts remain authoritative /facts strings. Only framing, punctuation and
+#    order vary; foreground recall never waits on Ollama.
 # ---------------------------------------------------------------------------
 renderer = r'''def _v11774_render_star_recall(facts: list[str]) -> str:
     # V120_FACT_PRESERVING_RECALL: factual clauses come only from supplied
@@ -32,7 +35,6 @@ renderer = r'''def _v11774_render_star_recall(facts: list[str]) -> str:
         fact = re.sub(r"\s+", " ", str(raw or "")).strip()
         if not fact or _v11774_is_internal_instruction_fact(fact):
             continue
-        # This removes storage labels only; the factual payload remains verbatim.
         fact = re.sub(r"^(?:star|user)\s*(?:fact|profile|preference|memory)?\s*[:\-]\s*", "", fact, flags=re.I).strip()
         if fact:
             clean.append(fact)
@@ -54,7 +56,6 @@ renderer = r'''def _v11774_render_star_recall(facts: list[str]) -> str:
     )
     intro = intros[variant % len(intros)]
 
-    # Each factual sentence below is the supplied fact with punctuation only.
     clauses = []
     for fact in clean[:5]:
         value = fact.rstrip()
@@ -67,11 +68,8 @@ bridge = replace_function(bridge, "_v11774_render_star_recall", renderer)
 
 
 # ---------------------------------------------------------------------------
-# 2) Reconcile local Wants against live capability health.
-#    Old failures are retained in SQLite history but moved out of active/open
-#    states once the capability is demonstrably healthy. Related project work is
-#    superseded rather than deleted. The art-worker gap remains open while art is
-#    actually unhealthy.
+# 2) Reconcile stale Wants against live capability health without making the
+#    visible /autonomy/requests endpoint wait on those live probes.
 # ---------------------------------------------------------------------------
 insert_anchor = "def _vex_background_services() -> None:\n"
 if insert_anchor not in bridge:
@@ -79,9 +77,23 @@ if insert_anchor not in bridge:
 
 layer = r'''
 V120_CORRECTNESS_UPGRADES = "v0.12-wants-reconcile-renderer-v1"
+V120_WANTS_BACKGROUND_RECONCILIATION = "v0.12-wants-background-v1"
 V120_ACTIVE_PROPOSAL_STATUSES = (
     "staged", "approval-required", "approval_required", "ready-for-review", "ready_for_review"
 )
+V120_WANTS_RECONCILE_LOCK = threading.Lock()
+V120_WANTS_RECONCILE_STATE = {
+    "running": False,
+    "updated_at": 0.0,
+    "last": {
+        "ok": True,
+        "state": "pending",
+        "resolved_gaps": 0,
+        "superseded_projects": 0,
+        "applied_upgrades": 0,
+        "healthy": {},
+    },
+}
 
 
 def _v120_supersede_project_work_for_gaps(gap_ids: list[int], reason: str) -> int:
@@ -141,8 +153,14 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
             conn.close()
     except Exception:
         resolved_ids = []
-    superseded = _v120_supersede_project_work_for_gaps(resolved_ids, f"{name} verified healthy: {detail}")
-    return {"capability": name, "resolved_gaps": len(resolved_ids), "superseded_projects": superseded}
+    superseded = _v120_supersede_project_work_for_gaps(
+        resolved_ids, f"{name} verified healthy: {detail}"
+    )
+    return {
+        "capability": name,
+        "resolved_gaps": len(resolved_ids),
+        "superseded_projects": superseded,
+    }
 
 
 def _v120_retire_windows_inventory_proposals(status: dict) -> int:
@@ -169,7 +187,10 @@ def _v120_retire_windows_inventory_proposals(status: dict) -> int:
             task_ids: set[int] = set()
             proposal_ids: list[int] = []
             for row in rows:
-                blob = " ".join(str(row[key] or "") for key in ("component", "summary", "goal", "detail")).lower()
+                blob = " ".join(
+                    str(row[key] or "")
+                    for key in ("component", "summary", "goal", "detail")
+                ).lower()
                 targeted = (
                     "windows-native capability discovery" in blob
                     or "visible-window enumeration" in blob
@@ -205,8 +226,6 @@ def _v120_retire_windows_inventory_proposals(status: dict) -> int:
 
 
 def _v120_mark_grounded_renderer_applied() -> int:
-    # Code-presence gate: only retire the staged request when both grounded
-    # renderers used by narrow and broad recall are actually installed.
     if not callable(globals().get("_v11771_render_verified_facts")):
         return 0
     if not callable(globals().get("_v11774_render_star_recall")):
@@ -239,8 +258,6 @@ def _v120_reconcile_wants() -> dict:
         "healthy": {},
     }
 
-    # These two checks are cheap/local and directly correspond to stale gaps seen
-    # in the field. Never resolve a gap merely because it is old.
     for name in ("file_index", "local_cognition"):
         try:
             ok, detail = _autonomy_probe_capability(name)
@@ -252,11 +269,11 @@ def _v120_reconcile_wants() -> dict:
             summary["resolved_gaps"] += int(item.get("resolved_gaps") or 0)
             summary["superseded_projects"] += int(item.get("superseded_projects") or 0)
 
-    # The window-discovery proposal is retired only on positive live evidence.
     try:
         win = _windows_native_capabilities()
         win_ok = bool(
-            win.get("ok") and win.get("native_window_inventory")
+            win.get("ok")
+            and win.get("native_window_inventory")
             and int(win.get("visible_window_count") or 0) > 0
             and win.get("interactive_session_match") is not False
             and win.get("input_desktop_accessible") is not False
@@ -269,6 +286,58 @@ def _v120_reconcile_wants() -> dict:
 
     summary["applied_upgrades"] += _v120_mark_grounded_renderer_applied()
     return summary
+
+
+def _v120_reconcile_wants_cached() -> dict:
+    """Return immediately; refresh live capability truth off the HTTP thread."""
+    now = time.time()
+    launch = False
+    with V120_WANTS_RECONCILE_LOCK:
+        snapshot = dict(V120_WANTS_RECONCILE_STATE.get("last") or {})
+        running = bool(V120_WANTS_RECONCILE_STATE.get("running"))
+        updated_at = float(V120_WANTS_RECONCILE_STATE.get("updated_at") or 0.0)
+        if not running and (updated_at <= 0.0 or now - updated_at >= 15.0):
+            V120_WANTS_RECONCILE_STATE["running"] = True
+            launch = True
+
+    if launch:
+        snapshot["state"] = "refreshing"
+
+        def _worker() -> None:
+            try:
+                result = dict(_v120_reconcile_wants() or {})
+                result.setdefault("ok", True)
+                result["state"] = "fresh"
+                result["updated_at"] = time.time()
+            except Exception as exc:
+                result = {
+                    "ok": False,
+                    "state": "error",
+                    "detail": f"{exc.__class__.__name__}: {str(exc)[:240]}",
+                    "resolved_gaps": 0,
+                    "superseded_projects": 0,
+                    "applied_upgrades": 0,
+                    "healthy": {},
+                    "updated_at": time.time(),
+                }
+            with V120_WANTS_RECONCILE_LOCK:
+                V120_WANTS_RECONCILE_STATE["last"] = result
+                V120_WANTS_RECONCILE_STATE["updated_at"] = time.time()
+                V120_WANTS_RECONCILE_STATE["running"] = False
+
+        # Let the local Wants response finish its SQLite reads before the
+        # reconciliation worker starts competing for those same locks.
+        timer = threading.Timer(0.75, _worker)
+        timer.daemon = True
+        timer.name = "VexWantsReconcile"
+        timer.start()
+
+    snapshot.setdefault("ok", True)
+    snapshot.setdefault("resolved_gaps", 0)
+    snapshot.setdefault("superseded_projects", 0)
+    snapshot.setdefault("applied_upgrades", 0)
+    snapshot.setdefault("healthy", {})
+    return snapshot
 
 
 _v120_autonomy_feature_curriculum_base = _autonomy_feature_curriculum_once
@@ -291,11 +360,18 @@ def _autonomy_feature_curriculum_once() -> dict:
 if MARKER not in bridge:
     bridge = bridge.replace(insert_anchor, layer + insert_anchor, 1)
 
-# Reconcile immediately before the local-only Wants view reads active rows. This
-# keeps the UI truthful without publishing raw requests through Remote Support.
+# Reconcile in the background before the local-only Wants view reads active rows.
+# First Refresh is immediate; a later Refresh sees the newly reconciled state.
 wants_anchor = '''def _v120_local_upgrade_requests() -> dict:\n    """Return raw local self-improvement requests without publishing them remotely."""\n    result = {'''
-wants_replacement = '''def _v120_local_upgrade_requests() -> dict:\n    """Return raw local self-improvement requests without publishing them remotely."""\n    reconciliation = _v120_reconcile_wants()\n    result = {\n        "reconciliation": reconciliation,'''
-if '"reconciliation": reconciliation' not in bridge:
+wants_replacement = '''def _v120_local_upgrade_requests() -> dict:\n    """Return raw local self-improvement requests without publishing them remotely."""\n    reconciliation = _v120_reconcile_wants_cached()\n    result = {\n        "reconciliation": reconciliation,'''
+
+if 'reconciliation = _v120_reconcile_wants()' in bridge:
+    bridge = bridge.replace(
+        'reconciliation = _v120_reconcile_wants()',
+        'reconciliation = _v120_reconcile_wants_cached()',
+        1,
+    )
+elif '"reconciliation": reconciliation' not in bridge:
     if wants_anchor not in bridge:
         raise SystemExit("v0.12 correctness patch missing local Wants function anchor")
     bridge = bridge.replace(wants_anchor, wants_replacement, 1)
@@ -303,20 +379,41 @@ if '"reconciliation": reconciliation' not in bridge:
 BRIDGE.write_text(bridge, encoding="utf-8")
 compile(bridge, str(BRIDGE), "exec")
 
+# ---------------------------------------------------------------------------
+# 3) Final-stage cognition integrity. The cumulative legacy generator can keep
+#    calls to _cognition_capacity while dropping the helper definition. Reapply
+#    the dedicated v0.12 integrity repair *after* generation so the shipped
+#    Bridge cannot expose the field NameError seen by What Vex Wants.
+# ---------------------------------------------------------------------------
+subprocess.run(
+    [sys.executable, "Tools/apply_v120_cognition_capacity_integrity.py"],
+    check=True,
+)
+bridge = BRIDGE.read_text(encoding="utf-8")
+compile(bridge, str(BRIDGE), "exec")
+
 for required in [
     MARKER,
+    BACKGROUND_MARKER,
     "V120_FACT_PRESERVING_RECALL",
     "def _v120_reconcile_wants() -> dict:",
+    "def _v120_reconcile_wants_cached() -> dict:",
     "def _v120_resolve_capability_gap(",
     "superseded-solved",
     "grounded%conversation%renderer",
     '"reconciliation": reconciliation',
+    "reconciliation = _v120_reconcile_wants_cached()",
     "_v120_autonomy_feature_curriculum_base = _autonomy_feature_curriculum_once",
+    "def _cognition_capacity() -> dict:",
+    "def _model_billions(name: str) -> float | None:",
+    "def _cognition_model_rank(name: str, max_billions: float) -> tuple:",
 ]:
     if required not in bridge:
         raise SystemExit(f"v0.12 correctness verifier missing: {required}")
 
-# Foreground verified recall must remain model-free.
+if "reconciliation = _v120_reconcile_wants()" in bridge:
+    raise SystemExit("v0.12 Wants endpoint still blocks on synchronous live reconciliation")
+
 start = bridge.find("def _v11774_render_star_recall(")
 end = bridge.find("\n\ndef ", start + 10)
 renderer_text = bridge[start:end]
@@ -324,4 +421,4 @@ for forbidden in ("_choose_ollama_model", "_ollama_generate", "requests.post", "
     if forbidden in renderer_text:
         raise SystemExit(f"v0.12 grounded renderer unexpectedly invokes model/transport: {forbidden}")
 
-print("Applied v0.12 stale-Wants reconciliation + fact-preserving conversational renderer completion")
+print("Applied v0.12 nonblocking Wants reconciliation + grounded renderer + cognition integrity")
