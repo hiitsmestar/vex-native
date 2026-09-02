@@ -11,7 +11,6 @@ on:
       - "Tools/apply_v120_installer_lock_fix.py"
       - "Tools/apply_v120_cognition_model_resilience.py"
       - "Tools/apply_v120_cognition_capacity_integrity.py"
-      - "Tools/apply_v120_ollama_chat_transport.py"
       - "Tools/apply_v120_field_chat_transport.py"
       - "Tools/apply_v120_ollama_preflight.py"
       - "Tools/apply_v120_install_readiness_gate.py"
@@ -74,11 +73,13 @@ jobs:
               'def _v11777_window_action(',
               'pc-memory-star-query-v11775',
               '_OLLAMA_MODEL_CACHE_TTL_SECONDS = 1800.0',
-              'session.trust_env = False',
               '[exe, "list"]',
               'One bounded second-chance selection',
-              'response = session.post(',
-              'timeout=180',
+              'V120_LOOPBACK_CHAT_PROXY_BYPASS',
+              'session.trust_env = False',
+              'v120_num_ctx = 2048',
+              '"num_ctx": v120_num_ctx,',
+              'timeout=90,',
               '"error": "local cognition request failed",',
           ]:
               assert marker in bridge, marker
@@ -132,21 +133,18 @@ jobs:
           undefined = sorted(name for name in called if name not in names)
           assert not undefined, f"chooser references undefined helpers: {undefined}"
 
-          chat = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_ollama_chat")
-          chat_source = ast.get_source_segment(bridge, chat) or ""
-          assert "session.trust_env = False" in chat_source
-          assert "response = session.post(" in chat_source
-          assert "requests.post(" not in chat_source
-          assert "timeout=180" in chat_source
-
+          # This is the function used by the purple Windows Host /llm/chat path.
+          # Do not green-light a package merely because the legacy helper is healthy.
           agent_chat = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_v120_agent_chat")
           agent_source = ast.get_source_segment(bridge, agent_chat) or ""
           assert "V120_LOOPBACK_CHAT_PROXY_BYPASS" in agent_source
           assert "session.trust_env = False" in agent_source
           assert "response = session.post(" in agent_source
-          assert '"num_ctx": v120_num_ctx' in agent_source
-          assert "timeout=90" in agent_source
-          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery/chat + low-memory field agent transport + CLI/cache fallback + install readiness contract")
+          assert "requests.post(" not in agent_source
+          assert '"num_ctx": v120_num_ctx,' in agent_source
+          assert "v120_num_ctx = 2048" in agent_source
+          assert "timeout=90," in agent_source
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe low-memory active Host cognition + CLI/cache fallback + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
