@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import ast
 
 source_path = Path("Tools/ci_v11780_memory_route_punctuation_fix.py")
 source = source_path.read_text(encoding="utf-8")
@@ -100,3 +101,44 @@ for marker in [
 if '{"message": text, "history": []}' in host:
     raise SystemExit("v0.12 Windows Host still sends empty conversation history")
 print("PASS v0.12 Windows Host ships bounded real conversation history")
+
+# Behavior gate: execute the two functions that decide ownership and exact
+# recent-turn recall. This test reproduces the field failure without Ollama or
+# any profile/memory sidecar. A green build must return the literal phrase.
+bridge_path = Path("Bridge/vex_bridge.py")
+bridge_source = bridge_path.read_text(encoding="utf-8")
+tree = ast.parse(bridge_source)
+functions = {
+    node.name: node
+    for node in tree.body
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+}
+for required in ("_v120_agent_owns_turn", "_v120_agent_chat"):
+    if required not in functions:
+        raise SystemExit(f"v0.12 recent-turn behavior gate missing function: {required}")
+
+mini = ast.Module(
+    body=[
+        ast.Import(names=[ast.alias(name="re")]),
+        functions["_v120_agent_owns_turn"],
+        functions["_v120_agent_chat"],
+    ],
+    type_ignores=[],
+)
+ast.fix_missing_locations(mini)
+namespace: dict = {}
+exec(compile(mini, "<v120-recent-turn-smoke>", "exec"), namespace)
+
+question = "What exact test phrase did I just tell you to remember?"
+if namespace["_v120_agent_owns_turn"](question) is not True:
+    raise SystemExit("v0.12 recent-turn question is still swallowed by legacy memory routing")
+
+history = [
+    {"role": "user", "content": "Remember this exact test phrase: velvet toaster 73"},
+    {"role": "assistant", "content": 'Got it, baby - I will remember "velvet toaster 73".'},
+]
+answer = namespace["_v120_agent_chat"](history, question, {})
+expected = ("velvet toaster 73", "vex-agent-recent-turn")
+if answer != expected:
+    raise SystemExit(f"v0.12 recent-turn behavior failed: expected {expected!r}, got {answer!r}")
+print("PASS v0.12 exact two-turn recall behavior: velvet toaster 73")
