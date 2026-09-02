@@ -10,6 +10,7 @@ on:
       - "Tools/apply_v120_conversation_route_entry.py"
       - "Tools/apply_v120_installer_lock_fix.py"
       - "Tools/apply_v120_cognition_model_resilience.py"
+      - "Tools/apply_v120_cognition_capacity_integrity.py"
       - "Tools/apply_v120_ollama_preflight.py"
       - "Tools/apply_v120_install_readiness_gate.py"
       - "Tools/apply_v120_cognition_transport_tolerance.py"
@@ -54,6 +55,9 @@ jobs:
               'def _v120_execute_tool(',
               'def _v120_agent_chat(',
               'def _v120_agent_owns_turn(message: str) -> bool:',
+              'def _cognition_capacity() -> dict:',
+              'def _model_billions(name: str) -> float | None:',
+              'def _cognition_model_rank(name: str, max_billions: float) -> tuple:',
               'parsed.path == "/agent/capabilities"',
               'parsed.path == "/agent/plan"',
               'parsed.path == "/agent/execute"',
@@ -97,9 +101,29 @@ jobs:
 
           tree = ast.parse(bridge)
           names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-          for name in ["_v120_capability_registry", "_v120_plan", "_v120_execute_tool", "_v120_agent_chat", "_v120_agent_owns_turn"]:
+          for name in [
+              "_v120_capability_registry",
+              "_v120_plan",
+              "_v120_execute_tool",
+              "_v120_agent_chat",
+              "_v120_agent_owns_turn",
+              "_cognition_capacity",
+              "_model_billions",
+              "_cognition_model_rank",
+              "_choose_ollama_model",
+              "_ollama_models",
+              "_start_ollama_if_needed",
+          ]:
               assert name in names, name
-          print("PASS v0.12.0 cumulative agent orchestration + Ollama preflight + stable cognition warm-up + install readiness contract")
+          chooser = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_choose_ollama_model")
+          called = {
+              n.func.id
+              for n in ast.walk(chooser)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id.startswith("_")
+          }
+          undefined = sorted(name for name in called if name not in names)
+          assert not undefined, f"chooser references undefined helpers: {undefined}"
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + Ollama preflight + stable cognition warm-up + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
