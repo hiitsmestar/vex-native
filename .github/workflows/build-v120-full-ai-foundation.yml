@@ -71,7 +71,9 @@ jobs:
               'def _v11776_launch_app(',
               'def _v11777_window_action(',
               'pc-memory-star-query-v11775',
-              '_OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0',
+              '_OLLAMA_MODEL_CACHE_TTL_SECONDS = 1800.0',
+              'session.trust_env = False',
+              '[exe, "list"]',
               'One bounded second-chance selection',
           ]:
               assert marker in bridge, marker
@@ -123,7 +125,7 @@ jobs:
           }
           undefined = sorted(name for name in called if name not in names)
           assert not undefined, f"chooser references undefined helpers: {undefined}"
-          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + Ollama preflight + stable cognition warm-up + install readiness contract")
+          print("PASS v0.12.0 cumulative agent orchestration + complete cognition helper integrity + proxy-safe Ollama discovery + CLI/cache fallback + install readiness contract")
       - name: Verify bounded safety contract
         shell: python
         run: |
