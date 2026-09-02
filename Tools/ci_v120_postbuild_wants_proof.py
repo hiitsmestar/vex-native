@@ -143,7 +143,9 @@ def prove_bridge_from_zip() -> None:
                 requests_view = no_proxy_json(f"http://127.0.0.1:{port}/autonomy/requests?{query}", timeout=5)
                 if requests_view.get("ok") is not True:
                     raise RuntimeError(f"local requests endpoint failed: {requests_view}")
-                log(f"PASS final ZIP Bridge v0.12 + authenticated local requests endpoint")
+                if not isinstance(requests_view.get("reconciliation"), dict):
+                    raise RuntimeError(f"correctness reconciliation missing from local requests: {requests_view}")
+                log("PASS final ZIP Bridge v0.12 + authenticated local requests + Wants reconciliation")
                 return
             except Exception as exc:
                 last = f"{exc.__class__.__name__}: {exc}"
@@ -158,9 +160,11 @@ def main() -> int:
     if not PKG.exists() or not ZIP.exists():
         raise RuntimeError("normal v0.12 package must exist before post-build proof")
 
-    # Apply the local-only request viewer after every legacy source generator has finished.
+    # Apply local-only UI and correctness work only after every legacy source
+    # generator has finished. Then re-freeze the actual files we ship.
     run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
     run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
+    run(sys.executable, "apply_v120_correctness_upgrades.py")
 
     host_source = ROOT / "Tools" / "VexWindowsHost-v11740.py"
     bridge_source = ROOT / "Bridge" / "vex_bridge.py"
@@ -180,6 +184,9 @@ def main() -> int:
         f'"vex_wants_field_build": "{FIELD}"',
         "def _v120_local_upgrade_requests() -> dict:",
         'parsed.path == "/autonomy/requests"',
+        'V120_CORRECTNESS_UPGRADES = "v0.12-wants-reconcile-renderer-v1"',
+        "def _v120_reconcile_wants() -> dict:",
+        "V120_FACT_PRESERVING_RECALL",
     ]:
         if marker not in bridge_text:
             raise RuntimeError(f"post-build Bridge source marker missing: {marker}")
@@ -223,7 +230,7 @@ def main() -> int:
 
     prove_host_from_zip()
     prove_bridge_from_zip()
-    log(f"PASS final rewritten artifact is field-proven wants{FIELD}: {ZIP.stat().st_size} bytes")
+    log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1: {ZIP.stat().st_size} bytes")
     return 0
 
 
