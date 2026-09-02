@@ -9,8 +9,9 @@ if "0.11.7.80" not in source:
 
 # ci_v11780 is source-generating source. Find the actual nested .80 patch line
 # instead of depending on its exact escape spelling, then append the v0.12 layers
-# in the required order. Field/runtime integrity checks stay last so later source
-# generation cannot silently drop a helper after it was previously verified.
+# in the required order. This preserves the known-good composition order; the
+# cognition-resilience layer performs the final helper integrity repair after the
+# complete v0.12 bootstrap has established runtime identity.
 lines = source.splitlines(keepends=True)
 indices = [
     i for i, line in enumerate(lines)
@@ -44,10 +45,6 @@ tolerance_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_transport_tolerance.py",
 )
-capacity_integrity_line = base_line.replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_cognition_capacity_integrity.py",
-)
 lines[index + 1:index + 1] = [
     entry_line,
     lock_line,
@@ -55,7 +52,6 @@ lines[index + 1:index + 1] = [
     preflight_line,
     readiness_line,
     tolerance_line,
-    capacity_integrity_line,
 ]
 source = "".join(lines)
 
