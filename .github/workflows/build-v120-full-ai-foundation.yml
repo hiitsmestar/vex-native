@@ -35,6 +35,11 @@ jobs:
       - name: Re-freeze and prove final Vex wants artifact
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
+      - name: Apply self-learning lifecycle and re-freeze final artifact
+        run: |
+          python Tools/apply_v120_learning_lifecycle.py
+          python Tools/ci_v120_postbuild_wants_proof.py
+
       - name: Verify v0.12 core and field contract
         shell: python
         run: |
@@ -58,6 +63,9 @@ jobs:
               'def _v120_local_upgrade_requests() -> dict:',
               'parsed.path == "/autonomy/requests"',
               '"vex_wants_field_build": "74"',
+              'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v1"',
+              'def _v120_record_resolution_lesson(',
+              'def _v120_retire_orphaned_adaptive_upgrades(',
               'close requires explicit confirmation',
               'Never claim a tool action happened unless a confirmed tool result says it did',
               'Do not invent memories, sources, files, device state, or completed actions',
@@ -77,7 +85,7 @@ jobs:
           assert 'BUNDLE_VERSION = "0.12.0"' in installer
           assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + wants74 final-artifact contract")
+          print("PASS v0.12 core + wants74 + active learning lifecycle final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v4
