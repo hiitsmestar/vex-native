@@ -88,12 +88,22 @@ source = source.replace(
     'Vex Agent Runtime v0.12.0 Full AI Foundation',
 )
 
+# IMPORTANT: do not execute the nested assembler as __main__. Doing so triggers
+# its own `raise SystemExit(main())` and makes every v0.12 post-build/repack gate
+# below unreachable. Load it as a module-like namespace, then call main explicitly.
 globals_dict = {
-    "__name__": "__main__",
+    "__name__": "__v120_nested__",
     "__file__": str(source_path),
     "__package__": None,
 }
 exec(compile(source, str(source_path) + "[v120]", "exec"), globals_dict)
+legacy_main = globals_dict.get("main")
+if not callable(legacy_main):
+    raise SystemExit("v0.12 nested assembler main() missing")
+legacy_rc = legacy_main()
+if legacy_rc not in (0, None):
+    raise SystemExit(f"v0.12 nested assembler failed with rc={legacy_rc!r}")
+print("PASS v0.12 nested assembler returned; post-build proof is reachable")
 
 # The nested legacy assembler can regenerate VexWindowsHost-v11740.py after
 # injected layers. Apply both local-request patches again at the very end, then
@@ -131,11 +141,11 @@ def verify_frozen_host_title(exe: Path) -> None:
                 check=False,
             )
             last = probe.stdout.strip()
-            if "wants71" in last:
+            if "wants72" in last:
                 print(f"PASS frozen Host field title: {last}")
                 return
             time.sleep(0.5)
-        raise SystemExit(f"v0.12 frozen Host lacks wants71 field fingerprint; title={last!r}")
+        raise SystemExit(f"v0.12 frozen Host lacks wants72 field fingerprint; title={last!r}")
     finally:
         globals_dict["stop_windows_process"](pid)
 
@@ -167,7 +177,7 @@ print("PASS v0.12 Windows Host ships bounded real conversation history")
 # public GitHub.
 for marker in [
     'text="Vex wants / upgrade requests"',
-    'wants71',
+    'wants72',
     'def show_vex_wants(self):',
     'bridge_get("/autonomy/requests", timeout=8)',
     'popup.title("What Vex Wants")',
@@ -187,7 +197,7 @@ for marker in [
     'parsed.path == "/autonomy/requests"',
     'FROM project_proposals p',
     'raw companion gaps are never emitted by public Remote Support',
-    '"vex_wants_field_build": "71"',
+    '"vex_wants_field_build": "72"',
 ]:
     if marker not in bridge_source:
         raise SystemExit(f"v0.12 local Vex-wants Bridge marker missing: {marker}")
