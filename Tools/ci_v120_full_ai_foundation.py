@@ -30,6 +30,10 @@ lock_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_installer_lock_fix.py",
 )
+quiesce_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_installer_quiesce_coordinator.py",
+)
 resilience_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_model_resilience.py",
@@ -49,6 +53,7 @@ tolerance_line = base_line.replace(
 lines[index + 1:index + 1] = [
     entry_line,
     lock_line,
+    quiesce_line,
     resilience_line,
     preflight_line,
     readiness_line,
