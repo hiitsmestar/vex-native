@@ -9,6 +9,11 @@ from pathlib import Path
 # every artifact that reaches the stable-install tolerance gate contains it.
 runpy.run_path("Tools/apply_v120_field_chat_transport.py", run_name="__main__")
 
+# This layer is the final proven Bridge composition point in the cumulative chain.
+# Apply recent-turn recall here explicitly so source-generator ordering cannot
+# silently omit it from the packaged Bridge.
+runpy.run_path("Tools/apply_v120_recent_turn_priority.py", run_name="__main__")
+
 BRIDGE = Path("Bridge/vex_bridge.py")
 bridge = BRIDGE.read_text(encoding="utf-8")
 for marker in [
@@ -17,9 +22,11 @@ for marker in [
     "v120_num_ctx = 2048",
     '"num_ctx": v120_num_ctx,',
     '"error": "local cognition request failed",',
+    'vex-agent-recent-turn',
+    'user_profile = ""',
 ]:
     if marker not in bridge:
-        raise SystemExit(f"v0.12 transport tolerance missing field-chat marker: {marker}")
+        raise SystemExit(f"v0.12 transport tolerance missing final Bridge marker: {marker}")
 
 INSTALLER = Path("Tools/VexAgentRuntimeInstall.py")
 installer = INSTALLER.read_text(encoding="utf-8")
@@ -82,4 +89,4 @@ for marker in [
     if marker not in installer:
         raise SystemExit(f"v0.12 transport tolerance missing marker: {marker}")
 
-print("Applied v0.12 field-chat + stable-install cognition transport tolerance")
+print("Applied v0.12 field-chat + deterministic recent-turn recall + stable-install cognition transport tolerance")
