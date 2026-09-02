@@ -24,18 +24,23 @@ def function_slice(source: str, name: str) -> tuple[int, int, str]:
     return start, end, source[start:end]
 
 
-# Patch the *actual* v0.12 agent function. Earlier resilience used a generic
-# first-match replacement and could harden the legacy _ollama_chat while leaving
-# this wrapper unchanged.
 start, end, agent = function_slice(text, "_v120_agent_chat")
 
+# Model selection + hardware pressure policy. This old 8 GB field node needs a
+# much smaller KV/context budget than the workstation-oriented default.
 old_select = '''    model = _choose_ollama_model()\n    if not model:\n        return None\n'''
-new_select = '''    model = _choose_ollama_model()\n    if not model:\n        _start_ollama_if_needed()\n        for _ in range(8):\n            time.sleep(0.75)\n            model = _choose_ollama_model()\n            if model:\n                break\n    if not model:\n        return None\n\n    # The upstairs 8 GB field node can report the model as installed/ready while\n    # an 8192-token KV cache still pushes the first generation over memory limits.\n    # Scale context to the same hardware pressure signal used by model selection.\n    capacity = _cognition_capacity()\n    tier = str(capacity.get("tier") or "lite")\n    pressure = str(capacity.get("pressure") or "normal")\n    v120_num_ctx = 2048 if tier == "lite" or pressure == "memory" else (4096 if tier == "balanced" else 8192)\n'''
+new_select = '''    model = _choose_ollama_model()\n    if not model:\n        _start_ollama_if_needed()\n        for _ in range(8):\n            time.sleep(0.75)\n            model = _choose_ollama_model()\n            if model:\n                break\n    if not model:\n        return None\n\n    capacity = _cognition_capacity()\n    tier = str(capacity.get("tier") or "lite")\n    pressure = str(capacity.get("pressure") or "normal")\n    v120_lite_mode = tier == "lite" or pressure == "memory"\n    v120_num_ctx = 1024 if v120_lite_mode else (2048 if tier == "balanced" else 4096)\n    v120_num_predict = 160 if v120_lite_mode else (320 if tier == "balanced" else 640)\n    v120_timeout = 240 if v120_lite_mode else 150\n'''
 if old_select in agent:
     agent = agent.replace(old_select, new_select, 1)
-elif "v120_num_ctx = 2048" not in agent:
+elif "v120_num_ctx = 2048 if tier == \"lite\" or pressure == \"memory\"" in agent:
+    old_existing = '''    capacity = _cognition_capacity()\n    tier = str(capacity.get("tier") or "lite")\n    pressure = str(capacity.get("pressure") or "normal")\n    v120_num_ctx = 2048 if tier == "lite" or pressure == "memory" else (4096 if tier == "balanced" else 8192)\n'''
+    if old_existing not in agent:
+        raise SystemExit("v0.12 field chat fix found old capacity marker but not expected block")
+    agent = agent.replace(old_existing, new_select.split("\n\n    capacity", 1)[1].join(["    capacity", ""]) if False else '''    capacity = _cognition_capacity()\n    tier = str(capacity.get("tier") or "lite")\n    pressure = str(capacity.get("pressure") or "normal")\n    v120_lite_mode = tier == "lite" or pressure == "memory"\n    v120_num_ctx = 1024 if v120_lite_mode else (2048 if tier == "balanced" else 4096)\n    v120_num_predict = 160 if v120_lite_mode else (320 if tier == "balanced" else 640)\n    v120_timeout = 240 if v120_lite_mode else 150\n''', 1)
+elif "v120_num_ctx = 1024" not in agent:
     raise SystemExit("v0.12 field chat fix could not patch agent model/context selection")
 
+# Keep the actual loopback generation path blind to Windows/system proxy settings.
 old_transport = '''        import requests\n        response = requests.post(\n'''
 new_transport = '''        import requests\n        # V120_LOOPBACK_CHAT_PROXY_BYPASS: never inherit Windows/system proxy\n        # settings for the local Ollama API. /llm/status already proved loopback.\n        session = requests.Session()\n        session.trust_env = False\n        response = session.post(\n'''
 if old_transport in agent:
@@ -43,28 +48,49 @@ if old_transport in agent:
 elif "V120_LOOPBACK_CHAT_PROXY_BYPASS" not in agent:
     raise SystemExit("v0.12 field chat fix could not patch agent loopback POST")
 
+# Bound the prompt itself, not just Ollama's KV cache. The full agent system prompt
+# plus 18 history turns can exceed what the lite node can process comfortably.
+old_messages = '''    safe_messages = [{"role": "system", "content": system[:18000]}]\n    for item in history[-18:]:\n        if not isinstance(item, dict):\n            continue\n        role = str(item.get("role") or "").lower().strip()\n        content = str(item.get("content") or "").strip()\n        if role in {"user", "assistant"} and content:\n            safe_messages.append({"role": role, "content": content[:3500]})\n    safe_messages.append({"role": "user", "content": str(message or "").strip()[:5000]})\n'''
+new_messages = '''    v120_system_limit = 6000 if v120_lite_mode else 12000\n    v120_history_window = 4 if v120_lite_mode else 12\n    v120_history_limit = 900 if v120_lite_mode else 2200\n    safe_messages = [{"role": "system", "content": system[:v120_system_limit]}]\n    for item in history[-v120_history_window:]:\n        if not isinstance(item, dict):\n            continue\n        role = str(item.get("role") or "").lower().strip()\n        content = str(item.get("content") or "").strip()\n        if role in {"user", "assistant"} and content:\n            safe_messages.append({"role": role, "content": content[:v120_history_limit]})\n    safe_messages.append({"role": "user", "content": str(message or "").strip()[:2200]})\n'''
+if old_messages in agent:
+    agent = agent.replace(old_messages, new_messages, 1)
+elif "v120_system_limit = 6000" not in agent:
+    raise SystemExit("v0.12 field chat fix could not bound lite prompt/history")
+
 if '"num_ctx": 8192,' in agent:
-    agent = agent.replace('"num_ctx": 8192,', '"num_ctx": v120_num_ctx,', 1)
-elif '"num_ctx": v120_num_ctx,' not in agent:
-    raise SystemExit("v0.12 field chat fix could not make context hardware-aware")
+    agent = agent.replace('"num_ctx": 8192,', '"num_ctx": v120_num_ctx,\n                    "num_predict": v120_num_predict,', 1)
+elif '"num_ctx": v120_num_ctx,' in agent and '"num_predict": v120_num_predict,' not in agent:
+    agent = agent.replace('"num_ctx": v120_num_ctx,', '"num_ctx": v120_num_ctx,\n                    "num_predict": v120_num_predict,', 1)
+elif '"num_predict": v120_num_predict,' not in agent:
+    raise SystemExit("v0.12 field chat fix could not install bounded output")
 
 if "timeout=55," in agent:
-    agent = agent.replace("timeout=55,", "timeout=90,", 1)
-elif "timeout=90," not in agent:
-    raise SystemExit("v0.12 field chat fix could not extend first-generation timeout")
+    agent = agent.replace("timeout=55,", "timeout=v120_timeout,", 1)
+elif "timeout=90," in agent:
+    agent = agent.replace("timeout=90,", "timeout=v120_timeout,", 1)
+elif "timeout=v120_timeout," not in agent:
+    raise SystemExit("v0.12 field chat fix could not install hardware-aware timeout")
+
+# If the richly-grounded agent turn still fails on the lite machine, make one tiny
+# local-only second attempt. This preserves a functioning conversational core while
+# keeping the full-memory/tool path as the preferred first attempt.
+old_except = '''    except Exception as exc:\n        print(f"[agent] full-AI cognition failed: {exc}", flush=True)\n        return None\n'''
+new_except = '''    except Exception as exc:\n        print(f"[agent] full-AI cognition failed: {exc.__class__.__name__}: {exc}", flush=True)\n        if not v120_lite_mode:\n            return None\n        try:\n            import requests\n            fallback = requests.Session()\n            fallback.trust_env = False\n            compact_system = (\n                "You are VexNative, Star's local assistant. Answer the newest user message directly, "\n                "naturally, briefly, and do not invent actions or memories. " + V120_AGENT_RULES[:1800]\n            )\n            response = fallback.post(\n                f"{OLLAMA_BASE}/api/chat",\n                json={\n                    "model": model,\n                    "messages": [\n                        {"role": "system", "content": compact_system[:2400]},\n                        {"role": "user", "content": str(message or "").strip()[:1400]},\n                    ],\n                    "stream": False,\n                    "options": {\n                        "temperature": 0.55,\n                        "top_p": 0.88,\n                        "num_ctx": 1024,\n                        "num_predict": 128,\n                        "repeat_penalty": 1.08,\n                    },\n                },\n                timeout=240,\n            )\n            response.raise_for_status()\n            payload = response.json()\n            raw = str(((payload.get("message") or {}).get("content")) or "")\n            reply = _strip_reasoning_markup(raw)\n            if reply:\n                return reply[:6000], model\n        except Exception as fallback_exc:\n            print(f"[agent] lite fallback failed: {fallback_exc.__class__.__name__}: {fallback_exc}", flush=True)\n        return None\n'''
+if old_except in agent:
+    agent = agent.replace(old_except, new_except, 1)
+elif "[agent] lite fallback failed:" not in agent:
+    raise SystemExit("v0.12 field chat fix could not install lite generation fallback")
 
 text = text[:start] + agent + text[end:]
 
-# Harden the legacy cognition helper too because Remote Support/older callers can
-# still reach it independently of the v0.12 agent wrapper.
+# Harden the legacy cognition helper too when it still has the raw transport;
+# older Remote Support callers can reach it independently of the v0.12 wrapper.
 start, end, legacy = function_slice(text, "_ollama_chat")
 if old_transport in legacy:
     legacy = legacy.replace(old_transport, new_transport, 1)
 text = text[:start] + legacy + text[end:]
 
-# The old route used one generic message for every None return (model lookup,
-# Ollama load failure, timeout, proxy failure). Stop falsely claiming the model is
-# absent when the status endpoint has already verified one.
+# Do not falsely report that the model is absent when discovery already verified it.
 text = text.replace(
     '"error": "no local cognition model available",',
     '"error": "local cognition request failed",',
@@ -77,11 +103,16 @@ compile(text, str(BRIDGE), "exec")
 _, _, agent = function_slice(text, "_v120_agent_chat")
 for marker in [
     "for _ in range(8):",
-    "v120_num_ctx = 2048",
+    "v120_num_ctx = 1024",
+    "v120_num_predict = 160",
+    "v120_system_limit = 6000",
     "V120_LOOPBACK_CHAT_PROXY_BYPASS",
     "session.trust_env = False",
-    '"num_ctx": v120_num_ctx,',
-    "timeout=90,",
+    '"num_predict": v120_num_predict,',
+    "timeout=v120_timeout,",
+    "[agent] lite fallback failed:",
+    '"num_ctx": 1024,',
+    "timeout=240,",
 ]:
     if marker not in agent:
         raise SystemExit(f"v0.12 field chat fix missing agent marker: {marker}")
@@ -89,4 +120,4 @@ for marker in [
 if '"error": "local cognition request failed",' not in text:
     raise SystemExit("v0.12 field chat fix missing truthful route error")
 
-print("Applied v0.12 proxy-blind + low-memory field chat transport fix")
+print("Applied v0.12 proxy-blind low-memory agent chat + bounded lite fallback")
