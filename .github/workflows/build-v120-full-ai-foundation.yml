@@ -70,7 +70,6 @@ jobs:
               'RUNTIME IDENTITY',
               'STAR / RELATIONSHIP CONTEXT',
               'CURRENT VEX STATE',
-              'RECENT CONVERSATION HISTORY outranks all long-term memory/profile grounding',
               'vex-agent-recent-turn',
               'def _v11776_launch_app(',
               'def _v11777_window_action(',
