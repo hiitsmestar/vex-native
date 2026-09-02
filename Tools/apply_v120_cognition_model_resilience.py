@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 import runpy
 from pathlib import Path
 
@@ -144,6 +145,12 @@ compile(text, str(BRIDGE), "exec")
 # Run the integrity repair here, after the complete v0.12 bootstrap and resilience
 # rewrite, so the packaged Bridge cannot carry dangling helper NameErrors.
 runpy.run_path("Tools/apply_v120_cognition_capacity_integrity.py", run_name="__main__")
+
+# The original v0.9.3 cognition overlay used a proxy-aware requests.post() for
+# actual generation. Discovery can therefore be healthy while /llm/chat fails.
+# Reapply the field chat transport *after* every cognition/helper rewrite so the
+# executable that PyInstaller packages is guaranteed to use proxy-free loopback.
+runpy.run_path("Tools/apply_v120_ollama_chat_transport.py", run_name="__main__")
 text = BRIDGE.read_text(encoding="utf-8")
 compile(text, str(BRIDGE), "exec")
 
@@ -157,9 +164,28 @@ checks = [
     '"agent_runtime_bundle": "0.12.0"',
     'def _v120_agent_owns_turn(message: str) -> bool:',
     'def _cognition_capacity() -> dict:',
+    "response = session.post(",
+    "timeout=180",
+    "local cognition generation failed",
+    "visible_model = _choose_ollama_model()",
 ]
 for marker in checks:
     if marker not in text:
         raise SystemExit(f"v0.12 cognition resilience missing marker: {marker}")
 
-print("Applied v0.12 proxy-safe Ollama discovery + CLI/cache resilience + final cognition helper integrity")
+# Verify the final packaged function itself, not just global marker text.
+tree = ast.parse(text)
+chat = next(
+    (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_ollama_chat"),
+    None,
+)
+if chat is None:
+    raise SystemExit("v0.12 cognition resilience final _ollama_chat missing")
+chat_source = ast.get_source_segment(text, chat) or ""
+for marker in ["session.trust_env = False", "response = session.post(", "timeout=180"]:
+    if marker not in chat_source:
+        raise SystemExit(f"v0.12 cognition resilience final chat missing marker: {marker}")
+if "requests.post(" in chat_source:
+    raise SystemExit("v0.12 cognition resilience final chat regressed to proxy-aware requests.post")
+
+print("Applied v0.12 final proxy-safe Ollama discovery/chat + CLI/cache resilience + cognition helper integrity")
