@@ -33,6 +33,10 @@ resilience_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_model_resilience.py",
 )
+chat_transport_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_ollama_chat_transport.py",
+)
 preflight_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_ollama_preflight.py",
@@ -49,6 +53,7 @@ lines[index + 1:index + 1] = [
     entry_line,
     lock_line,
     resilience_line,
+    chat_transport_line,
     preflight_line,
     readiness_line,
     tolerance_line,
