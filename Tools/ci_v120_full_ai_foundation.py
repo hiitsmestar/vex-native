@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import ast
+import subprocess
+import sys
 
 source_path = Path("Tools/ci_v11780_memory_route_punctuation_fix.py")
 source = source_path.read_text(encoding="utf-8")
@@ -11,8 +13,8 @@ if "0.11.7.80" not in source:
 # ci_v11780 is source-generating source. Find the actual nested .80 patch line
 # instead of depending on its exact escape spelling, then append the v0.12 layers
 # in the required order. The generated chain executes inserted entries in reverse
-# order, so the local requests view is listed first here so it runs last, after
-# the final v0.12 Bridge + Host sources exist.
+# order, so recent-turn priority is listed first here so it runs last, after the
+# v0.12 conversation/context layer exists.
 lines = source.splitlines(keepends=True)
 indices = [
     i for i, line in enumerate(lines)
@@ -87,6 +89,21 @@ globals_dict = {
     "__package__": None,
 }
 exec(compile(source, str(source_path) + "[v120]", "exec"), globals_dict)
+
+# The nested legacy assembler regenerates VexWindowsHost-v11740.py after the
+# injected v0.12 patch list, which can overwrite a late Host UI patch while still
+# leaving the loose source green. Re-apply the local-only request view after the
+# legacy source generation, then rebuild frozen components and recreate the ZIP.
+# This makes the downloadable artifact itself contain the Vex-wants Host + Bridge.
+subprocess.run([sys.executable, "Tools/apply_v120_local_upgrade_requests.py"], check=True)
+for required_build_fn in ("build_components", "smoke_bridge_agent_runtime", "smoke_user_processes", "package_runtime"):
+    if not callable(globals_dict.get(required_build_fn)):
+        raise SystemExit(f"v0.12 repack missing legacy build function: {required_build_fn}")
+globals_dict["build_components"]()
+globals_dict["smoke_bridge_agent_runtime"]()
+globals_dict["smoke_user_processes"]()
+globals_dict["package_runtime"]()
+print("PASS v0.12 repacked frozen components after local What Vex Wants patch")
 
 # Field-proof gate: the purple Windows Host must send actual prior turns to
 # Bridge. Empty history made second-turn continuity structurally impossible.
