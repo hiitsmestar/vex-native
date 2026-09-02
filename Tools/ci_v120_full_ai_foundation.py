@@ -50,6 +50,10 @@ tolerance_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_transport_tolerance.py",
 )
+recent_turn_line = base_line.replace(
+    "Tools/apply_v11780_memory_route_punctuation_fix.py",
+    "Tools/apply_v120_recent_turn_priority.py",
+)
 lines[index + 1:index + 1] = [
     entry_line,
     lock_line,
@@ -58,6 +62,7 @@ lines[index + 1:index + 1] = [
     preflight_line,
     readiness_line,
     tolerance_line,
+    recent_turn_line,
 ]
 source = "".join(lines)
 
