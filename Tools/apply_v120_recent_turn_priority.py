@@ -23,6 +23,19 @@ if contract_old in text:
 elif 'RECENT CONVERSATION HISTORY outranks all long-term memory/profile grounding' not in text:
     raise SystemExit("v0.12 recent-turn priority could not patch response contract")
 
+# Recent-turn questions must reach the v0.12 agent before the older verified
+# personal-memory shortcut. Previously a question containing "remember" was
+# swallowed by _personal_memory_fact_question() and never reached the history
+# resolver, which exactly matched the field profile-dump failure.
+ownership_anchor = '''    if not text:\n        return False\n\n    recall_cues = (\n'''
+ownership_replacement = '''    if not text:\n        return False\n\n    recent_turn_query = bool(re.search(\n        r"\\b(just|previous|last|earlier|a moment ago)\\b", text, flags=re.I\n    )) or bool(re.search(\n        r"\\bwhat did i (?:just )?(?:say|ask|tell you|tell you to remember)\\b",\n        text, flags=re.I,\n    ))\n    if recent_turn_query:\n        return True\n\n    recall_cues = (\n'''
+if 'def _v120_agent_owns_turn(message: str) -> bool:' not in text:
+    raise SystemExit("v0.12 recent-turn priority missing agent ownership helper")
+if ownership_anchor in text:
+    text = text.replace(ownership_anchor, ownership_replacement, 1)
+elif 'if recent_turn_query:\n        return True\n\n    recall_cues = (' not in text:
+    raise SystemExit("v0.12 recent-turn priority could not prioritize recent-turn ownership")
+
 # Exact recent-turn recall should not depend on the tiny local model following a
 # crowded prompt. Resolve it directly from the real conversation history first.
 agent_sig = 'def _v120_agent_chat(history: list[dict], message: str, phone_context: dict | None = None) -> tuple[str, str] | None:\n'
@@ -48,6 +61,7 @@ for marker in [
     'recent_turn = bool(re.search(',
     'facts = [] if recent_turn else _v120_fact_rows(text, 5)',
     'RECENT CONVERSATION HISTORY outranks all long-term memory/profile grounding',
+    'if recent_turn_query:\n        return True',
     'vex-agent-recent-turn',
     'exact = re.search(',
     'if recent_turn_query:',
@@ -59,4 +73,4 @@ for marker in [
 if 'facts = _v120_fact_rows("", 4)' in text:
     raise SystemExit("v0.12 recent-turn priority left empty-query memory fallback active")
 
-print("Applied deterministic v0.12 recent-turn recall before profile/model grounding")
+print("Applied deterministic v0.12 recent-turn ownership + recall before legacy profile/model grounding")
