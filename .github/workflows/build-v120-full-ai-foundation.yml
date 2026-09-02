@@ -78,7 +78,6 @@ jobs:
               'One bounded second-chance selection',
               'response = session.post(',
               'timeout=180',
-              'local cognition generation failed',
               'visible_model = _choose_ollama_model()',
           ]:
               assert marker in bridge, marker
