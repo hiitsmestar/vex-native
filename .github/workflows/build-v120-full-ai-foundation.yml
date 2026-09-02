@@ -85,7 +85,7 @@ jobs:
               'cognition_bridge_get("/llm/status"',
               'cognition = wait_cognition(home)',
               '"warming": True',
-              'PC cognition: warming (Ollama model verified:',
+              "PC cognition: {'ready' if cognition.get('ok') else 'warming'}",
               'installed and verified',
           ]:
               assert marker in installer, marker
