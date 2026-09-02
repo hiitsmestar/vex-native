@@ -13,8 +13,8 @@ bridge = BRIDGE.read_text(encoding="utf-8")
 # Make the field artifact unmistakable. The title is inspected from the actual
 # frozen EXE in CI and is also visible to Star after installation.
 title_old = '        self.title(f"Vex Windows {VERSION}")\n'
-title_new = '        self.title(f"Vex Windows {VERSION} | wants73")\n'
-if "wants73" not in host:
+title_new = '        self.title(f"Vex Windows {VERSION} | wants74")\n'
+if "wants74" not in host:
     if title_old not in host:
         raise SystemExit("v0.12 wants fingerprint missing Host title anchor")
     host = host.replace(title_old, title_new, 1)
@@ -28,12 +28,12 @@ if 'text="Vex wants / upgrade requests"' not in host:
         raise SystemExit("v0.12 wants fingerprint missing Host control-row anchor")
     host = host.replace(bar_anchor, bar_code + bar_anchor, 1)
 
-# Expose a harmless build fingerprint through local Bridge status so Remote
-# Support can prove which field artifact is actually running without exposing
-# private request contents.
+# Keep a harmless source-level Bridge build marker for package inspection. The
+# executable proof uses the authenticated /autonomy/requests endpoint itself,
+# because legacy /status is intentionally a smaller stable payload.
 status_anchor = '"agent_runtime_bundle": "0.12.0",'
-status_new = status_anchor + '\n        "vex_wants_field_build": "73",'
-if '"vex_wants_field_build": "73"' not in bridge:
+status_new = status_anchor + '\n        "vex_wants_field_build": "74",'
+if '"vex_wants_field_build": "74"' not in bridge:
     if status_anchor not in bridge:
         raise SystemExit("v0.12 wants fingerprint missing Bridge bundle-status anchor")
     bridge = bridge.replace(status_anchor, status_new, 1)
@@ -44,13 +44,13 @@ compile(host, str(HOST), "exec")
 compile(bridge, str(BRIDGE), "exec")
 
 for marker in [
-    'wants73',
+    'wants74',
     'text="Vex wants / upgrade requests"',
     'command=self.show_vex_wants',
 ]:
     if marker not in host:
         raise SystemExit(f"v0.12 wants field Host marker missing: {marker}")
-if '"vex_wants_field_build": "73"' not in bridge:
+if '"vex_wants_field_build": "74"' not in bridge:
     raise SystemExit("v0.12 wants field Bridge fingerprint missing")
 
-print("Applied field-visible Vex wants bar + wants73 frozen-build fingerprint")
+print("Applied field-visible Vex wants bar + wants74 frozen-build fingerprint")
