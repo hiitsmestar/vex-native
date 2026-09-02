@@ -10,8 +10,9 @@ if "0.11.7.80" not in source:
 # ci_v11780 is source-generating source. Find the actual nested .80 patch line
 # instead of depending on its exact escape spelling, then append the v0.12 layers
 # in the required order. This preserves the known-good composition order; the
-# cognition-resilience layer performs the final helper integrity repair after the
-# complete v0.12 bootstrap has established runtime identity.
+# cognition-resilience layer performs the final helper integrity *and* proxy-safe
+# Ollama chat transport repair after the complete v0.12 bootstrap has established
+# runtime identity, so later installer-only layers cannot overwrite Bridge chat.
 lines = source.splitlines(keepends=True)
 indices = [
     i for i, line in enumerate(lines)
@@ -33,10 +34,6 @@ resilience_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_cognition_model_resilience.py",
 )
-chat_transport_line = base_line.replace(
-    "Tools/apply_v11780_memory_route_punctuation_fix.py",
-    "Tools/apply_v120_ollama_chat_transport.py",
-)
 preflight_line = base_line.replace(
     "Tools/apply_v11780_memory_route_punctuation_fix.py",
     "Tools/apply_v120_ollama_preflight.py",
@@ -53,7 +50,6 @@ lines[index + 1:index + 1] = [
     entry_line,
     lock_line,
     resilience_line,
-    chat_transport_line,
     preflight_line,
     readiness_line,
     tolerance_line,
