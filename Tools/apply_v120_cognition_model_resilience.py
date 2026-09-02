@@ -142,50 +142,54 @@ compile(text, str(BRIDGE), "exec")
 
 # Field validation proved that a later cumulative source layer could leave the
 # chooser call intact while dropping cognition helpers after the old .39 check.
-# Run the integrity repair here, after the complete v0.12 bootstrap and resilience
-# rewrite, so the packaged Bridge cannot carry dangling helper NameErrors.
 runpy.run_path("Tools/apply_v120_cognition_capacity_integrity.py", run_name="__main__")
 
-# The original v0.9.3 cognition overlay used a proxy-aware requests.post() for
-# actual generation. Discovery can therefore be healthy while /llm/chat fails.
-# Reapply the field chat transport *after* every cognition/helper rewrite so the
-# executable that PyInstaller packages is guaranteed to use proxy-free loopback.
-runpy.run_path("Tools/apply_v120_ollama_chat_transport.py", run_name="__main__")
+# The purple Windows Host routes through _v120_agent_chat, not the legacy
+# _ollama_chat helper. Make the real field path the final transport owner here.
+# This patch is idempotent, so the later installer-tolerance stage may verify it
+# again without changing the already-correct Bridge source.
+runpy.run_path("Tools/apply_v120_field_chat_transport.py", run_name="__main__")
 text = BRIDGE.read_text(encoding="utf-8")
 compile(text, str(BRIDGE), "exec")
 
 checks = [
     "_OLLAMA_MODEL_CACHE_TTL_SECONDS = 1800.0",
-    "session.trust_env = False",
     '[exe, "list"]',
     "return list(_OLLAMA_MODEL_CACHE)",
-    "for _ in range(3):",
     "One bounded second-chance selection",
     '"agent_runtime_bundle": "0.12.0"',
     'def _v120_agent_owns_turn(message: str) -> bool:',
     'def _cognition_capacity() -> dict:',
-    "response = session.post(",
-    "timeout=180",
-    "local cognition generation failed",
-    "visible_model = _choose_ollama_model()",
+    "V120_LOOPBACK_CHAT_PROXY_BYPASS",
+    "session.trust_env = False",
+    "v120_num_ctx = 2048",
+    '"num_ctx": v120_num_ctx,',
+    "timeout=90,",
+    '"error": "local cognition request failed",',
 ]
 for marker in checks:
     if marker not in text:
         raise SystemExit(f"v0.12 cognition resilience missing marker: {marker}")
 
-# Verify the final packaged function itself, not just global marker text.
+# Verify the actual v0.12 field-generation function itself, not a legacy helper.
 tree = ast.parse(text)
-chat = next(
-    (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_ollama_chat"),
+agent_chat = next(
+    (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_v120_agent_chat"),
     None,
 )
-if chat is None:
-    raise SystemExit("v0.12 cognition resilience final _ollama_chat missing")
-chat_source = ast.get_source_segment(text, chat) or ""
-for marker in ["session.trust_env = False", "response = session.post(", "timeout=180"]:
-    if marker not in chat_source:
-        raise SystemExit(f"v0.12 cognition resilience final chat missing marker: {marker}")
-if "requests.post(" in chat_source:
-    raise SystemExit("v0.12 cognition resilience final chat regressed to proxy-aware requests.post")
+if agent_chat is None:
+    raise SystemExit("v0.12 cognition resilience final _v120_agent_chat missing")
+agent_source = ast.get_source_segment(text, agent_chat) or ""
+for marker in [
+    "V120_LOOPBACK_CHAT_PROXY_BYPASS",
+    "session.trust_env = False",
+    "response = session.post(",
+    '"num_ctx": v120_num_ctx,',
+    "timeout=90,",
+]:
+    if marker not in agent_source:
+        raise SystemExit(f"v0.12 cognition resilience final agent chat missing marker: {marker}")
+if "requests.post(" in agent_source:
+    raise SystemExit("v0.12 cognition resilience active agent chat regressed to proxy-aware requests.post")
 
-print("Applied v0.12 final proxy-safe Ollama discovery/chat + CLI/cache resilience + cognition helper integrity")
+print("Applied v0.12 final proxy-safe model discovery + low-memory active agent chat + cognition helper integrity")
