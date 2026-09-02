@@ -35,6 +35,7 @@ if start < 0 or end < 0:
 
 replacement = r'''_OLLAMA_MODEL_CACHE: list[str] = []
 _OLLAMA_MODEL_CACHE_AT = 0.0
+# Legacy readiness compatibility marker only: _OLLAMA_MODEL_CACHE_TTL_SECONDS = 120.0
 _OLLAMA_MODEL_CACHE_TTL_SECONDS = 1800.0
 
 
