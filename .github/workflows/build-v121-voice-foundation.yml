@@ -6,6 +6,7 @@ on:
     paths:
       - "Tools/apply_v121_voice_foundation_bridge.py"
       - "Tools/apply_v121_voice_foundation_ios.py"
+      - "Tools/apply_v121_natural_continuity_compat.py"
       - "Tools/build_v121_ios_voice_foundation.py"
       - ".github/workflows/build-v121-voice-foundation.yml"
   workflow_dispatch:
