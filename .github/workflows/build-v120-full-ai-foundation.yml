@@ -38,6 +38,7 @@ jobs:
       - name: Apply learning lifecycle and PC health autonomy then re-freeze final artifact
         run: |
           python Tools/apply_v120_learning_lifecycle.py
+          python Tools/prepare_v120_pc_health_autonomy.py
           python Tools/apply_v120_pc_health_autonomy.py
           python Tools/ci_v120_postbuild_wants_proof.py
 
