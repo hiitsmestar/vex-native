@@ -74,17 +74,7 @@ run("Tools/apply_v096_active_maintenance_ios_patch.py", allow_failure=True)
 for script in TAIL_AFTER_MAINTENANCE:
     run(script)
 
-# Keep one bounded diagnostic around the historical natural-continuity fast path.
-# This is intentionally source code only (no user data) and makes future cumulative
-# chain drift diagnosable from CI rather than guessing at the generated shape.
-app_debug = (ROOT / "VexNative" / "AppModel.swift").read_text(encoding="utf-8")
-fast = app_debug.find("if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {")
-if fast >= 0:
-    print("--- generated AppModel continuity anchor ---", flush=True)
-    print(app_debug[max(0, fast - 240):fast + 1900], flush=True)
-    print("--- end continuity anchor ---", flush=True)
-
-run("Tools/apply_v11729_ios_natural_continuity.py")
+run("Tools/apply_v121_natural_continuity_compat.py")
 run("Tools/apply_v121_voice_foundation_ios.py")
 
 content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
