@@ -20,6 +20,7 @@ PKG = ROOT / PKG_NAME
 ZIP = ROOT / f"{PKG_NAME}.zip"
 VERIFY = ROOT / "verify-package"
 FIELD = "74"
+SKIP_PATCHES = os.environ.get("V120_POSTBUILD_SKIP_PATCHES", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def log(message: str) -> None:
@@ -164,17 +165,21 @@ def main() -> int:
     if not PKG.exists() or not ZIP.exists():
         raise RuntimeError("normal v0.12 package must exist before post-build proof")
 
-    run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
-    run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
-    run(sys.executable, "apply_v120_correctness_upgrades.py")
+    if SKIP_PATCHES:
+        log("freeze-only mode: preserving already-mutated final source; no patch scripts will be re-applied")
+    else:
+        run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
+        run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
+        run(sys.executable, "apply_v120_correctness_upgrades.py")
+
+        pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
+        pc_health_prepare = ROOT / "Tools" / "prepare_v120_pc_health_autonomy.py"
+        if pc_health_patch.exists():
+            if pc_health_prepare.exists():
+                run(sys.executable, str(pc_health_prepare.relative_to(ROOT)))
+            run(sys.executable, str(pc_health_patch.relative_to(ROOT)))
 
     pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
-    pc_health_prepare = ROOT / "Tools" / "prepare_v120_pc_health_autonomy.py"
-    if pc_health_patch.exists():
-        if pc_health_prepare.exists():
-            run(sys.executable, str(pc_health_prepare.relative_to(ROOT)))
-        run(sys.executable, str(pc_health_patch.relative_to(ROOT)))
-
     host_source = ROOT / "Tools" / "VexWindowsHost-v11740.py"
     bridge_source = ROOT / "Bridge" / "vex_bridge.py"
     py_compile.compile(str(host_source), doraise=True)
@@ -199,6 +204,22 @@ def main() -> int:
     ]:
         if marker not in bridge_text:
             raise RuntimeError(f"post-build Bridge source marker missing: {marker}")
+    if SKIP_PATCHES:
+        for marker in [
+            'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"',
+            "def _v120_record_resolution_lesson(",
+            "def _v120_retire_orphaned_adaptive_upgrades(",
+            "def _v120_retire_projects_for_closed_gaps(",
+        ]:
+            if marker not in bridge_text:
+                raise RuntimeError(f"freeze-only lifecycle marker missing: {marker}")
+        for forbidden in [
+            "_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants",
+            "V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()",
+            "def _v120_lifecycle_cleanup_async() -> None:",
+        ]:
+            if forbidden in bridge_text:
+                raise RuntimeError(f"freeze-only legacy Wants wrapper survived: {forbidden}")
 
     pyinstaller = shutil.which("pyinstaller")
     if not pyinstaller:
@@ -245,7 +266,8 @@ def main() -> int:
 
     prove_host_from_zip()
     prove_bridge_from_zip()
-    log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1: {ZIP.stat().st_size} bytes")
+    mode = "freeze-only" if SKIP_PATCHES else "patched"
+    log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1 ({mode}): {ZIP.stat().st_size} bytes")
     return 0
 
 
