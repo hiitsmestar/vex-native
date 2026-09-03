@@ -13,8 +13,8 @@ MARKER = 'V121_VOICE_FOUNDATION = "v0.12.1-swap-ready-voice-v1"'
 
 if 'parsed.path == "/tts/speak"' not in bridge or "NEURAL_TTS_VOICES" not in bridge:
     raise SystemExit("v0.12.1 voice foundation requires the proven v0.9 neural TTS Bridge layer")
-if 'V120_PC_HEALTH_AUTONOMY' not in bridge:
-    raise SystemExit("v0.12.1 voice foundation requires the generated v0.12 Bridge")
+if '"agent_runtime_bundle": "0.12.0"' not in bridge or 'def _v120_agent_chat(' not in bridge:
+    raise SystemExit("v0.12.1 voice foundation requires the cumulative v0.12 agent Bridge")
 
 if "import importlib.util\n" not in bridge:
     import_anchor = "import hashlib\n"
@@ -91,7 +91,8 @@ def _v121_resolve_voice_provider(requested: str) -> str:
     bridge = bridge.replace(state_anchor, layer + state_anchor, 1)
 
 # Authenticated capability discovery. Prefer the v0.12 hardware route as the
-# insertion anchor because this patch runs after the cumulative v0.12 assembler.
+# insertion anchor when it already exists; the cumulative pre-postbuild Bridge can
+# safely use the root status anchor, and the later PC-health pass preserves it.
 voice_get = '''        if parsed.path == "/voice/status":\n            self._json(200, _v121_voice_status())\n            return\n\n'''
 if 'parsed.path == "/voice/status"' not in bridge:
     get_anchor = '        if parsed.path == "/hardware/status":\n'
