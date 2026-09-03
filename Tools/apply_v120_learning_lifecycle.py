@@ -23,6 +23,24 @@ def replace_function(source: str, name: str, replacement: str) -> str:
 if CORRECTNESS_MARKER not in text:
     raise SystemExit("v0.12 learning lifecycle requires background Wants reconciliation first")
 
+# Old experimental lifecycle wrappers must never survive into a new artifact.
+# They wrapped _v120_reconcile_wants itself and caused the local Wants control
+# plane to inherit lifecycle housekeeping. Strip only that known legacy wrapper;
+# preserve the canonical correctness reconciler installed by
+# apply_v120_correctness_upgrades.py.
+cached_anchor = "def _v120_reconcile_wants_cached() -> dict:\n"
+cached_pos = text.find(cached_anchor)
+if cached_pos < 0:
+    raise SystemExit("v0.12 lifecycle could not locate cached Wants reconciler")
+legacy_starts = [
+    text.rfind("V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()", 0, cached_pos),
+    text.rfind("_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants", 0, cached_pos),
+]
+legacy_starts = [pos for pos in legacy_starts if pos >= 0]
+if legacy_starts:
+    legacy_start = min(legacy_starts)
+    text = text[:legacy_start] + text[cached_pos:]
+
 if MARKER not in text:
     resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"
 
@@ -187,26 +205,24 @@ for required in [
     "def _v120_retire_projects_for_closed_gaps(",
     "status='superseded-solved'",
     "Only reopen the problem when a new live capability check or acceptance test fails.",
+    "def _v120_reconcile_wants() -> dict:",
+    "def _v120_reconcile_wants_cached() -> dict:",
 ]:
     if required not in text:
         raise SystemExit(f"v0.12 learning lifecycle verifier missing: {required}")
 
-marker_pos = text.find(MARKER)
-if marker_pos < 0:
-    raise SystemExit("v0.12 learning lifecycle marker missing after mutation")
-next_cached = text.find("def _v120_reconcile_wants_cached", marker_pos)
-if next_cached < 0:
-    raise SystemExit("v0.12 learning lifecycle could not locate cached Wants reconciler")
-segment = text[marker_pos:next_cached]
+# The canonical correctness reconciler is intentionally preserved. What is
+# forbidden is the old lifecycle wrapper/async hook that interposed itself on
+# the Wants path, or a new synchronous all-capability sweep.
 for forbidden in [
-    "def _v120_reconcile_wants(",
-    "_v120_reconcile_wants_lifecycle_base",
-    "_v120_lifecycle_cleanup_async()",
+    "_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants",
+    "V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()",
+    "def _v120_lifecycle_cleanup_async() -> None:",
     'registry = globals().get("AUTONOMY_CAPABILITIES")',
 ]:
-    if forbidden in segment:
+    if forbidden in text:
         raise SystemExit(f"v0.12 lifecycle verifier found forbidden Wants-path mutation: {forbidden}")
 
 compile(text, str(BRIDGE), "exec")
 BRIDGE.write_text(text, encoding="utf-8")
-print("Applied v0.12 event-driven active-state cleanup + learning outcome feedback v3; Wants path untouched")
+print("Applied v0.12 event-driven active-state cleanup + learning outcome feedback v3; canonical Wants path preserved")
