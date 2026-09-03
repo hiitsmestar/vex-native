@@ -35,9 +35,10 @@ jobs:
       - name: Re-freeze and prove final Vex wants artifact
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply self-learning lifecycle and re-freeze final artifact
+      - name: Apply learning lifecycle and PC health autonomy then re-freeze final artifact
         run: |
           python Tools/apply_v120_learning_lifecycle.py
+          python Tools/apply_v120_pc_health_autonomy.py
           python Tools/ci_v120_postbuild_wants_proof.py
 
       - name: Verify v0.12 core and field contract
@@ -49,6 +50,7 @@ jobs:
           host = Path("Tools/VexWindowsHost-v11740.py").read_text(encoding="utf-8")
           installer = Path("Tools/VexAgentRuntimeInstall.py").read_text(encoding="utf-8")
           worker = Path("Tools/VexMemoryWorker.py").read_text(encoding="utf-8")
+          remote = Path("Tools/VexRemoteSupport.py").read_text(encoding="utf-8")
 
           for marker in [
               '"agent_runtime_bundle": "0.12.0"',
@@ -66,6 +68,12 @@ jobs:
               'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v1"',
               'def _v120_record_resolution_lesson(',
               'def _v120_retire_orphaned_adaptive_upgrades(',
+              'V120_PC_HEALTH_AUTONOMY = "v0.12-pc-health-autonomy-v1"',
+              'V120_IDLE_ROTATION = "v0.12-idle-productive-rotation-v1"',
+              'def _v120_health_housekeeping_audit() -> dict:',
+              'parsed.path == "/hardware/status"',
+              'parsed.path == "/maintenance/status"',
+              'parsed.path == "/maintenance/run"',
               'close requires explicit confirmation',
               'Never claim a tool action happened unless a confirmed tool result says it did',
               'Do not invent memories, sources, files, device state, or completed actions',
@@ -82,10 +90,18 @@ jobs:
           ]:
               assert marker in host, marker
 
+          for marker in [
+              'VERSION = "0.11.7.70"',
+              'def hardware_public(',
+              'action == "hardware_status"',
+          ]:
+              assert marker in remote, marker
+
           assert 'BUNDLE_VERSION = "0.12.0"' in installer
+          assert 'REMOTE_VERSION = "0.11.7.70"' in installer
           assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + wants74 + active learning lifecycle final-artifact contract")
+          print("PASS v0.12 core + lifecycle + PC health autonomy final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v4
