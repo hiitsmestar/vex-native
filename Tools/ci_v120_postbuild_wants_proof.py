@@ -145,12 +145,24 @@ def prove_bridge_from_zip() -> None:
                 if not saw_status:
                     log("PASS final ZIP Bridge v0.12 identity; waiting for local Wants readiness")
                     saw_status = True
+
                 requests_view = no_proxy_json(f"http://127.0.0.1:{port}/autonomy/requests?{query}", timeout=8)
                 if requests_view.get("ok") is not True:
                     raise RuntimeError(f"local requests endpoint failed: {requests_view}")
                 if not isinstance(requests_view.get("reconciliation"), dict):
                     raise RuntimeError(f"correctness reconciliation missing from local requests: {requests_view}")
-                log("PASS final ZIP Bridge v0.12 + authenticated local requests + Wants reconciliation")
+
+                hardware = no_proxy_json(f"http://127.0.0.1:{port}/hardware/status?{query}", timeout=22)
+                if hardware.get("ok") is not True:
+                    raise RuntimeError(f"hardware status failed: {hardware}")
+                maintenance = no_proxy_json(f"http://127.0.0.1:{port}/maintenance/status?{query}", timeout=8)
+                if maintenance.get("ok") is not True:
+                    raise RuntimeError(f"maintenance status failed: {maintenance}")
+                audit = no_proxy_json(f"http://127.0.0.1:{port}/housekeeping/audit?{query}", timeout=12)
+                if audit.get("ok") is not True:
+                    raise RuntimeError(f"housekeeping audit failed: {audit}")
+
+                log("PASS final ZIP Bridge v0.12 + Wants reconciliation + PC health endpoints")
                 return
             except Exception as exc:
                 last = f"{exc.__class__.__name__}: {exc}"
@@ -171,21 +183,19 @@ def main() -> int:
         run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
         run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
         run(sys.executable, "apply_v120_correctness_upgrades.py")
+        run(sys.executable, "Tools/prepare_v120_pc_health_autonomy.py")
+        run(sys.executable, "Tools/apply_v120_pc_health_autonomy.py")
 
-        pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
-        pc_health_prepare = ROOT / "Tools" / "prepare_v120_pc_health_autonomy.py"
-        if pc_health_patch.exists():
-            if pc_health_prepare.exists():
-                run(sys.executable, str(pc_health_prepare.relative_to(ROOT)))
-            run(sys.executable, str(pc_health_patch.relative_to(ROOT)))
-
-    pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
     host_source = ROOT / "Tools" / "VexWindowsHost-v11740.py"
     bridge_source = ROOT / "Bridge" / "vex_bridge.py"
+    remote_source = ROOT / "Tools" / "VexRemoteSupport.py"
     py_compile.compile(str(host_source), doraise=True)
     py_compile.compile(str(bridge_source), doraise=True)
+    py_compile.compile(str(remote_source), doraise=True)
     host_text = host_source.read_text(encoding="utf-8")
     bridge_text = bridge_source.read_text(encoding="utf-8")
+    remote_text = remote_source.read_text(encoding="utf-8")
+
     for marker in [
         f"wants{FIELD}",
         'text="Vex wants / upgrade requests"',
@@ -201,9 +211,18 @@ def main() -> int:
         'V120_CORRECTNESS_UPGRADES = "v0.12-wants-reconcile-renderer-v1"',
         "def _v120_reconcile_wants() -> dict:",
         "V120_FACT_PRESERVING_RECALL",
+        "V120_PC_HEALTH_AUTONOMY",
+        "V120_IDLE_ROTATION",
+        'parsed.path == "/hardware/status"',
+        'parsed.path == "/maintenance/status"',
+        'parsed.path == "/maintenance/run"',
     ]:
         if marker not in bridge_text:
             raise RuntimeError(f"post-build Bridge source marker missing: {marker}")
+    for marker in ['VERSION = "0.11.7.70"', "def hardware_public(", 'action == "hardware_status"']:
+        if marker not in remote_text:
+            raise RuntimeError(f"post-build Remote source marker missing: {marker}")
+
     if SKIP_PATCHES:
         for marker in [
             'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"',
@@ -242,11 +261,10 @@ def main() -> int:
         pyinstaller, "--noconfirm", "--clean", "--onedir", "--noupx", "--windowed",
         "--name", "VexWindowsHost", "--collect-all", "requests", "Tools/VexWindowsHost-v11740.py",
     )
-    if pc_health_patch.exists():
-        run(
-            pyinstaller, "--noconfirm", "--clean", "--onedir", "--noupx", "--windowed",
-            "--name", "VexRemoteSupport", "--collect-all", "requests", "Tools/VexRemoteSupport.py",
-        )
+    run(
+        pyinstaller, "--noconfirm", "--clean", "--onedir", "--noupx", "--windowed",
+        "--name", "VexRemoteSupport", "--collect-all", "requests", "Tools/VexRemoteSupport.py",
+    )
 
     embedded = DIST / "VexBridge" / "VexMemoryWorkerRuntime"
     shutil.rmtree(embedded, ignore_errors=True)
@@ -255,8 +273,7 @@ def main() -> int:
     shutil.copy2(DIST / "VexBridge" / "VexBridge.exe", PKG / "VexBridge.exe")
     replace_tree(DIST / "VexBridge" / "VexBridgeRuntime", PKG / "VexBridgeRuntime")
     replace_tree(DIST / "VexWindowsHost", PKG / "VexWindowsHost")
-    if pc_health_patch.exists() and (DIST / "VexRemoteSupport").exists():
-        replace_tree(DIST / "VexRemoteSupport", PKG / "VexRemoteSupportRuntime")
+    replace_tree(DIST / "VexRemoteSupport", PKG / "VexRemoteSupportRuntime")
 
     if ZIP.exists():
         ZIP.unlink()
@@ -264,10 +281,13 @@ def main() -> int:
     shutil.rmtree(VERIFY, ignore_errors=True)
     shutil.unpack_archive(str(ZIP), VERIFY, "zip")
 
+    remote_exe = VERIFY / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe"
+    if not remote_exe.exists():
+        raise RuntimeError(f"rewritten ZIP Remote Support missing: {remote_exe}")
     prove_host_from_zip()
     prove_bridge_from_zip()
     mode = "freeze-only" if SKIP_PATCHES else "patched"
-    log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1 ({mode}): {ZIP.stat().st_size} bytes")
+    log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1 + PC-health-v1 ({mode}): {ZIP.stat().st_size} bytes")
     return 0
 
 
