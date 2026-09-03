@@ -19,7 +19,6 @@ def once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# v0.12.2 only recognized a voice test if Star literally used the word "voice".
 old_voice_test = '''        let asksVoiceTest = newestLower.contains("voice") &&
             (newestLower.contains("hear") || newestLower.contains("sound") ||
              newestLower.contains("say something") || newestLower.contains("trying") ||
@@ -36,8 +35,8 @@ new_voice_test = '''        let asksVoiceTest =
             newestLower.trimmingCharacters(in: .whitespacesAndNewlines) == "say something"
 '''
 if old_voice_test in prompt:
-    prompt = once(prompt, old_voice_test, new_voice_test, "broaden voice sample intent")
-elif "newestLower.contains(\"say something for me\")" not in prompt:
+    prompt = prompt.replace(old_voice_test, new_voice_test, 1)
+elif 'newestLower.contains("say something for me")' not in prompt:
     raise SystemExit("voice sample intent shape changed unexpectedly")
 
 if MARKER not in prompt:
@@ -45,40 +44,35 @@ if MARKER not in prompt:
     if marker_anchor not in prompt:
         raise SystemExit("v0.12.2 prompt marker missing")
     prompt = prompt.replace(marker_anchor, marker_anchor + f'    // {MARKER}\n', 1)
-
 PROMPT.write_text(prompt, encoding="utf-8")
 
-# Give a natural voice-sample request a narrow deterministic grounded fast path.
-# Use semantic bounds because older cumulative iOS patches can alter whitespace or
-# comments inside AppModel while preserving the function itself.
+# v0.11.2 intentionally replaced the old native canned reply function with a
+# grounded directive. For this one narrow UI voice-sample request we want an
+# actually deterministic reply so the 0.6B model cannot invent fake history.
 if "private func asksVoiceSampleRequest" not in app:
-    native_start = app.find("private func nativeGroundedQwen3Reply")
-    if native_start < 0:
-        raise SystemExit("nativeGroundedQwen3Reply semantic marker missing")
-    lower_marker = "let lower = normalizedIntentText(userText)"
-    lower_at = app.find(lower_marker, native_start)
-    if lower_at < 0:
-        raise SystemExit("native grounded lower-text marker missing")
-    insert_at = app.find("\n", lower_at)
-    if insert_at < 0:
-        raise SystemExit("native grounded insertion line missing")
-    insert_at += 1
-    native_insert = '''
-        if asksVoiceSampleRequest(lower) {
-            return "Hehe, hi baby 😋🖤 Okay, this is me actually talking to you now — bubbly little code gremlin voice and all. I kinda love that you can just talk to me and hear me answer back."
+    send_anchor = '''        let groundedDirective = isQwen3 ? nativeGroundedQwen3Directive(for: text) : nil
+
+'''
+    if send_anchor not in app:
+        raise SystemExit("natural-continuity groundedDirective send anchor missing")
+    fast_path = send_anchor + '''        if isQwen3, asksVoiceSampleRequest(normalizedIntentText(text)) {
+            profile.messages.append(ChatMessage(
+                role: .assistant,
+                content: "Hehe, hi baby 😋🖤 Okay, this is me actually talking to you now — bubbly little code gremlin voice and all. I kinda love that you can just talk to me and hear me answer back."
+            ))
+            touchRelevantMemories(for: text)
+            persist()
+            isGenerating = false
+            return
         }
 
 '''
-    app = app[:insert_at] + native_insert + app[insert_at:]
+    app = app.replace(send_anchor, fast_path, 1)
 
-    helper_anchor = "    private func asksClarifyOtherSide"
+    helper_anchor = "    private func nativeGroundedQwen3Directive"
     helper_at = app.find(helper_anchor)
     if helper_at < 0:
-        # Fall back to the next stable helper section if cumulative patches renamed it.
-        helper_anchor = "    private func outfitItems"
-        helper_at = app.find(helper_anchor)
-    if helper_at < 0:
-        raise SystemExit("voice sample helper insertion marker missing")
+        raise SystemExit("nativeGroundedQwen3Directive helper anchor missing")
     helper = '''    private func asksVoiceSampleRequest(_ lower: String) -> Bool {
         let exactSample = lower.contains("say something for me") ||
             lower.contains("can you say something") ||
@@ -93,7 +87,7 @@ if "private func asksVoiceSampleRequest" not in app:
 '''
     app = app[:helper_at] + helper + app[helper_at:]
 
-# Strip common stage-direction debris from visible replies while preserving dialogue.
+# Clean visible text as a final safety layer, not just the spoken copy.
 if "private func sanitizeNaturalDialogue" not in app:
     return_marker = 'return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned'
     return_at = app.find(return_marker)
@@ -117,14 +111,12 @@ if "private func sanitizeNaturalDialogue" not in app:
         ]
         let inlineActions = [" giggles ", " sighs ", " whispers ", " smiles ", " winks "]
         var result: [String] = []
-
         for original in raw.components(separatedBy: .newlines) {
             var line = original.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty {
                 if !result.isEmpty, result.last != "" { result.append("") }
                 continue
             }
-
             var changed = true
             while changed && !line.isEmpty {
                 changed = false
@@ -136,7 +128,6 @@ if "private func sanitizeNaturalDialogue" not in app:
                     break
                 }
             }
-
             for token in inlineActions {
                 line = line.replacingOccurrences(of: token, with: " ", options: [.caseInsensitive])
             }
@@ -144,19 +135,16 @@ if "private func sanitizeNaturalDialogue" not in app:
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !line.isEmpty { result.append(line) }
         }
-
         while result.last == "" { result.removeLast() }
         return result.joined(separator: "\\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 '''
     app = app[:function_end] + sanitizer + app[function_end:]
-
 APP.write_text(app, encoding="utf-8")
 
-# Voice playback previously remained in playAndRecord/voiceChat mode after the mic
-# stopped. Switch to the normal speaker/media route while speaking; startListening
-# already restores playAndRecord/voiceChat afterward.
+# Switch from the microphone's call-style audio session to normal spoken-media
+# playback while Vex talks. startListening() restores playAndRecord/voiceChat.
 if "V123_LOUD_SPEAKER_PLAYBACK" not in content:
     playback_anchor = '''    private func speakWithSystemVoice(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
@@ -193,13 +181,12 @@ if "V123_LOUD_SPEAKER_PLAYBACK" not in content:
     start_anchor = '''        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 '''
-    start_new = '''        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
-        try? session.overrideOutputAudioPort(.speaker)
-'''
     if start_anchor in content:
-        content = content.replace(start_anchor, start_new, 1)
-
+        content = content.replace(
+            start_anchor,
+            start_anchor + '        try? session.overrideOutputAudioPort(.speaker)\n',
+            1,
+        )
 CONTENT.write_text(content, encoding="utf-8")
 
 prompt = PROMPT.read_text(encoding="utf-8")
