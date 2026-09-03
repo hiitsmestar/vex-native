@@ -33,7 +33,9 @@ jobs:
         run: python Tools/ci_v120_full_ai_foundation.py
 
       - name: Re-freeze and prove final Vex wants artifact
-        run: python Tools/ci_v120_postbuild_wants_proof.py
+        run: |
+          python Tools/prepare_v120_pc_health_autonomy.py
+          python Tools/ci_v120_postbuild_wants_proof.py
 
       - name: Apply learning lifecycle and PC health autonomy then re-freeze final artifact
         run: |
