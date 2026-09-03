@@ -6,7 +6,7 @@ from pathlib import Path
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
 
-MARKER = 'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"'
+MARKER = 'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"'
 CORRECTNESS_MARKER = 'V120_WANTS_BACKGROUND_RECONCILIATION = "v0.12-wants-background-v1"'
 
 
@@ -24,7 +24,7 @@ if CORRECTNESS_MARKER not in text:
     raise SystemExit("v0.12 learning lifecycle requires background Wants reconciliation first")
 
 if MARKER not in text:
-    resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"
+    resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"
 
 
 def _v120_record_resolution_lesson(subject: str, detail: str, evidence: str = "") -> None:
@@ -118,7 +118,7 @@ def _v120_retire_projects_for_closed_gaps() -> int:
 
 
 def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
-    """Close stale work only after caller has independently verified capability health."""
+    """Close stale work only after the existing reconciler independently verifies health."""
     request_text = f"local capability {str(name or '').strip()} is unhealthy"
     resolved_ids: list[int] = []
     retired_upgrades = 0
@@ -159,6 +159,16 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
             str(detail or "healthy"),
             f"resolved_gaps={len(resolved_ids)} retired_upgrades={retired_upgrades} superseded_projects={superseded}",
         )
+        # Cheap DB-only cleanup belongs to the successful resolution event, not
+        # to /autonomy/requests and not to startup readiness.
+        orphaned = _v120_retire_orphaned_adaptive_upgrades()
+        linked_projects = _v120_retire_projects_for_closed_gaps()
+        if orphaned or linked_projects:
+            _v120_record_resolution_lesson(
+                "self-improvement lifecycle",
+                "stale active work was retired because its source learning gap is already closed",
+                f"retired_upgrades={orphaned} superseded_projects={linked_projects}",
+            )
     return {
         "capability": name,
         "resolved_gaps": len(resolved_ids),
@@ -168,82 +178,35 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
 '''
     text = replace_function(text, "_v120_resolve_capability_gap", resolve_replacement)
 
-    cached_anchor = "def _v120_reconcile_wants_cached() -> dict:\n"
-    if cached_anchor not in text:
-        raise SystemExit("v0.12 lifecycle could not find cached Wants reconciler")
-
-    lifecycle = r'''
-V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()
-V120_LIFECYCLE_CLEANUP_STATE = {"running": False, "last_run": 0.0}
-# Compatibility alias only. Do NOT wrap or redefine _v120_reconcile_wants here:
-# the correctness layer owns the proven nonblocking Wants/readiness path.
-_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants
-
-
-def _v120_lifecycle_cleanup_async() -> None:
-    """Retire stale DB work completely outside the Wants HTTP/readiness path."""
-    now = time.time()
-    with V120_LIFECYCLE_CLEANUP_LOCK:
-        if V120_LIFECYCLE_CLEANUP_STATE.get("running"):
-            return
-        if now - float(V120_LIFECYCLE_CLEANUP_STATE.get("last_run") or 0.0) < 15.0:
-            return
-        V120_LIFECYCLE_CLEANUP_STATE["running"] = True
-
-    def _worker() -> None:
-        try:
-            orphaned = _v120_retire_orphaned_adaptive_upgrades()
-            linked_projects = _v120_retire_projects_for_closed_gaps()
-            if orphaned or linked_projects:
-                _v120_record_resolution_lesson(
-                    "self-improvement lifecycle",
-                    "stale active work was retired because its source learning gap is already closed",
-                    f"retired_upgrades={orphaned} superseded_projects={linked_projects}",
-                )
-        finally:
-            with V120_LIFECYCLE_CLEANUP_LOCK:
-                V120_LIFECYCLE_CLEANUP_STATE["last_run"] = time.time()
-                V120_LIFECYCLE_CLEANUP_STATE["running"] = False
-
-    threading.Thread(target=_worker, daemon=True, name="VexLifecycleCleanup").start()
-
-
-def _v120_lifecycle_bootstrap_cleanup() -> None:
-    # Delay lifecycle-only bookkeeping until after local-control and foreground
-    # Wants are established. This timer never participates in request handling.
-    timer = threading.Timer(20.0, _v120_lifecycle_cleanup_async)
-    timer.daemon = True
-    timer.name = "VexLifecycleBootstrap"
-    timer.start()
-
-
-_v120_lifecycle_bootstrap_cleanup()
-
-
-'''
-    text = text.replace(cached_anchor, lifecycle + cached_anchor, 1)
-
-BRIDGE.write_text(text, encoding="utf-8")
-compile(text, str(BRIDGE), "exec")
-
+# Validate the complete mutation before writing anything. A failing verifier must
+# never leave Bridge/vex_bridge.py half-mutated for later workflow commands.
 for required in [
     MARKER,
     "def _v120_record_resolution_lesson(",
     "def _v120_retire_orphaned_adaptive_upgrades(",
     "def _v120_retire_projects_for_closed_gaps(",
-    "_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants",
     "status='superseded-solved'",
     "Only reopen the problem when a new live capability check or acceptance test fails.",
-    "def _v120_lifecycle_cleanup_async() -> None:",
-    "def _v120_lifecycle_bootstrap_cleanup() -> None:",
 ]:
     if required not in text:
         raise SystemExit(f"v0.12 learning lifecycle verifier missing: {required}")
 
-section = text[text.find(MARKER):text.find("def _v120_reconcile_wants_cached")]
-if 'registry = globals().get("AUTONOMY_CAPABILITIES")' in section:
-    raise SystemExit("v0.12 lifecycle verifier found synchronous all-capability Wants probing")
-if "def _v120_reconcile_wants()" in section:
-    raise SystemExit("v0.12 lifecycle verifier found a Wants-path wrapper")
+marker_pos = text.find(MARKER)
+if marker_pos < 0:
+    raise SystemExit("v0.12 learning lifecycle marker missing after mutation")
+next_cached = text.find("def _v120_reconcile_wants_cached", marker_pos)
+if next_cached < 0:
+    raise SystemExit("v0.12 learning lifecycle could not locate cached Wants reconciler")
+segment = text[marker_pos:next_cached]
+for forbidden in [
+    "def _v120_reconcile_wants(",
+    "_v120_reconcile_wants_lifecycle_base",
+    "_v120_lifecycle_cleanup_async()",
+    'registry = globals().get("AUTONOMY_CAPABILITIES")',
+]:
+    if forbidden in segment:
+        raise SystemExit(f"v0.12 lifecycle verifier found forbidden Wants-path mutation: {forbidden}")
 
-print("Applied v0.12 isolated active-state cleanup + learning outcome feedback v2")
+compile(text, str(BRIDGE), "exec")
+BRIDGE.write_text(text, encoding="utf-8")
+print("Applied v0.12 event-driven active-state cleanup + learning outcome feedback v3; Wants path untouched")
