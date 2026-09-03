@@ -114,30 +114,23 @@ payload_new = '''                "text": String(text.prefix(1800)),
 '''
 once(payload_anchor, payload_new, "provider-aware TTS request")
 
-# The first-tap crash hotfix wrapped startListening() in do/catch. Extend that
-# proven shape instead of replacing it: while Vex is speaking, a mic tap interrupts
-# speech and resumes recognition; while already listening, the same tap still turns
-# hands-free mode off.
-old_toggle = '''    func toggleHandsFree() async throws {
-        if isHandsFree {
-            stopHandsFree()
-            return
-        }
-        guard await requestSpeechPermission() else { throw VoiceError.speechPermission }
-        guard await requestMicPermission() else { throw VoiceError.microphonePermission }
-        isHandsFree = true
-        waitingForReply = false
-        do {
-            try startListening()
-        } catch {
-            isHandsFree = false
-            waitingForReply = false
-            stopRecognition()
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            throw error
-        }
-    }
-'''
+# Later historical reliability patches legitimately changed the inside of this
+# function (diagnostics, wake state and crash-safe do/catch). Replace the function
+# by semantic boundaries rather than assuming the old v0.8.6 body still exists.
+toggle_start = text.find("    func toggleHandsFree() async throws {")
+toggle_end = text.find("\n\n    func stopHandsFree()", toggle_start)
+if toggle_start < 0 or toggle_end < 0:
+    raise SystemExit("voice interruption behavior: toggle function bounds missing")
+old_toggle = text[toggle_start:toggle_end]
+for invariant in [
+    "guard await requestSpeechPermission()",
+    "guard await requestMicPermission()",
+    "try startListening()",
+    "stopRecognition()",
+]:
+    if invariant not in old_toggle:
+        raise SystemExit(f"voice interruption behavior: generated toggle missing {invariant}")
+
 new_toggle = '''    func toggleHandsFree() async throws {
         if isHandsFree {
             if isSpeechOutputActive {
@@ -151,6 +144,9 @@ new_toggle = '''    func toggleHandsFree() async throws {
         guard await requestMicPermission() else { throw VoiceError.microphonePermission }
         isHandsFree = true
         waitingForReply = false
+        lastHeard = ""
+        voiceHint = "Just talk — I’m listening"
+        wakeArmedUntil = nil
         do {
             try startListening()
         } catch {
@@ -176,7 +172,7 @@ new_toggle = '''    func toggleHandsFree() async throws {
         restartListeningSoon()
     }
 '''
-once(old_toggle, new_toggle, "voice interruption behavior")
+text = text[:toggle_start] + new_toggle + text[toggle_end:]
 
 old_detail = '''                    Text(voice.speechEngine == .pcNeural
                          ? "Natural neural speech through either paired Vex Bridge. Falls back to the iPhone voice if both PCs or the internet are unavailable."
