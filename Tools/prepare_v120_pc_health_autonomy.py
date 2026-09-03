@@ -17,6 +17,13 @@ if old_open in text:
 if old_close in text:
     text = text.replace(old_close, new_close, 1)
 
+# A raw generated Windows root written as r"C:\\" becomes the invalid r"C:\"
+# once the outer raw layer is emitted. A forward-slash Windows root is accepted
+# by pathlib/shutil and avoids that trailing-backslash syntax trap entirely.
+bad_root = 'Path.home().anchor or r"C:\\"'
+if bad_root in text:
+    text = text.replace(bad_root, 'Path.home().anchor or "C:/"')
+
 compile(text, str(path), "exec")
 path.write_text(text, encoding="utf-8")
 print("Prepared v0.12 PC health autonomy patch source")
