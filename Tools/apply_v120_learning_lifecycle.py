@@ -24,9 +24,6 @@ if CORRECTNESS_MARKER not in text:
     raise SystemExit("v0.12 learning lifecycle requires background Wants reconciliation first")
 
 if MARKER not in text:
-    # Enhance closure of a capability *after another subsystem has already proved
-    # it healthy*. Do not probe capabilities here; live probing belongs to the
-    # bounded background correctness worker and the normal autonomy curriculum.
     resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"
 
 
@@ -171,18 +168,53 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
 '''
     text = replace_function(text, "_v120_resolve_capability_gap", resolve_replacement)
 
-    # Preserve the already-proven nonblocking correctness reconciler. Wrap it
-    # with cheap database lifecycle retirement only. This deliberately avoids
-    # the v1 regression that synchronously probed every registered capability
-    # and could keep the cold-start Wants control plane in 503 indefinitely.
     cached_anchor = "def _v120_reconcile_wants_cached() -> dict:\n"
     if cached_anchor not in text:
         raise SystemExit("v0.12 lifecycle could not find cached Wants reconciler")
+
     wrapper = r'''
+V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()
+V120_LIFECYCLE_CLEANUP_STATE = {"running": False, "last_run": 0.0}
 _v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants
 
 
+def _v120_lifecycle_cleanup_async() -> None:
+    """Retire stale DB work away from the Wants HTTP/readiness path."""
+    now = time.time()
+    with V120_LIFECYCLE_CLEANUP_LOCK:
+        if V120_LIFECYCLE_CLEANUP_STATE.get("running"):
+            return
+        if now - float(V120_LIFECYCLE_CLEANUP_STATE.get("last_run") or 0.0) < 15.0:
+            return
+        V120_LIFECYCLE_CLEANUP_STATE["running"] = True
+
+    def _worker() -> None:
+        try:
+            # Cold-start proof and foreground Wants reads get first claim on the
+            # SQLite locks. Lifecycle cleanup deliberately waits and never gates
+            # local-control readiness.
+            time.sleep(5.0)
+            orphaned = _v120_retire_orphaned_adaptive_upgrades()
+            linked_projects = _v120_retire_projects_for_closed_gaps()
+            if orphaned or linked_projects:
+                _v120_record_resolution_lesson(
+                    "self-improvement lifecycle",
+                    "stale active work was retired because its source learning gap is already closed",
+                    f"retired_upgrades={orphaned} superseded_projects={linked_projects}",
+                )
+        finally:
+            with V120_LIFECYCLE_CLEANUP_LOCK:
+                V120_LIFECYCLE_CLEANUP_STATE["last_run"] = time.time()
+                V120_LIFECYCLE_CLEANUP_STATE["running"] = False
+
+    thread = threading.Thread(target=_worker, daemon=True, name="VexLifecycleCleanup")
+    thread.start()
+
+
 def _v120_reconcile_wants() -> dict:
+    # Preserve the already-proven nonblocking correctness reconciler. The
+    # lifecycle bookkeeping is scheduled separately so /autonomy/requests can
+    # never be held hostage by project/adaptive DB housekeeping during startup.
     summary = dict(_v120_reconcile_wants_lifecycle_base() or {})
     summary.setdefault("ok", True)
     summary.setdefault("resolved_gaps", 0)
@@ -190,18 +222,8 @@ def _v120_reconcile_wants() -> dict:
     summary.setdefault("superseded_projects", 0)
     summary.setdefault("applied_upgrades", 0)
     summary.setdefault("healthy", {})
-
-    orphaned = _v120_retire_orphaned_adaptive_upgrades()
-    linked_projects = _v120_retire_projects_for_closed_gaps()
-    summary["retired_upgrades"] += orphaned
-    summary["superseded_projects"] += linked_projects
-    if orphaned or linked_projects:
-        _v120_record_resolution_lesson(
-            "self-improvement lifecycle",
-            "stale active work was retired because its source learning gap is already closed",
-            f"retired_upgrades={orphaned} superseded_projects={linked_projects}",
-        )
     summary["lifecycle"] = "reconciled-active-state-v2"
+    _v120_lifecycle_cleanup_async()
     return summary
 
 
@@ -220,12 +242,11 @@ for required in [
     'summary["lifecycle"] = "reconciled-active-state-v2"',
     "status='superseded-solved'",
     "Only reopen the problem when a new live capability check or acceptance test fails.",
+    "def _v120_lifecycle_cleanup_async() -> None:",
 ]:
     if required not in text:
         raise SystemExit(f"v0.12 learning lifecycle verifier missing: {required}")
 
-# Guard the regression explicitly: this patch must not add a loop that probes
-# every registered capability from the Wants reconciliation path.
 if 'registry = globals().get("AUTONOMY_CAPABILITIES")' in text[text.find(MARKER):text.find("def _v120_reconcile_wants_cached")]:
     raise SystemExit("v0.12 lifecycle verifier found synchronous all-capability Wants probing")
 
