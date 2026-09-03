@@ -123,8 +123,14 @@ def prove_bridge_from_zip() -> None:
     )
     try:
         config = roaming / "VexBridge" / "config.json"
-        deadline = time.time() + 35
+        # The health/autonomy layer starts additional bounded background workers.
+        # During a cold frozen start the local control plane can intentionally
+        # answer 503 until those services finish their startup gate. Treat 503 as
+        # transient readiness, not a failed artifact, while still requiring the
+        # exact v0.12 identity + Wants reconciliation before passing.
+        deadline = time.time() + 85
         last = "config not created"
+        saw_status = False
         while time.time() < deadline:
             if proc.poll() is not None:
                 raise RuntimeError(f"rewritten ZIP Bridge exited early rc={proc.returncode}")
@@ -137,10 +143,13 @@ def prove_bridge_from_zip() -> None:
                 if not token or not port:
                     raise RuntimeError("local-control identity incomplete")
                 query = urllib.parse.urlencode({"token": token})
-                status = no_proxy_json(f"http://127.0.0.1:{port}/status?{query}", timeout=3)
+                status = no_proxy_json(f"http://127.0.0.1:{port}/status?{query}", timeout=4)
                 if str(status.get("agent_runtime_bundle") or "") != "0.12.0":
                     raise RuntimeError(f"runtime bundle mismatch: {status}")
-                requests_view = no_proxy_json(f"http://127.0.0.1:{port}/autonomy/requests?{query}", timeout=5)
+                if not saw_status:
+                    log("PASS final ZIP Bridge v0.12 identity; waiting for local Wants readiness")
+                    saw_status = True
+                requests_view = no_proxy_json(f"http://127.0.0.1:{port}/autonomy/requests?{query}", timeout=8)
                 if requests_view.get("ok") is not True:
                     raise RuntimeError(f"local requests endpoint failed: {requests_view}")
                 if not isinstance(requests_view.get("reconciliation"), dict):
@@ -149,7 +158,7 @@ def prove_bridge_from_zip() -> None:
                 return
             except Exception as exc:
                 last = f"{exc.__class__.__name__}: {exc}"
-                time.sleep(0.5)
+                time.sleep(0.75)
         raise RuntimeError(f"rewritten ZIP Bridge proof timed out: {last}")
     finally:
         stop_pid(proc.pid)
@@ -165,6 +174,12 @@ def main() -> int:
     run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
     run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
     run(sys.executable, "apply_v120_correctness_upgrades.py")
+
+    # If the optional PC-health/autonomy patch exists, reapply it last so later
+    # correctness generators cannot erase its runtime routes or Remote .70 source.
+    pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
+    if pc_health_patch.exists():
+        run(sys.executable, str(pc_health_patch.relative_to(ROOT)))
 
     host_source = ROOT / "Tools" / "VexWindowsHost-v11740.py"
     bridge_source = ROOT / "Bridge" / "vex_bridge.py"
@@ -195,11 +210,13 @@ def main() -> int:
     if not pyinstaller:
         raise RuntimeError("pyinstaller is not on PATH")
 
-    # Re-freeze only the two components changed by the post-build patches.
+    # Re-freeze only the components changed by the post-build patches.
     shutil.rmtree(DIST / "VexBridge", ignore_errors=True)
     shutil.rmtree(DIST / "VexWindowsHost", ignore_errors=True)
+    shutil.rmtree(DIST / "VexRemoteSupport", ignore_errors=True)
     shutil.rmtree(ROOT / "build" / "VexBridge", ignore_errors=True)
     shutil.rmtree(ROOT / "build" / "VexWindowsHost", ignore_errors=True)
+    shutil.rmtree(ROOT / "build" / "VexRemoteSupport", ignore_errors=True)
 
     run(
         pyinstaller, "--noconfirm", "--clean", "--onedir", "--contents-directory", "VexBridgeRuntime",
@@ -211,6 +228,11 @@ def main() -> int:
         pyinstaller, "--noconfirm", "--clean", "--onedir", "--noupx", "--windowed",
         "--name", "VexWindowsHost", "--collect-all", "requests", "Tools/VexWindowsHost-v11740.py",
     )
+    if pc_health_patch.exists():
+        run(
+            pyinstaller, "--noconfirm", "--clean", "--onedir", "--noupx", "--windowed",
+            "--name", "VexRemoteSupport", "--collect-all", "requests", "Tools/VexRemoteSupport.py",
+        )
 
     # Keep the Bridge's staged memory-worker layout consistent with the normal build.
     embedded = DIST / "VexBridge" / "VexMemoryWorkerRuntime"
@@ -221,6 +243,8 @@ def main() -> int:
     shutil.copy2(DIST / "VexBridge" / "VexBridge.exe", PKG / "VexBridge.exe")
     replace_tree(DIST / "VexBridge" / "VexBridgeRuntime", PKG / "VexBridgeRuntime")
     replace_tree(DIST / "VexWindowsHost", PKG / "VexWindowsHost")
+    if pc_health_patch.exists() and (DIST / "VexRemoteSupport").exists():
+        replace_tree(DIST / "VexRemoteSupport", PKG / "VexRemoteSupportRuntime")
 
     if ZIP.exists():
         ZIP.unlink()
