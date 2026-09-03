@@ -32,17 +32,18 @@ jobs:
       - name: Build cumulative Full AI Runtime
         run: python Tools/ci_v120_full_ai_foundation.py
 
-      - name: Re-freeze and prove final Vex wants artifact
-        run: |
-          python Tools/prepare_v120_pc_health_autonomy.py
-          python Tools/ci_v120_postbuild_wants_proof.py
+      - name: Re-freeze and prove final Vex wants plus PC health artifact
+        run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply learning lifecycle and PC health autonomy then re-freeze final artifact
+      - name: Apply learning lifecycle once then freeze without repatching
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           python Tools/apply_v120_learning_lifecycle.py
-          python Tools/prepare_v120_pc_health_autonomy.py
-          python Tools/apply_v120_pc_health_autonomy.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:V120_POSTBUILD_SKIP_PATCHES = '1'
           python Tools/ci_v120_postbuild_wants_proof.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify v0.12 core and field contract
         shell: python
@@ -68,10 +69,10 @@ jobs:
               'def _v120_local_upgrade_requests() -> dict:',
               'parsed.path == "/autonomy/requests"',
               '"vex_wants_field_build": "74"',
-              'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"',
+              'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v3"',
               'def _v120_record_resolution_lesson(',
               'def _v120_retire_orphaned_adaptive_upgrades(',
-              '_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants',
+              'def _v120_retire_projects_for_closed_gaps(',
               'V120_PC_HEALTH_AUTONOMY = "v0.12-pc-health-autonomy-v1"',
               'V120_IDLE_ROTATION = "v0.12-idle-productive-rotation-v1"',
               'def _v120_health_housekeeping_audit() -> dict:',
@@ -83,6 +84,13 @@ jobs:
               'Do not invent memories, sources, files, device state, or completed actions',
           ]:
               assert marker in bridge, marker
+
+          for forbidden in [
+              '_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants',
+              'V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()',
+              'def _v120_lifecycle_cleanup_async() -> None:',
+          ]:
+              assert forbidden not in bridge, forbidden
 
           for marker in [
               'wants74',
@@ -105,7 +113,7 @@ jobs:
           assert 'REMOTE_VERSION = "0.11.7.70"' in installer
           assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + nonblocking lifecycle v2 + PC health autonomy final-artifact contract")
+          print("PASS v0.12 core + event-driven lifecycle v3 + PC health autonomy final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v4
