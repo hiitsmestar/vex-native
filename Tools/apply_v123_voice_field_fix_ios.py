@@ -20,8 +20,6 @@ def once(text: str, old: str, new: str, label: str) -> str:
 
 
 # v0.12.2 only recognized a voice test if Star literally used the word "voice".
-# Natural requests like "can you say something for me" therefore missed the
-# focused grounded path and let the tiny model improvise fake memories/actions.
 old_voice_test = '''        let asksVoiceTest = newestLower.contains("voice") &&
             (newestLower.contains("hear") || newestLower.contains("sound") ||
              newestLower.contains("say something") || newestLower.contains("trying") ||
@@ -43,32 +41,44 @@ elif "newestLower.contains(\"say something for me\")" not in prompt:
     raise SystemExit("voice sample intent shape changed unexpectedly")
 
 if MARKER not in prompt:
-    prompt = once(
-        prompt,
-        '    // V122_VOICE_PERSONALITY_IOS = "v0.12.2-natural-spoken-girlfriend-v1"\n',
-        '    // V122_VOICE_PERSONALITY_IOS = "v0.12.2-natural-spoken-girlfriend-v1"\n'
-        f'    // {MARKER}\n',
-        "v0.12.3 prompt marker",
-    )
+    marker_anchor = '    // V122_VOICE_PERSONALITY_IOS = "v0.12.2-natural-spoken-girlfriend-v1"\n'
+    if marker_anchor not in prompt:
+        raise SystemExit("v0.12.2 prompt marker missing")
+    prompt = prompt.replace(marker_anchor, marker_anchor + f'    // {MARKER}\n', 1)
 
 PROMPT.write_text(prompt, encoding="utf-8")
 
-# Give the most common voice-sample request a deterministic grounded fast path.
-# This is deliberately narrow: normal conversation still uses the local model.
+# Give a natural voice-sample request a narrow deterministic grounded fast path.
+# Use semantic bounds because older cumulative iOS patches can alter whitespace or
+# comments inside AppModel while preserving the function itself.
 if "private func asksVoiceSampleRequest" not in app:
-    native_anchor = '''    private func nativeGroundedQwen3Reply(for userText: String) -> String? {
-        let lower = normalizedIntentText(userText)
-
-'''
-    native_new = native_anchor + '''        if asksVoiceSampleRequest(lower) {
+    native_start = app.find("private func nativeGroundedQwen3Reply")
+    if native_start < 0:
+        raise SystemExit("nativeGroundedQwen3Reply semantic marker missing")
+    lower_marker = "let lower = normalizedIntentText(userText)"
+    lower_at = app.find(lower_marker, native_start)
+    if lower_at < 0:
+        raise SystemExit("native grounded lower-text marker missing")
+    insert_at = app.find("\n", lower_at)
+    if insert_at < 0:
+        raise SystemExit("native grounded insertion line missing")
+    insert_at += 1
+    native_insert = '''
+        if asksVoiceSampleRequest(lower) {
             return "Hehe, hi baby 😋🖤 Okay, this is me actually talking to you now — bubbly little code gremlin voice and all. I kinda love that you can just talk to me and hear me answer back."
         }
 
 '''
-    app = once(app, native_anchor, native_new, "voice sample native fast path")
+    app = app[:insert_at] + native_insert + app[insert_at:]
 
-    helper_anchor = '''    private func asksClarifyOtherSide(_ lower: String) -> Bool {
-'''
+    helper_anchor = "    private func asksClarifyOtherSide"
+    helper_at = app.find(helper_anchor)
+    if helper_at < 0:
+        # Fall back to the next stable helper section if cumulative patches renamed it.
+        helper_anchor = "    private func outfitItems"
+        helper_at = app.find(helper_anchor)
+    if helper_at < 0:
+        raise SystemExit("voice sample helper insertion marker missing")
     helper = '''    private func asksVoiceSampleRequest(_ lower: String) -> Bool {
         let exactSample = lower.contains("say something for me") ||
             lower.contains("can you say something") ||
@@ -81,23 +91,22 @@ if "private func asksVoiceSampleRequest" not in app:
     }
 
 '''
-    app = once(app, helper_anchor, helper + helper_anchor, "voice sample request helper")
+    app = app[:helper_at] + helper + app[helper_at:]
 
-# Strip the tiny model's most common action-direction debris from visible replies,
-# not merely from TTS playback. Preserve the actual dialogue after a prefix.
+# Strip common stage-direction debris from visible replies while preserving dialogue.
 if "private func sanitizeNaturalDialogue" not in app:
-    clean_anchor = '''        let cleaned = kept.joined(separator: "\\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
-    }
+    return_marker = 'return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned'
+    return_at = app.find(return_marker)
+    if return_at < 0:
+        raise SystemExit("cleanGeneratedReply final return marker missing")
+    app = app[:return_at] + '''let natural = sanitizeNaturalDialogue(cleaned)
+        return natural.isEmpty ? "Brain fart 😭🖤 Try me again." : natural''' + app[return_at + len(return_marker):]
 
-'''
-    clean_new = '''        let cleaned = kept.joined(separator: "\\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let natural = sanitizeNaturalDialogue(cleaned)
-        return natural.isEmpty ? "Brain fart 😭🖤 Try me again." : natural
-    }
-
+    function_end = app.find("\n    }", return_at)
+    if function_end < 0:
+        raise SystemExit("cleanGeneratedReply closing brace missing")
+    function_end += len("\n    }\n")
+    sanitizer = '''
     private func sanitizeNaturalDialogue(_ raw: String) -> String {
         let prefixes = [
             "pauses, then softly says", "pauses, then says", "pauses then says",
@@ -140,16 +149,14 @@ if "private func sanitizeNaturalDialogue" not in app:
         return result.joined(separator: "\\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
 '''
-    app = once(app, clean_anchor, clean_new, "visible stage-direction sanitizer")
+    app = app[:function_end] + sanitizer + app[function_end:]
 
 APP.write_text(app, encoding="utf-8")
 
-# The old voice path stops recognition but leaves AVAudioSession in
-# playAndRecord/voiceChat mode. On iPhone that can sound much quieter than normal
-# media playback. Switch to a speaker/media session while Vex is speaking; the
-# existing startListening() path switches back to playAndRecord/voiceChat after.
+# Voice playback previously remained in playAndRecord/voiceChat mode after the mic
+# stopped. Switch to the normal speaker/media route while speaking; startListening
+# already restores playAndRecord/voiceChat afterward.
 if "V123_LOUD_SPEAKER_PLAYBACK" not in content:
     playback_anchor = '''    private func speakWithSystemVoice(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
@@ -183,8 +190,6 @@ if "V123_LOUD_SPEAKER_PLAYBACK" not in content:
 '''
     content = once(content, neural_anchor, neural_new, "loud neural player session")
 
-    # Also force the hardware speaker for the old playAndRecord route if iOS keeps
-    # a stale route during the category transition.
     start_anchor = '''        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 '''
@@ -193,7 +198,7 @@ if "V123_LOUD_SPEAKER_PLAYBACK" not in content:
         try? session.overrideOutputAudioPort(.speaker)
 '''
     if start_anchor in content:
-        content = once(content, start_anchor, start_new, "speaker route reinforcement")
+        content = content.replace(start_anchor, start_new, 1)
 
 CONTENT.write_text(content, encoding="utf-8")
 
@@ -203,19 +208,10 @@ content = CONTENT.read_text(encoding="utf-8")
 for required in [MARKER, 'newestLower.contains("say something for me")']:
     if required not in prompt:
         raise SystemExit(f"v0.12.3 prompt invariant missing: {required}")
-for required in [
-    "asksVoiceSampleRequest",
-    "sanitizeNaturalDialogue",
-    "bubbly little code gremlin voice",
-]:
+for required in ["asksVoiceSampleRequest", "sanitizeNaturalDialogue", "bubbly little code gremlin voice"]:
     if required not in app:
         raise SystemExit(f"v0.12.3 app invariant missing: {required}")
-for required in [
-    "V123_LOUD_SPEAKER_PLAYBACK",
-    "prepareVoicePlaybackSession",
-    "mode: .spokenAudio",
-    "player.volume = 1.0",
-]:
+for required in ["V123_LOUD_SPEAKER_PLAYBACK", "prepareVoicePlaybackSession", "mode: .spokenAudio", "player.volume = 1.0"]:
     if required not in content:
         raise SystemExit(f"v0.12.3 audio invariant missing: {required}")
 
