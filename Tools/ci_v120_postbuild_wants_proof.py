@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -99,8 +100,15 @@ def prove_host_from_zip() -> None:
 
 def no_proxy_json(url: str, timeout: float = 3.0) -> dict:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with opener.open(url, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        raise RuntimeError(f"HTTP {exc.code} for {url}: {body[:1600]}") from exc
 
 
 def prove_bridge_from_zip() -> None:
@@ -284,8 +292,10 @@ def main() -> int:
     remote_exe = VERIFY / "VexRemoteSupportRuntime" / "VexRemoteSupport.exe"
     if not remote_exe.exists():
         raise RuntimeError(f"rewritten ZIP Remote Support missing: {remote_exe}")
-    prove_host_from_zip()
+    # Prove the isolated Bridge first. Host startup can legitimately discover or
+    # recover a Bridge; doing Host first risks contaminating the fixed-port proof.
     prove_bridge_from_zip()
+    prove_host_from_zip()
     mode = "freeze-only" if SKIP_PATCHES else "patched"
     log(f"PASS final rewritten artifact is field-proven wants{FIELD} + correctness-v1 + PC-health-v1 ({mode}): {ZIP.stat().st_size} bytes")
     return 0
