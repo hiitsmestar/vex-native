@@ -6,7 +6,8 @@ from pathlib import Path
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
 
-MARKER = 'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v1"'
+MARKER = 'V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"'
+CORRECTNESS_MARKER = 'V120_WANTS_BACKGROUND_RECONCILIATION = "v0.12-wants-background-v1"'
 
 
 def replace_function(source: str, name: str, replacement: str) -> str:
@@ -19,12 +20,18 @@ def replace_function(source: str, name: str, replacement: str) -> str:
     return source[:start] + replacement.rstrip() + source[end:]
 
 
+if CORRECTNESS_MARKER not in text:
+    raise SystemExit("v0.12 learning lifecycle requires background Wants reconciliation first")
+
 if MARKER not in text:
-    resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v1"
+    # Enhance closure of a capability *after another subsystem has already proved
+    # it healthy*. Do not probe capabilities here; live probing belongs to the
+    # bounded background correctness worker and the normal autonomy curriculum.
+    resolve_replacement = r'''V120_LEARNING_LIFECYCLE = "v0.12-active-state-learning-v2"
 
 
 def _v120_record_resolution_lesson(subject: str, detail: str, evidence: str = "") -> None:
-    """Feed successful repair/upgrade outcomes back into adaptive learning once."""
+    """Feed a verified repair/upgrade closure back into adaptive learning once."""
     store = globals().get("_adaptive_store_lesson")
     if not callable(store):
         return
@@ -47,36 +54,12 @@ def _v120_record_resolution_lesson(subject: str, detail: str, evidence: str = ""
         pass
 
 
-def _v120_sync_capability_state(name: str, ok: bool, detail: str) -> None:
-    """Refresh current capability truth without inflating success/failure counters on UI refresh."""
-    try:
-        now = time.time()
-        with _ADAPTIVE_DB_LOCK:
-            conn = _adaptive_conn()
-            _autonomy_ensure_tables(conn)
-            conn.execute(
-                """INSERT OR IGNORE INTO capabilities
-                   (name,updated_at,last_tested,last_researched,confidence,successes,failures,healthy,detail)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                (str(name), now, now, 0.0, 0.0, 0, 0, 1 if ok else 0, str(detail)[:900]),
-            )
-            conn.execute(
-                "UPDATE capabilities SET updated_at=?,last_tested=?,healthy=?,detail=? WHERE name=?",
-                (now, now, 1 if ok else 0, str(detail)[:900], str(name)),
-            )
-            conn.commit()
-            conn.close()
-    except Exception:
-        pass
-
-
 def _v120_retire_orphaned_adaptive_upgrades() -> int:
-    """Hide active upgrades whose source gap is already closed or gone."""
+    """Hide active upgrades whose source gap is already closed or gone; DB-only."""
     changed = 0
     try:
         with _ADAPTIVE_DB_LOCK:
             conn = _adaptive_conn()
-            _autonomy_ensure_tables(conn)
             active_marks = ",".join("?" for _ in V120_ACTIVE_PROPOSAL_STATUSES)
             cur = conn.execute(
                 f"""UPDATE upgrade_candidates
@@ -98,7 +81,7 @@ def _v120_retire_orphaned_adaptive_upgrades() -> int:
 
 
 def _v120_retire_projects_for_closed_gaps() -> int:
-    """Supersede project proposals when their originating learning gap is no longer open."""
+    """Supersede project proposals whose source gap is no longer open; no probes."""
     source_ids: set[int] = set()
     try:
         with _PROJECT_DB_LOCK:
@@ -138,6 +121,7 @@ def _v120_retire_projects_for_closed_gaps() -> int:
 
 
 def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
+    """Close stale work only after caller has independently verified capability health."""
     request_text = f"local capability {str(name or '').strip()} is unhealthy"
     resolved_ids: list[int] = []
     retired_upgrades = 0
@@ -187,36 +171,26 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
 '''
     text = replace_function(text, "_v120_resolve_capability_gap", resolve_replacement)
 
-    reconcile_replacement = r'''def _v120_reconcile_wants() -> dict:
-    summary = {
-        "ok": True,
-        "resolved_gaps": 0,
-        "retired_upgrades": 0,
-        "superseded_projects": 0,
-        "applied_upgrades": 0,
-        "healthy": {},
-    }
+    # Preserve the already-proven nonblocking correctness reconciler. Wrap it
+    # with cheap database lifecycle retirement only. This deliberately avoids
+    # the v1 regression that synchronously probed every registered capability
+    # and could keep the cold-start Wants control plane in 503 indefinitely.
+    cached_anchor = "def _v120_reconcile_wants_cached() -> dict:\n"
+    if cached_anchor not in text:
+        raise SystemExit("v0.12 lifecycle could not find cached Wants reconciler")
+    wrapper = r'''
+_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants
 
-    # Reconcile every installed autonomy capability, not a hard-coded pair.
-    registry = globals().get("AUTONOMY_CAPABILITIES")
-    names = list(registry.keys()) if isinstance(registry, dict) else []
-    if not names:
-        names = ["personal_memory", "local_cognition", "web_research", "learned_skills", "self_repair", "art_worker", "file_index"]
 
-    for name in names:
-        try:
-            ok, detail = _autonomy_probe_capability(str(name))
-        except Exception as exc:
-            ok, detail = False, f"{exc.__class__.__name__}: {str(exc)[:180]}"
-        summary["healthy"][str(name)] = bool(ok)
-        _v120_sync_capability_state(str(name), bool(ok), str(detail))
-        if ok:
-            item = _v120_resolve_capability_gap(str(name), str(detail))
-            summary["resolved_gaps"] += int(item.get("resolved_gaps") or 0)
-            summary["retired_upgrades"] += int(item.get("retired_upgrades") or 0)
-            summary["superseded_projects"] += int(item.get("superseded_projects") or 0)
+def _v120_reconcile_wants() -> dict:
+    summary = dict(_v120_reconcile_wants_lifecycle_base() or {})
+    summary.setdefault("ok", True)
+    summary.setdefault("resolved_gaps", 0)
+    summary.setdefault("retired_upgrades", 0)
+    summary.setdefault("superseded_projects", 0)
+    summary.setdefault("applied_upgrades", 0)
+    summary.setdefault("healthy", {})
 
-    # Catch rows left behind by older builds even if their gap was resolved long ago.
     orphaned = _v120_retire_orphaned_adaptive_upgrades()
     linked_projects = _v120_retire_projects_for_closed_gaps()
     summary["retired_upgrades"] += orphaned
@@ -227,40 +201,12 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
             "stale active work was retired because its source learning gap is already closed",
             f"retired_upgrades={orphaned} superseded_projects={linked_projects}",
         )
-
-    try:
-        win = _windows_native_capabilities()
-        win_ok = bool(
-            win.get("ok")
-            and win.get("native_window_inventory")
-            and int(win.get("visible_window_count") or 0) > 0
-            and win.get("interactive_session_match") is not False
-            and win.get("input_desktop_accessible") is not False
-        )
-        summary["healthy"]["windows_visible_inventory"] = win_ok
-        if win_ok:
-            changed = _v120_retire_windows_inventory_proposals(win)
-            summary["superseded_projects"] += changed
-            if changed:
-                _v120_record_resolution_lesson(
-                    "Windows visible-window inventory",
-                    f"live native enumeration verified {int(win.get('visible_window_count') or 0)} visible windows",
-                    f"retired_project_proposals={changed}",
-                )
-    except Exception:
-        summary["healthy"]["windows_visible_inventory"] = False
-
-    applied = _v120_mark_grounded_renderer_applied()
-    summary["applied_upgrades"] += applied
-    if applied:
-        _v120_record_resolution_lesson(
-            "grounded conversation renderer",
-            "fact-preserving renderer is implemented and verified in the shipped Bridge",
-            f"applied_upgrade_rows={applied}",
-        )
+    summary["lifecycle"] = "reconciled-active-state-v2"
     return summary
+
+
 '''
-    text = replace_function(text, "_v120_reconcile_wants", reconcile_replacement)
+    text = text.replace(cached_anchor, wrapper + cached_anchor, 1)
 
 BRIDGE.write_text(text, encoding="utf-8")
 compile(text, str(BRIDGE), "exec")
@@ -268,14 +214,19 @@ compile(text, str(BRIDGE), "exec")
 for required in [
     MARKER,
     "def _v120_record_resolution_lesson(",
-    "def _v120_sync_capability_state(",
     "def _v120_retire_orphaned_adaptive_upgrades(",
     "def _v120_retire_projects_for_closed_gaps(",
-    "registry = globals().get(\"AUTONOMY_CAPABILITIES\")",
+    "_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants",
+    'summary["lifecycle"] = "reconciled-active-state-v2"',
     "status='superseded-solved'",
     "Only reopen the problem when a new live capability check or acceptance test fails.",
 ]:
     if required not in text:
         raise SystemExit(f"v0.12 learning lifecycle verifier missing: {required}")
 
-print("Applied v0.12 active-state Wants cleanup + self-learning outcome feedback")
+# Guard the regression explicitly: this patch must not add a loop that probes
+# every registered capability from the Wants reconciliation path.
+if 'registry = globals().get("AUTONOMY_CAPABILITIES")' in text[text.find(MARKER):text.find("def _v120_reconcile_wants_cached")]:
+    raise SystemExit("v0.12 lifecycle verifier found synchronous all-capability Wants probing")
+
+print("Applied v0.12 nonblocking active-state cleanup + learning outcome feedback v2")
