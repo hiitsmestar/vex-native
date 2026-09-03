@@ -123,11 +123,6 @@ def prove_bridge_from_zip() -> None:
     )
     try:
         config = roaming / "VexBridge" / "config.json"
-        # The health/autonomy layer starts additional bounded background workers.
-        # During a cold frozen start the local control plane can intentionally
-        # answer 503 until those services finish their startup gate. Treat 503 as
-        # transient readiness, not a failed artifact, while still requiring the
-        # exact v0.12 identity + Wants reconciliation before passing.
         deadline = time.time() + 85
         last = "config not created"
         saw_status = False
@@ -169,16 +164,15 @@ def main() -> int:
     if not PKG.exists() or not ZIP.exists():
         raise RuntimeError("normal v0.12 package must exist before post-build proof")
 
-    # Apply local-only UI and correctness work only after every legacy source
-    # generator has finished. Then re-freeze the actual files we ship.
     run(sys.executable, "Tools/apply_v120_local_upgrade_requests.py")
     run(sys.executable, "Tools/apply_v120_wants_field_fingerprint.py")
     run(sys.executable, "apply_v120_correctness_upgrades.py")
 
-    # If the optional PC-health/autonomy patch exists, reapply it last so later
-    # correctness generators cannot erase its runtime routes or Remote .70 source.
     pc_health_patch = ROOT / "Tools" / "apply_v120_pc_health_autonomy.py"
+    pc_health_prepare = ROOT / "Tools" / "prepare_v120_pc_health_autonomy.py"
     if pc_health_patch.exists():
+        if pc_health_prepare.exists():
+            run(sys.executable, str(pc_health_prepare.relative_to(ROOT)))
         run(sys.executable, str(pc_health_patch.relative_to(ROOT)))
 
     host_source = ROOT / "Tools" / "VexWindowsHost-v11740.py"
@@ -210,7 +204,6 @@ def main() -> int:
     if not pyinstaller:
         raise RuntimeError("pyinstaller is not on PATH")
 
-    # Re-freeze only the components changed by the post-build patches.
     shutil.rmtree(DIST / "VexBridge", ignore_errors=True)
     shutil.rmtree(DIST / "VexWindowsHost", ignore_errors=True)
     shutil.rmtree(DIST / "VexRemoteSupport", ignore_errors=True)
@@ -234,12 +227,10 @@ def main() -> int:
             "--name", "VexRemoteSupport", "--collect-all", "requests", "Tools/VexRemoteSupport.py",
         )
 
-    # Keep the Bridge's staged memory-worker layout consistent with the normal build.
     embedded = DIST / "VexBridge" / "VexMemoryWorkerRuntime"
     shutil.rmtree(embedded, ignore_errors=True)
     shutil.copytree(DIST / "VexMemoryWorker", embedded)
 
-    # Rewrite the already-complete package rather than regenerating all legacy components.
     shutil.copy2(DIST / "VexBridge" / "VexBridge.exe", PKG / "VexBridge.exe")
     replace_tree(DIST / "VexBridge" / "VexBridgeRuntime", PKG / "VexBridgeRuntime")
     replace_tree(DIST / "VexWindowsHost", PKG / "VexWindowsHost")
