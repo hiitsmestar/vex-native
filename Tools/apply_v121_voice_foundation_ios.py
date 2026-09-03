@@ -114,9 +114,10 @@ payload_new = '''                "text": String(text.prefix(1800)),
 '''
 once(payload_anchor, payload_new, "provider-aware TTS request")
 
-# A mic tap while Vex is speaking now means "stop talking and listen" instead of
-# turning the whole hands-free session off. A mic tap while already listening still
-# turns hands-free off, preserving the old quick toggle behavior.
+# The first-tap crash hotfix wrapped startListening() in do/catch. Extend that
+# proven shape instead of replacing it: while Vex is speaking, a mic tap interrupts
+# speech and resumes recognition; while already listening, the same tap still turns
+# hands-free mode off.
 old_toggle = '''    func toggleHandsFree() async throws {
         if isHandsFree {
             stopHandsFree()
@@ -126,7 +127,15 @@ old_toggle = '''    func toggleHandsFree() async throws {
         guard await requestMicPermission() else { throw VoiceError.microphonePermission }
         isHandsFree = true
         waitingForReply = false
-        try startListening()
+        do {
+            try startListening()
+        } catch {
+            isHandsFree = false
+            waitingForReply = false
+            stopRecognition()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
     }
 '''
 new_toggle = '''    func toggleHandsFree() async throws {
@@ -142,7 +151,15 @@ new_toggle = '''    func toggleHandsFree() async throws {
         guard await requestMicPermission() else { throw VoiceError.microphonePermission }
         isHandsFree = true
         waitingForReply = false
-        try startListening()
+        do {
+            try startListening()
+        } catch {
+            isHandsFree = false
+            waitingForReply = false
+            stopRecognition()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
     }
 
     func interruptSpeechAndListen() {
