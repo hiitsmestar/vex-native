@@ -18,7 +18,8 @@ The system should:
 - safely inspect, maintain, clean, diagnose, and repair its own Windows host within explicit bounded permissions;
 - use conservative autonomy for destructive/security-sensitive work and preserve user data by default;
 - propose and, where explicitly authorized and safe, execute useful self-improvements rather than requiring Star to micromanage every small engineering step;
-- remain portable so a stronger dedicated AI PC can materially increase cognition, model size, multimodal capability, background learning, and tool capacity without redesigning the whole system.
+- support natural low-latency audio chat with a realistic, consistent custom Vex voice rather than generic robotic TTS, including expressive pacing/prosody/emotional delivery while keeping voice generation local where practical;
+- remain portable so a stronger dedicated AI PC can materially increase cognition, model size, multimodal capability, background learning, voice quality, and tool capacity without redesigning the whole system.
 
 ## Current-PC goal
 
@@ -39,6 +40,7 @@ Search for the strongest-value dedicated VexNative AI desktop, not a gaming mach
 
 Prioritize:
 - NVIDIA GPU with at least 16 GB VRAM; candidates can include RTX 4070 Ti SUPER, 4080/4080 SUPER, 5070 Ti, 5080, or anything materially better for VexNative AI workloads;
+- enough GPU/CPU/RAM headroom to run the main local model and a high-quality real-time custom voice stack together without constantly unloading one workload to run the other;
 - 32 GB or more system RAM, with upgradeability strongly preferred;
 - 1 TB or more NVMe storage, with more storage favored at similar price;
 - adequate PSU, cooling, standard/upgradeable tower components where possible;
