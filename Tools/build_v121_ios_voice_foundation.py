@@ -34,7 +34,7 @@ SCRIPTS = [
     "Tools/apply_v091_youtube_context_ios_patch.py",
 ]
 
-TAIL = [
+TAIL_BEFORE_MAINTENANCE = [
     "Tools/apply_v093_cognition_ios_patch.py",
     "Tools/apply_v094_art_ios_patch.py",
     "Tools/apply_v0941_startup_safe_mode_patch.py",
@@ -42,13 +42,14 @@ TAIL = [
     "Tools/apply_v0943_dual_node_race_patch.py",
     "Tools/apply_v0944_bridge_long_request_timeout_patch.py",
     "Tools/apply_v095_resource_housekeeper_ios_patch.py",
+]
+
+TAIL_AFTER_MAINTENANCE = [
     "Tools/apply_v098_ios_time_grounding_patch.py",
     "Tools/apply_v107_art_ios_adapter_patch.py",
     "Tools/apply_v108_ios_art_followup_grounding.py",
     "Tools/apply_v110_ios_memory_sync.py",
     "Tools/apply_v111_ios_memory_sync_hotfix.py",
-    "Tools/apply_v11729_ios_natural_continuity.py",
-    "Tools/apply_v121_voice_foundation_ios.py",
 ]
 
 
@@ -62,19 +63,29 @@ def run(path: str, allow_failure: bool = False) -> None:
 for script in SCRIPTS:
     run(script)
 
-# These two historical patches were intentionally optional in the last proven iOS
-# chain. Preserve that behavior, but require the capability markers that later
-# patches depend on when applicable.
 run("Tools/apply_v092_device_control_patch.py", allow_failure=True)
 content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
 if "PhoneToolRouter" not in content:
     raise SystemExit("device-control chain did not produce PhoneToolRouter")
 
-for script in TAIL[:7]:
+for script in TAIL_BEFORE_MAINTENANCE:
     run(script)
 run("Tools/apply_v096_active_maintenance_ios_patch.py", allow_failure=True)
-for script in TAIL[7:]:
+for script in TAIL_AFTER_MAINTENANCE:
     run(script)
+
+# Keep one bounded diagnostic around the historical natural-continuity fast path.
+# This is intentionally source code only (no user data) and makes future cumulative
+# chain drift diagnosable from CI rather than guessing at the generated shape.
+app_debug = (ROOT / "VexNative" / "AppModel.swift").read_text(encoding="utf-8")
+fast = app_debug.find("if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {")
+if fast >= 0:
+    print("--- generated AppModel continuity anchor ---", flush=True)
+    print(app_debug[max(0, fast - 240):fast + 1900], flush=True)
+    print("--- end continuity anchor ---", flush=True)
+
+run("Tools/apply_v11729_ios_natural_continuity.py")
+run("Tools/apply_v121_voice_foundation_ios.py")
 
 content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
 for marker in [
