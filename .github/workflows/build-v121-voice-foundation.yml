@@ -1,0 +1,138 @@
+name: Build VexNative v0.12.1 Voice Foundation
+
+on:
+  push:
+    branches: [ "build/v120-full-ai-foundation" ]
+    paths:
+      - "Tools/apply_v121_voice_foundation_bridge.py"
+      - "Tools/apply_v121_voice_foundation_ios.py"
+      - "Tools/build_v121_ios_voice_foundation.py"
+      - ".github/workflows/build-v121-voice-foundation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-voice:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Windows runtime build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+      - name: Build cumulative v0.12 runtime
+        run: python Tools/ci_v120_full_ai_foundation.py
+      - name: Apply swap-ready voice provider contract
+        run: python Tools/apply_v121_voice_foundation_bridge.py
+      - name: Re-freeze and prove voice-capable final artifact
+        run: python Tools/ci_v120_postbuild_wants_proof.py
+      - name: Preserve learning lifecycle and freeze final source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python Tools/apply_v120_learning_lifecycle.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:V120_POSTBUILD_SKIP_PATCHES = '1'
+          python Tools/ci_v120_postbuild_wants_proof.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify voice contract survived the final freeze
+        shell: python
+        run: |
+          from pathlib import Path
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          proof = Path("Tools/ci_v120_postbuild_wants_proof.py").read_text(encoding="utf-8")
+          for marker in [
+              'V121_VOICE_FOUNDATION = "v0.12.1-swap-ready-voice-v1"',
+              'parsed.path == "/voice/status"',
+              'requested_provider = str(payload.get("provider")',
+              'V121_VOICE_FUTURE_LOCAL_PROVIDER = "local-neural"',
+          ]:
+              assert marker in bridge, marker
+          for marker in ['"--collect-all", "edge_tts"', '/voice/status?', 'swap-ready voice contract']:
+              assert marker in proof, marker
+          assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
+          print("PASS final Windows voice provider contract")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-VoiceFoundation
+          path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-voice:
+    runs-on: macos-15
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble proven iOS chain plus v0.12.1 voice foundation
+        run: python3 Tools/build_v121_ios_voice_foundation.py
+      - name: Verify final voice source markers
+        run: |
+          grep -q 'V121_VOICE_FOUNDATION_IOS = "v0.12.1-swap-ready-voice-v1"' VexNative/ContentView.swift
+          grep -q 'case automatic' VexNative/ContentView.swift
+          grep -q 'return "Bridge Voice"' VexNative/ContentView.swift
+          grep -q 'provider.*speechEngine == .automatic' VexNative/ContentView.swift
+          grep -q 'func interruptSpeechAndListen()' VexNative/ContentView.swift
+      - name: Resolve local Swift package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=121 \
+            MARKETING_VERSION=0.12.1 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Add permissions and verify build identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local memory, tools, and voice providers." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.12.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "121"
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.12.1-voice-foundation.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.12.1-voice-foundation.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.1-Voice-Foundation
+          path: VexNative-v0.12.1-voice-foundation.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.1-Voice-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
