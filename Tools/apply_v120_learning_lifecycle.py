@@ -172,14 +172,16 @@ def _v120_resolve_capability_gap(name: str, detail: str = "") -> dict:
     if cached_anchor not in text:
         raise SystemExit("v0.12 lifecycle could not find cached Wants reconciler")
 
-    wrapper = r'''
+    lifecycle = r'''
 V120_LIFECYCLE_CLEANUP_LOCK = threading.Lock()
 V120_LIFECYCLE_CLEANUP_STATE = {"running": False, "last_run": 0.0}
+# Compatibility alias only. Do NOT wrap or redefine _v120_reconcile_wants here:
+# the correctness layer owns the proven nonblocking Wants/readiness path.
 _v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants
 
 
 def _v120_lifecycle_cleanup_async() -> None:
-    """Retire stale DB work away from the Wants HTTP/readiness path."""
+    """Retire stale DB work completely outside the Wants HTTP/readiness path."""
     now = time.time()
     with V120_LIFECYCLE_CLEANUP_LOCK:
         if V120_LIFECYCLE_CLEANUP_STATE.get("running"):
@@ -190,10 +192,6 @@ def _v120_lifecycle_cleanup_async() -> None:
 
     def _worker() -> None:
         try:
-            # Cold-start proof and foreground Wants reads get first claim on the
-            # SQLite locks. Lifecycle cleanup deliberately waits and never gates
-            # local-control readiness.
-            time.sleep(5.0)
             orphaned = _v120_retire_orphaned_adaptive_upgrades()
             linked_projects = _v120_retire_projects_for_closed_gaps()
             if orphaned or linked_projects:
@@ -207,28 +205,23 @@ def _v120_lifecycle_cleanup_async() -> None:
                 V120_LIFECYCLE_CLEANUP_STATE["last_run"] = time.time()
                 V120_LIFECYCLE_CLEANUP_STATE["running"] = False
 
-    thread = threading.Thread(target=_worker, daemon=True, name="VexLifecycleCleanup")
-    thread.start()
+    threading.Thread(target=_worker, daemon=True, name="VexLifecycleCleanup").start()
 
 
-def _v120_reconcile_wants() -> dict:
-    # Preserve the already-proven nonblocking correctness reconciler. The
-    # lifecycle bookkeeping is scheduled separately so /autonomy/requests can
-    # never be held hostage by project/adaptive DB housekeeping during startup.
-    summary = dict(_v120_reconcile_wants_lifecycle_base() or {})
-    summary.setdefault("ok", True)
-    summary.setdefault("resolved_gaps", 0)
-    summary.setdefault("retired_upgrades", 0)
-    summary.setdefault("superseded_projects", 0)
-    summary.setdefault("applied_upgrades", 0)
-    summary.setdefault("healthy", {})
-    summary["lifecycle"] = "reconciled-active-state-v2"
-    _v120_lifecycle_cleanup_async()
-    return summary
+def _v120_lifecycle_bootstrap_cleanup() -> None:
+    # Delay lifecycle-only bookkeeping until after local-control and foreground
+    # Wants are established. This timer never participates in request handling.
+    timer = threading.Timer(20.0, _v120_lifecycle_cleanup_async)
+    timer.daemon = True
+    timer.name = "VexLifecycleBootstrap"
+    timer.start()
+
+
+_v120_lifecycle_bootstrap_cleanup()
 
 
 '''
-    text = text.replace(cached_anchor, wrapper + cached_anchor, 1)
+    text = text.replace(cached_anchor, lifecycle + cached_anchor, 1)
 
 BRIDGE.write_text(text, encoding="utf-8")
 compile(text, str(BRIDGE), "exec")
@@ -239,15 +232,18 @@ for required in [
     "def _v120_retire_orphaned_adaptive_upgrades(",
     "def _v120_retire_projects_for_closed_gaps(",
     "_v120_reconcile_wants_lifecycle_base = _v120_reconcile_wants",
-    'summary["lifecycle"] = "reconciled-active-state-v2"',
     "status='superseded-solved'",
     "Only reopen the problem when a new live capability check or acceptance test fails.",
     "def _v120_lifecycle_cleanup_async() -> None:",
+    "def _v120_lifecycle_bootstrap_cleanup() -> None:",
 ]:
     if required not in text:
         raise SystemExit(f"v0.12 learning lifecycle verifier missing: {required}")
 
-if 'registry = globals().get("AUTONOMY_CAPABILITIES")' in text[text.find(MARKER):text.find("def _v120_reconcile_wants_cached")]:
+section = text[text.find(MARKER):text.find("def _v120_reconcile_wants_cached")]
+if 'registry = globals().get("AUTONOMY_CAPABILITIES")' in section:
     raise SystemExit("v0.12 lifecycle verifier found synchronous all-capability Wants probing")
+if "def _v120_reconcile_wants()" in section:
+    raise SystemExit("v0.12 lifecycle verifier found a Wants-path wrapper")
 
-print("Applied v0.12 nonblocking active-state cleanup + learning outcome feedback v2")
+print("Applied v0.12 isolated active-state cleanup + learning outcome feedback v2")
