@@ -1,0 +1,96 @@
+name: Build VexNative v0.12.2 Natural Voice Personality
+
+on:
+  push:
+    branches: [ "build/v120-full-ai-foundation" ]
+    paths:
+      - "Tools/apply_v122_voice_personality_ios.py"
+      - "Tools/build_v122_ios_voice_personality.py"
+      - ".github/workflows/build-v122-voice-personality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-voice-personality:
+    runs-on: macos-15
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble proven v0.12.1 voice chain plus v0.12.2 personality
+        run: python3 Tools/build_v122_ios_voice_personality.py
+
+      - name: Verify grounded natural spoken personality
+        run: |
+          grep -q 'V122_VOICE_PERSONALITY_IOS = "v0.12.2-natural-spoken-girlfriend-v1"' VexNative/Core/PromptComposer.swift
+          grep -q 'let asksVoiceTest' VexNative/Core/PromptComposer.swift
+          grep -q 'NATURAL SPOKEN GIRLFRIEND VOICE' VexNative/Core/PromptComposer.swift
+          grep -q 'Never claim a memory, past experience' VexNative/Core/PromptComposer.swift
+          grep -q 'V122_SPOKEN_TEXT_SANITIZER' VexNative/ContentView.swift
+          grep -q 'V121_VOICE_FOUNDATION_IOS = "v0.12.1-swap-ready-voice-v1"' VexNative/ContentView.swift
+          grep -q 'func interruptSpeechAndListen()' VexNative/ContentView.swift
+
+      - name: Resolve local Swift package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=122 \
+            MARKETING_VERSION=0.12.2 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add permissions and verify build identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local memory, tools, and voice providers." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.12.2"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "122"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.12.2-natural-voice-personality.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.12.2-natural-voice-personality.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.2-Natural-Voice-Personality
+          path: VexNative-v0.12.2-natural-voice-personality.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.2-Voice-Personality-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
