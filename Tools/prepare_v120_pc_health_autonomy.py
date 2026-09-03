@@ -56,8 +56,8 @@ if error_anchor in text and 'result["error_detail"] = str(exc)[:300]' not in tex
 
 for required in [
     'def _v120_health_hardware_status() -> dict:',
-    '    import subprocess\\n',
-    '    from pathlib import Path\\n',
+    '    import subprocess\n',
+    '    from pathlib import Path\n',
     'result["error_detail"] = str(exc)[:300]',
 ]:
     if required not in text:
