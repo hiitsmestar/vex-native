@@ -51,7 +51,7 @@ jobs:
               'action == "art_render"',
               'art prompt must be 1-1200 characters',
               'orientation must be portrait, landscape, or square',
-              '"image_name"',
+              '"mode", "image_name", "image_bytes", "elapsed_seconds"',
           ]:
               assert marker in remote, marker
           for marker in [
