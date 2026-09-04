@@ -51,9 +51,12 @@ jobs:
               'action == "art_render"',
               'art prompt must be 1-1200 characters',
               'orientation must be portrait, landscape, or square',
-              '"mode", "image_name", "image_bytes", "elapsed_seconds"',
           ]:
               assert marker in remote, marker
+          # Verify each sanitized relay field independently. Formatting of the
+          # allowlist is not part of the contract and may be wrapped/reordered.
+          for field in ['mode', 'image_name', 'image_bytes', 'elapsed_seconds']:
+              assert f'"{field}"' in remote, field
           for marker in [
               'VERSION = "0.12.0-art-remote"',
               '"image_name": target.name',
