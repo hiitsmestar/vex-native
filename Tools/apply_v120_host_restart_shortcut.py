@@ -46,10 +46,20 @@ $s.Save()
 '''
 text = text.replace(marker, helper + marker, 1)
 
+# The generated installer has used both a compact two-line replacement loop and
+# a blank-line-separated form. Anchor on the RUNTIME_DIRS loop itself rather
+# than an exact surrounding whitespace fingerprint.
 needle = '        for name in RUNTIME_DIRS:\n            replace_dir(pkg / name, home / name)\n'
 if needle not in text:
-    raise SystemExit('runtime replacement marker missing')
-text = text.replace(needle, needle + '\n        # Recreate this every install so the desktop control always follows the newest Host build.\n        install_host_restart_shortcut(home)\n', 1)
+    raise SystemExit('runtime replacement loop missing')
+text = text.replace(
+    needle,
+    needle + '\n        # Recreate this every install so the desktop control always follows the newest Host build.\n        install_host_restart_shortcut(home)\n',
+    1,
+)
 
 path.write_text(text, encoding="utf-8")
+compile(text, str(path), "exec")
+if 'install_host_restart_shortcut(home)' not in text:
+    raise SystemExit('Host restart shortcut call missing after patch')
 print('Applied stable self-updating Restart Vex Host desktop shortcut')
