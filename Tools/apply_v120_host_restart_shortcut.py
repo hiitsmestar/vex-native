@@ -46,17 +46,32 @@ $s.Save()
 '''
 text = text.replace(marker, helper + marker, 1)
 
-# The generated installer has used both a compact two-line replacement loop and
-# a blank-line-separated form. Anchor on the RUNTIME_DIRS loop itself rather
-# than an exact surrounding whitespace fingerprint.
-needle = '        for name in RUNTIME_DIRS:\n            replace_dir(pkg / name, home / name)\n'
-if needle not in text:
+# Find the generated RUNTIME_DIRS replacement loop by structure instead of an
+# exact whitespace fingerprint. The cumulative assembler has changed blank
+# lines/indentation around this loop more than once.
+lines = text.splitlines(keepends=True)
+insert_at = None
+for i, line in enumerate(lines):
+    if line.strip() != 'for name in RUNTIME_DIRS:':
+        continue
+    loop_indent = len(line) - len(line.lstrip())
+    j = i + 1
+    while j < len(lines):
+        stripped = lines[j].strip()
+        indent = len(lines[j]) - len(lines[j].lstrip())
+        if stripped and indent <= loop_indent:
+            break
+        if 'replace_dir(pkg / name, home / name)' in stripped:
+            insert_at = j + 1
+            break
+        j += 1
+    if insert_at is not None:
+        break
+if insert_at is None:
     raise SystemExit('runtime replacement loop missing')
-text = text.replace(
-    needle,
-    needle + '\n        # Recreate this every install so the desktop control always follows the newest Host build.\n        install_host_restart_shortcut(home)\n',
-    1,
-)
+call_indent = ' ' * loop_indent
+lines.insert(insert_at, f'\n{call_indent}# Recreate this every install so the desktop control always follows the newest Host build.\n{call_indent}install_host_restart_shortcut(home)\n')
+text = ''.join(lines)
 
 path.write_text(text, encoding="utf-8")
 compile(text, str(path), "exec")
