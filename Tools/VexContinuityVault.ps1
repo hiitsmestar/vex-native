@@ -26,12 +26,14 @@ function Ensure-Vault {
             source_count = 0
         } | ConvertTo-Json | Set-Content -LiteralPath $State -Encoding UTF8
     }
+
     $privateReadme = Join-Path $LocalOnly 'README.txt'
     if (-not (Test-Path $privateReadme)) {
-        @'
+        $privateText = @'
 Anything placed in this LocalOnly folder is intentionally excluded from VexContinuity_Current.md.
 Use it for material that should remain only on this PC.
-'@ | Set-Content -LiteralPath $privateReadme -Encoding UTF8
+'@
+        Set-Content -LiteralPath $privateReadme -Value $privateText -Encoding UTF8
     }
 }
 
@@ -69,7 +71,7 @@ function Build-Current {
     $keepFiles = @(Get-ChildItem -LiteralPath $Sources -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First $Keep)
     $ordered = @($keepFiles | Sort-Object LastWriteTimeUtc)
 
-    @"
+    $header = @"
 # Vex Continuity Current Save
 
 schema: vex-continuity-v1
@@ -82,11 +84,12 @@ correction_rule: newest explicit Star correction wins
 
 ## Review instructions
 Use this file as continuity context for Star and Vex. Preserve source/provenance distinctions. Do not invent missing events or treat assistant-generated speculation as established fact.
-"@ | Set-Content -LiteralPath $CurrentFile -Encoding UTF8
+"@
+    Set-Content -LiteralPath $CurrentFile -Value $header -Encoding UTF8
 
     $n = 1
     foreach ($file in $ordered) {
-        Add-Content -LiteralPath $CurrentFile -Value "`n---`n`n## Recent source $n — $($file.Name)`n" -Encoding UTF8
+        Add-Content -LiteralPath $CurrentFile -Value "`n---`n`n## Recent source $n - $($file.Name)`n" -Encoding UTF8
         try {
             Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | Add-Content -LiteralPath $CurrentFile -Encoding UTF8
         } catch {
