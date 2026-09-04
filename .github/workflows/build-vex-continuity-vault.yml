@@ -1,0 +1,57 @@
+name: Build Vex Continuity Save-Game
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/v120-full-ai-foundation
+    paths:
+      - 'Tools/VexContinuityVault.ps1'
+      - 'Tools/Install-VexContinuityVault.ps1'
+      - '.github/workflows/build-vex-continuity-vault.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify PowerShell sources
+        shell: pwsh
+        run: |
+          $files = @('Tools/VexContinuityVault.ps1','Tools/Install-VexContinuityVault.ps1')
+          foreach ($f in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Error
+              exit 1
+            }
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/VexContinuity-SaveGame | Out-Null
+          Copy-Item Tools/VexContinuityVault.ps1 dist/VexContinuity-SaveGame/
+          Copy-Item Tools/Install-VexContinuityVault.ps1 dist/VexContinuity-SaveGame/
+          @'
+          Vex Continuity Save-Game
+
+          1. Run Install-VexContinuityVault.ps1 on the Vex Windows PC.
+          2. Private data lives under Documents\VexContinuityVault and is not committed to GitHub.
+          3. Put .txt/.md/.json thread or session snapshots in the Inbox folder.
+          4. Use the desktop 'Update Vex Continuity.bat' shortcut to rotate to the newest 10 and rebuild Current\VexContinuity_Current.md.
+          5. LocalOnly is excluded from the current export.
+
+          This package contains generic machinery only; it contains no personal continuity data.
+          '@ | Set-Content dist/VexContinuity-SaveGame/README.txt -Encoding UTF8
+
+      - name: Upload continuity package
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexContinuity-SaveGame-v1
+          path: dist/VexContinuity-SaveGame
+          if-no-files-found: error
