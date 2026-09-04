@@ -37,6 +37,36 @@ Use it for material that should remain only on this PC.
     }
 }
 
+function Find-DropboxRoot {
+    $candidates = @()
+    if ($env:DROPBOX) { $candidates += $env:DROPBOX }
+    $candidates += (Join-Path $env:USERPROFILE 'Dropbox')
+    $candidates += (Join-Path $env:USERPROFILE 'Dropbox (Personal)')
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate -PathType Container)) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+function Sync-CurrentToDropbox {
+    if (-not (Test-Path -LiteralPath $CurrentFile -PathType Leaf)) { return $null }
+    $dropboxRoot = Find-DropboxRoot
+    if (-not $dropboxRoot) {
+        Write-Host 'Dropbox sync skipped: local Dropbox folder not found yet.'
+        return $null
+    }
+
+    $destDir = Join-Path $dropboxRoot 'VexContinuity'
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    $dest = Join-Path $destDir 'VexContinuity_Current.md'
+    Copy-Item -LiteralPath $CurrentFile -Destination $dest -Force
+    Write-Host "Dropbox continuity copy updated: $dest"
+    return $dest
+}
+
 function Import-One([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Input file not found: $Path" }
     $item = Get-Item -LiteralPath $Path
@@ -104,11 +134,16 @@ Use this file as continuity context for Star and Vex. Preserve source/provenance
     $s.source_count = $ordered.Count
     $s | ConvertTo-Json | Set-Content -LiteralPath $State -Encoding UTF8
     Write-Host "Vex continuity save updated: $CurrentFile"
+    [void](Sync-CurrentToDropbox)
 }
 
 Ensure-Vault
 switch ($Action) {
-    'init' { Write-Host "Vex continuity vault ready: $Root" }
+    'init' {
+        Write-Host "Vex continuity vault ready: $Root"
+        $dropboxRoot = Find-DropboxRoot
+        if ($dropboxRoot) { Write-Host "Dropbox detected: $dropboxRoot" }
+    }
     'ingest' {
         if ([string]::IsNullOrWhiteSpace($InputPath)) { throw '-InputPath is required for ingest.' }
         Import-One $InputPath
@@ -121,5 +156,14 @@ switch ($Action) {
         Write-Host "Stored source snapshots: $count / $Keep"
         Write-Host "Current save: $CurrentFile"
         Write-Host "Current save exists: $(Test-Path $CurrentFile)"
+        $dropboxRoot = Find-DropboxRoot
+        if ($dropboxRoot) {
+            $dropboxFile = Join-Path (Join-Path $dropboxRoot 'VexContinuity') 'VexContinuity_Current.md'
+            Write-Host "Dropbox root: $dropboxRoot"
+            Write-Host "Dropbox continuity copy: $dropboxFile"
+            Write-Host "Dropbox continuity copy exists: $(Test-Path $dropboxFile)"
+        } else {
+            Write-Host 'Dropbox root: not detected'
+        }
     }
 }
