@@ -10,9 +10,6 @@ MARKER = 'V126_CONCISE_GROUNDED_DIALOGUE_IOS = "v0.12.6-concise-grounded-dialogu
 app = APP.read_text(encoding="utf-8")
 prompt = PROMPT.read_text(encoding="utf-8")
 
-# v0.12.5 proved that a larger ceiling alone just lets the tiny model ramble
-# farther before it hits the next ceiling. Leave a modest amount of headroom,
-# then constrain ordinary dialogue to short complete answers.
 if "webGroundedTurn ? 240 : 192" in app:
     app = app.replace("webGroundedTurn ? 240 : 192", "webGroundedTurn ? 256 : 224", 1)
 elif "maxNewTokens = 192" in app:
@@ -28,31 +25,21 @@ if MARKER not in prompt:
         raise SystemExit("v0.12.6 prompt marker anchor missing")
     prompt = prompt.replace(anchor, anchor + f'    // {MARKER}\n', 1)
 
-# Patch the actual Qwen3 system prompt instead of introducing a detached helper.
-# The field failures were: third-person stage narration, invented autobiographical
-# memory, role reversal on a voice question, and long replies that ran into the
-# generation ceiling.
-old_rules = '''            No parenthetical, asterisk, or bare stage directions such as “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
-            Do not repeat or lightly paraphrase your previous reply.
-            Never write Star's dialogue or role labels. Produce one Vex reply and stop.
-            Usually answer in 1 to 3 natural sentences.
-'''
-new_rules = '''            No parenthetical, asterisk, italicized, or bare stage directions. Never narrate Star or Vex in third person and never write actions such as “Star tilts her head”, “Vex smiles”, “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
+# Patch the actual Qwen3 system instructions by a durable one-line anchor that
+# survives the generated v0.12.x chain.
+compact_anchor = "            Usually answer in 1 to 3 natural sentences.\n"
+compact_rules = '''            Never narrate Star or Vex in third person and never write stage directions, screenplay text, or actions such as “Star tilts her head”, “Vex smiles”, “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
             Never invent a memory or past event. Only say “I remember” when a specific supplied RELEVANT MEMORY or recent chat line actually supports the memory you name.
             For questions about your own voice, behavior, feelings, or improvements, answer about Vex; do not turn the answer into a description of Star.
-            Do not repeat or lightly paraphrase your previous reply.
-            Never write Star's dialogue or role labels. Produce one Vex reply and stop.
             Keep ordinary spoken replies compact: usually 2 to 4 complete sentences. Finish the thought you start and do not begin another idea near the end of the answer.
 '''
-if old_rules in prompt:
-    prompt = prompt.replace(old_rules, new_rules, 1)
-elif "Keep ordinary spoken replies compact: usually 2 to 4 complete sentences." not in prompt:
-    raise SystemExit("v0.12.6 Qwen3 response rules anchor missing")
+if "Keep ordinary spoken replies compact: usually 2 to 4 complete sentences." not in prompt:
+    if compact_anchor not in prompt:
+        raise SystemExit("v0.12.6 compact sentence anchor missing")
+    prompt = prompt.replace(compact_anchor, compact_rules, 1)
 
 PROMPT.write_text(prompt, encoding="utf-8")
 
-# Strip pure markdown-italic narration lines such as the field-test output
-# '*star tilts her head slightly...*' and obvious third-person action lines.
 if "V126_STAGE_DIRECTION_LINE_FILTER" not in app:
     needle = '''            var line = original.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty {
@@ -75,9 +62,6 @@ if "V126_STAGE_DIRECTION_LINE_FILTER" not in app:
 '''
     app = app.replace(needle, replacement, 1)
 
-# Apply a final visible-answer guard that always ends on a complete sentence when
-# the model produced at least one sentence. If there is no punctuation at all,
-# close the short fragment instead of exposing a raw cutoff.
 if "private func enforceCompletedVisibleReply" not in app:
     helper_anchor = "    private func finishReplyAtNaturalBoundary(_ raw: String) -> String {\n"
     if helper_anchor not in app:
