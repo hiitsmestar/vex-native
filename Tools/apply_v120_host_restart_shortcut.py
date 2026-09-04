@@ -26,20 +26,23 @@ helper = r'''def install_host_restart_shortcut(home: Path) -> None:
     ])
     helper_path.write_text(helper_text, encoding="utf-8")
 
-    desktop = Path(os.environ.get("USERPROFILE") or str(Path.home())) / "Desktop"
-    desktop.mkdir(parents=True, exist_ok=True)
-    shortcut = desktop / "Restart Vex Host.lnk"
+    # Ask Windows for the real Desktop known-folder path. This handles OneDrive
+    # and other redirected Desktop locations instead of assuming %USERPROFILE%\Desktop.
     ps = f"""$ws = New-Object -ComObject WScript.Shell
-$s = $ws.CreateShortcut({str(shortcut)!r})
+$desktop = $ws.SpecialFolders.Item('Desktop')
+if (-not $desktop) {{ throw 'Windows Desktop folder could not be resolved' }}
+$shortcut = Join-Path $desktop 'Restart Vex Host.lnk'
+$s = $ws.CreateShortcut($shortcut)
 $s.TargetPath = $env:ComSpec
 $s.Arguments = '/c ""{str(helper_path)}""'
 $s.WorkingDirectory = {str(home)!r}
 $s.IconLocation = {str(host_exe)!r} + ',0'
 $s.Description = 'Restart the currently installed Vex Windows Host'
 $s.Save()
+if (!(Test-Path -LiteralPath $shortcut)) {{ throw 'Restart Vex Host shortcut was not created' }}
 """
     result = run_powershell(ps, timeout=20)
-    if result.returncode != 0 or not shortcut.exists():
+    if result.returncode != 0:
         raise RuntimeError("Could not create Restart Vex Host desktop shortcut")
 
 
