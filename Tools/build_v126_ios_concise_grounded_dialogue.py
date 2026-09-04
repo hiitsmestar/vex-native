@@ -30,8 +30,9 @@ for marker in [
         raise SystemExit(f"final v0.12.6 app marker missing: {marker}")
 for marker in [
     'V126_CONCISE_GROUNDED_DIALOGUE_IOS = "v0.12.6-concise-grounded-dialogue-v1"',
-    "conciseGroundedDialogueRules",
-    "usually 2 to 4 complete sentences",
+    "Keep ordinary spoken replies compact: usually 2 to 4 complete sentences.",
+    "Never invent a memory or past event.",
+    "For questions about your own voice, behavior, feelings, or improvements, answer about Vex",
 ]:
     if marker not in prompt:
         raise SystemExit(f"final v0.12.6 prompt marker missing: {marker}")
