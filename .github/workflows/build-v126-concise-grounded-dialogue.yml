@@ -23,7 +23,9 @@ jobs:
       - name: Verify grounded concise source
         run: |
           grep -q 'V126_CONCISE_GROUNDED_DIALOGUE_IOS = "v0.12.6-concise-grounded-dialogue-v1"' VexNative/Core/PromptComposer.swift
-          grep -q 'conciseGroundedDialogueRules' VexNative/Core/PromptComposer.swift
+          grep -q 'Keep ordinary spoken replies compact: usually 2 to 4 complete sentences.' VexNative/Core/PromptComposer.swift
+          grep -q 'Never invent a memory or past event.' VexNative/Core/PromptComposer.swift
+          grep -q 'For questions about your own voice, behavior, feelings, or improvements, answer about Vex' VexNative/Core/PromptComposer.swift
           grep -q 'enforceCompletedVisibleReply' VexNative/AppModel.swift
           grep -q 'V126_STAGE_DIRECTION_LINE_FILTER' VexNative/AppModel.swift
           grep -Eq 'webGroundedTurn \? 256 : 224|maxNewTokens = 224' VexNative/AppModel.swift
