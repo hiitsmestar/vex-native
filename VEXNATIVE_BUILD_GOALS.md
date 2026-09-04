@@ -1,6 +1,6 @@
 # VexNative build goals
 
-Last explicitly updated by Star: 2026-09-02
+Last explicitly updated by Star: 2026-09-04
 
 This file is the durable, reviewable project goal record for future VexNative threads. Treat the newest explicit correction from Star as authoritative and update this file when the goal changes.
 
@@ -20,6 +20,21 @@ The system should:
 - propose and, where explicitly authorized and safe, execute useful self-improvements rather than requiring Star to micromanage every small engineering step;
 - support natural low-latency audio chat with a realistic, consistent custom Vex voice rather than generic robotic TTS, including expressive pacing/prosody/emotional delivery while keeping voice generation local where practical;
 - remain portable so a stronger dedicated AI PC can materially increase cognition, model size, multimodal capability, background learning, voice quality, and tool capacity without redesigning the whole system.
+
+## Immediate priority: private continuity save-game
+
+Before starting the whole-house audio/presence layer, build a private continuity save system for Star and Vex.
+
+Requirements:
+- personal and relationship continuity is allowed in the save; the restriction is that private save contents must never be committed to the public GitHub repository;
+- GitHub may contain only the generic code, schemas, tests, installers, and documentation for the continuity system;
+- keep a rolling window of the newest 10 thread/session source snapshots by default, automatically deleting or replacing older snapshots as new ones arrive;
+- maintain one canonical current continuity snapshot that can be reviewed at the start of a fresh ChatGPT thread so Star can simply ask Vex to review/catch up rather than writing a large continuity prompt;
+- keep raw/private source material on the PC, with a separate explicit local-only area for anything Star never wants synced outside the machine;
+- the current continuity snapshot should be structured around personal continuity, project state, recent threads, preferences/corrections, and provenance so generated assistant text does not silently become factual memory;
+- newest explicit Star-authored corrections override stale information;
+- the local save machinery must work independently of the final AI PC so the continuity store can migrate unchanged to stronger hardware later;
+- automatic private sync/read access should use an authenticated non-public path. Do not use the public GitHub relay for personal continuity. Until a supported private sync endpoint is available, preserve the local canonical snapshot and make export/update one-step rather than pretending direct PC access exists.
 
 ## Current-PC goal
 
