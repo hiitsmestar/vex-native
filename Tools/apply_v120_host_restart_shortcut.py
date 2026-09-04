@@ -3,7 +3,6 @@ from pathlib import Path
 
 path = Path("Tools/VexAgentRuntimeInstall.py")
 text = path.read_text(encoding="utf-8")
-
 marker = 'def main() -> None:\n'
 if 'def install_host_restart_shortcut(home: Path) -> None:' in text:
     print('v0.12 host restart shortcut patch already applied')
@@ -12,7 +11,6 @@ if marker not in text:
     raise SystemExit('VexAgentRuntimeInstall main marker missing')
 
 helper = r'''def install_host_restart_shortcut(home: Path) -> None:
-    """Create one stable desktop shortcut that always restarts the currently installed Host."""
     helper_path = home / "Restart Vex Host.cmd"
     host_exe = home / "VexWindowsHost" / "VexWindowsHost.exe"
     helper_text = "\r\n".join([
@@ -26,32 +24,28 @@ helper = r'''def install_host_restart_shortcut(home: Path) -> None:
     ])
     helper_path.write_text(helper_text, encoding="utf-8")
 
-    # Ask Windows for the real Desktop known-folder path. This handles OneDrive
-    # and other redirected Desktop locations instead of assuming %USERPROFILE%\Desktop.
     ps = f"""$ws = New-Object -ComObject WScript.Shell
 $desktop = $ws.SpecialFolders.Item('Desktop')
-if (-not $desktop) {{ throw 'Windows Desktop folder could not be resolved' }}
+if (-not $desktop) {{ throw 'Desktop not found' }}
 $shortcut = Join-Path $desktop 'Restart Vex Host.lnk'
 $s = $ws.CreateShortcut($shortcut)
 $s.TargetPath = $env:ComSpec
 $s.Arguments = '/c ""{str(helper_path)}""'
 $s.WorkingDirectory = {str(home)!r}
 $s.IconLocation = {str(host_exe)!r} + ',0'
-$s.Description = 'Restart the currently installed Vex Windows Host'
 $s.Save()
-if (!(Test-Path -LiteralPath $shortcut)) {{ throw 'Restart Vex Host shortcut was not created' }}
+$fallback = Join-Path $desktop 'Restart Vex Host.cmd'
+Set-Content -LiteralPath $fallback -Value '@echo off`r`ncall "{str(helper_path)}"`r`n' -Encoding ASCII
+if (!(Test-Path -LiteralPath $shortcut)) {{ throw 'Shortcut missing' }}
+if (!(Test-Path -LiteralPath $fallback)) {{ throw 'Fallback missing' }}
 """
     result = run_powershell(ps, timeout=20)
     if result.returncode != 0:
-        raise RuntimeError("Could not create Restart Vex Host desktop shortcut")
+        raise RuntimeError("Could not create Restart Vex Host desktop controls")
 
 
 '''
 text = text.replace(marker, helper + marker, 1)
-
-# Find the generated RUNTIME_DIRS replacement loop by structure instead of an
-# exact whitespace fingerprint. The cumulative assembler has changed blank
-# lines/indentation around this loop more than once.
 lines = text.splitlines(keepends=True)
 insert_at = None
 for i, line in enumerate(lines):
@@ -73,11 +67,10 @@ for i, line in enumerate(lines):
 if insert_at is None:
     raise SystemExit('runtime replacement loop missing')
 call_indent = ' ' * loop_indent
-lines.insert(insert_at, f'\n{call_indent}# Recreate this every install so the desktop control always follows the newest Host build.\n{call_indent}install_host_restart_shortcut(home)\n')
+lines.insert(insert_at, f'\n{call_indent}install_host_restart_shortcut(home)\n')
 text = ''.join(lines)
-
 path.write_text(text, encoding="utf-8")
 compile(text, str(path), "exec")
 if 'install_host_restart_shortcut(home)' not in text:
     raise SystemExit('Host restart shortcut call missing after patch')
-print('Applied stable self-updating Restart Vex Host desktop shortcut')
+print('Applied Restart Vex Host desktop controls')
