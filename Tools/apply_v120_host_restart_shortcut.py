@@ -29,7 +29,7 @@ helper = r'''def install_host_restart_shortcut(home: Path) -> None:
     desktop = Path(os.environ.get("USERPROFILE") or str(Path.home())) / "Desktop"
     desktop.mkdir(parents=True, exist_ok=True)
     shortcut = desktop / "Restart Vex Host.lnk"
-    ps = f'''$ws = New-Object -ComObject WScript.Shell
+    ps = f"""$ws = New-Object -ComObject WScript.Shell
 $s = $ws.CreateShortcut({str(shortcut)!r})
 $s.TargetPath = $env:ComSpec
 $s.Arguments = '/c ""{str(helper_path)}""'
@@ -37,7 +37,7 @@ $s.WorkingDirectory = {str(home)!r}
 $s.IconLocation = {str(host_exe)!r} + ',0'
 $s.Description = 'Restart the currently installed Vex Windows Host'
 $s.Save()
-'''
+"""
     result = run_powershell(ps, timeout=20)
     if result.returncode != 0 or not shortcut.exists():
         raise RuntimeError("Could not create Restart Vex Host desktop shortcut")
