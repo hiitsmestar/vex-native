@@ -1,0 +1,121 @@
+name: Build Vex Art Remote Render v0.12
+
+on:
+  push:
+    branches: [ "build/v120-art-remote-render" ]
+    paths:
+      - "Tools/apply_v120_art_remote_render.py"
+      - "Tools/VexArtWorker.py"
+      - ".github/workflows/build-v120-art-remote-render.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Generate current v0.12 field sources
+        run: python Tools/ci_v120_full_ai_foundation.py
+
+      - name: Apply bounded art remote render patch
+        run: python Tools/apply_v120_art_remote_render.py
+
+      - name: Verify sources
+        shell: python
+        run: |
+          from pathlib import Path
+          import py_compile
+
+          remote = Path("Tools/VexRemoteSupport.py").read_text(encoding="utf-8")
+          worker = Path("Tools/VexArtWorker.py").read_text(encoding="utf-8")
+          for marker in [
+              'VERSION = "0.11.7.71"',
+              'def art_worker_command(',
+              'action == "art_worker_status"',
+              'action == "art_render_test"',
+              'action == "art_render"',
+              'art prompt must be 1-1200 characters',
+              'orientation must be portrait, landscape, or square',
+              '"image_name"',
+          ]:
+              assert marker in remote, marker
+          for marker in [
+              'VERSION = "0.10.1"',
+              '(384, 384) if cpu else (1024, 1024)',
+              '(4 if mode == "cpu" else 6)',
+              '"image_name": target.name',
+          ]:
+              assert marker in worker, marker
+          py_compile.compile("Tools/VexRemoteSupport.py", doraise=True)
+          py_compile.compile("Tools/VexArtWorker.py", doraise=True)
+          print("PASS bounded remote art render source contract")
+
+      - name: Build Vex Art Worker
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexArtWorker `
+            --collect-all requests `
+            --collect-all PIL `
+            Tools/VexArtWorker.py
+          if (!(Test-Path dist/VexArtWorker.exe)) { throw "VexArtWorker.exe missing" }
+
+      - name: Build Vex Remote Support
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name VexRemoteSupport `
+            --collect-all requests `
+            Tools/VexRemoteSupport.py
+          if (!(Test-Path dist/VexRemoteSupport.exe)) { throw "VexRemoteSupport.exe missing" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          @'
+          Vex Art Remote Render v0.12
+          ===========================
+
+          INCLUDED
+          - VexArtWorker v0.10.1
+          - VexRemoteSupport v0.11.7.71, based on the current v0.12 field runtime
+
+          WHAT CHANGED
+          - CPU-only art renders use a smaller bounded resolution/step profile for the 8 GB no-GPU field PC.
+          - Successful headless renders return only the generated image basename, dimensions, seed, mode, byte size, and elapsed time.
+          - Remote Support adds three narrow allowlisted commands: art_worker_status, art_render_test, and art_render.
+          - art_render accepts only prompt, orientation, and optional integer seed. It does not add shell access or arbitrary file paths.
+          - Images remain local under Pictures\VexRenders.
+
+          INSTALL
+          1. Close only the existing Vex Remote Support window and Vex Art Worker if open.
+          2. Extract this ZIP.
+          3. Put VexArtWorker.exe and VexRemoteSupport.exe together in the same folder.
+          4. Open VexRemoteSupport.exe and start the support session.
+          5. Vex can then run art status, a deterministic test render, or a bounded requested render through the existing relay.
+          '@ | Set-Content -Encoding UTF8 dist/README-VexArtRemoteRender-v0.12.txt
+
+          Compress-Archive `
+            -Path dist/VexArtWorker.exe,dist/VexRemoteSupport.exe,dist/README-VexArtRemoteRender-v0.12.txt `
+            -DestinationPath VexArtRemoteRender-v0.12.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexArtRemoteRender-v0.12
+          path: VexArtRemoteRender-v0.12.zip
+          if-no-files-found: error
+          retention-days: 14
