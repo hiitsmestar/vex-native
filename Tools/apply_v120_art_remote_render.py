@@ -7,7 +7,11 @@ worker_path = Path("Tools/VexArtWorker.py")
 remote = remote_path.read_text(encoding="utf-8")
 worker = worker_path.read_text(encoding="utf-8")
 
-if 'action == "art_render"' in remote and 'V120_ART_REMOTE_RENDER = "v0.12-art-remote-render-v2"' in remote:
+if (
+    'action == "art_render"' in remote
+    and 'V120_ART_REMOTE_RENDER = "v0.12-art-remote-render-v2"' in remote
+    and '"image_name"' in remote
+):
     print("v0.12 art remote render patch already applied")
     raise SystemExit(0)
 
@@ -100,6 +104,25 @@ def art_worker_command(args: list[str], timeout: int) -> dict:
 '''
     remote = remote.replace(execute_marker, helper + execute_marker, 1)
 
+# Older generated v0.12 source can already contain the art-worker helper from a
+# historical patch. In that case, upgrade its relay allowlist in place instead of
+# skipping it just because the helper function exists.
+helper_start = remote.find('def art_worker_command(')
+helper_end = remote.find(execute_marker, helper_start if helper_start >= 0 else 0)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("Remote Support art_worker_command helper missing")
+helper_text = remote[helper_start:helper_end]
+if '"image_name"' not in helper_text:
+    helper_text, changed = re.subn(
+        r'("image_bytes"\s*,)',
+        r'"image_name", \1',
+        helper_text,
+        count=1,
+    )
+    if not changed or '"image_name"' not in helper_text:
+        raise SystemExit("Could not add image_name to art relay allowlist")
+    remote = remote[:helper_start] + helper_text + remote[helper_end:]
+
 if 'action == "art_render"' not in remote:
     addition = '''    if action == "art_worker_status":\n        return {"art_worker": art_worker_command(["--headless-status"], timeout=240)}\n    if action == "art_render_test":\n        return {"art_worker": art_worker_command(["--render-test"], timeout=1500)}\n    if action == "art_render":\n        prompt = " ".join(str(command.get("prompt") or "").split()).strip()\n        if not prompt or len(prompt) > 1200:\n            return {"ok": False, "error": "art prompt must be 1-1200 characters"}\n        orientation = str(command.get("orientation") or "portrait").strip().lower()\n        aliases = {"1:1": "square", "wide": "landscape", "horizontal": "landscape", "vertical": "portrait"}\n        orientation = aliases.get(orientation, orientation)\n        if orientation not in {"portrait", "landscape", "square"}:\n            return {"ok": False, "error": "orientation must be portrait, landscape, or square"}\n        args = ["--prompt", prompt, "--orientation", orientation]\n        seed = command.get("seed")\n        if seed is not None:\n            try:\n                seed_value = int(seed)\n            except Exception:\n                return {"ok": False, "error": "seed must be a whole number"}\n            if seed_value < 0 or seed_value > 2147483647:\n                return {"ok": False, "error": "seed is out of range"}\n            args += ["--seed", str(seed_value)]\n        return {"art_worker": art_worker_command(args, timeout=1800)}\n'''
     art_start = remote.find('    if action == "art_health":')
@@ -117,6 +140,7 @@ checks = [
     (remote, 'action == "art_worker_status"'),
     (remote, 'action == "art_render_test"'),
     (remote, 'action == "art_render"'),
+    (remote, '"image_name"'),
     (worker, 'VERSION = "0.12.0-art-remote"'),
     (worker, '"image_name": target.name'),
 ]
