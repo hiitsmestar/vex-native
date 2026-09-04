@@ -1,0 +1,86 @@
+name: Build VexNative v0.12.6 Concise Grounded Dialogue
+
+on:
+  push:
+    branches: [ "build/v120-full-ai-foundation" ]
+    paths:
+      - "Tools/apply_v126_concise_grounded_dialogue_ios.py"
+      - "Tools/build_v126_ios_concise_grounded_dialogue.py"
+      - ".github/workflows/build-v126-concise-grounded-dialogue.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-concise-grounded-dialogue:
+    runs-on: macos-15
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble v0.12.5 plus concise grounded dialogue
+        run: python3 Tools/build_v126_ios_concise_grounded_dialogue.py
+      - name: Verify grounded concise source
+        run: |
+          grep -q 'V126_CONCISE_GROUNDED_DIALOGUE_IOS = "v0.12.6-concise-grounded-dialogue-v1"' VexNative/Core/PromptComposer.swift
+          grep -q 'conciseGroundedDialogueRules' VexNative/Core/PromptComposer.swift
+          grep -q 'enforceCompletedVisibleReply' VexNative/AppModel.swift
+          grep -q 'V126_STAGE_DIRECTION_LINE_FILTER' VexNative/AppModel.swift
+          grep -Eq 'webGroundedTurn \? 256 : 224|maxNewTokens = 224' VexNative/AppModel.swift
+      - name: Resolve local Swift package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=126 \
+            MARKETING_VERSION=0.12.6 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Add permissions and verify build identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Vex uses your local network to connect privately to paired Vex Bridge computers, local memory, tools, and voice providers." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string Vex uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Vex uses the microphone while voice mode is enabled so she can hear your conversation." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string Vex uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.12.6"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "126"
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.12.6-concise-grounded-dialogue.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.12.6-concise-grounded-dialogue.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.6-Concise-Grounded-Dialogue
+          path: VexNative-v0.12.6-concise-grounded-dialogue.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.12.6-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
