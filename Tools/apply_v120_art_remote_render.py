@@ -11,6 +11,7 @@ if (
     'action == "art_render"' in remote
     and 'V120_ART_REMOTE_RENDER = "v0.12-art-remote-render-v2"' in remote
     and '"image_name"' in remote
+    and 'ComfyUI output file escaped output directory' in worker
 ):
     print("v0.12 art remote render patch already applied")
     raise SystemExit(0)
@@ -47,6 +48,34 @@ for old, new in replacements.items():
 old_steps = 'workflow = _workflow(prompt, checkpoint, width, height, seed, 4 if test else 6)'
 if old_steps in worker:
     worker = worker.replace(old_steps, 'workflow = _workflow(prompt, checkpoint, width, height, seed, 3 if test else (4 if mode == "cpu" else 6))', 1)
+
+# Once ComfyUI reports an output image, it already exists on this same machine.
+# Read it directly from ComfyUI/output instead of asking localhost /view to serve
+# the file back over HTTP. On the 8 GB CPU field PC that redundant request can
+# stall for 60 seconds and turn a successful render into ReadTimeout.
+old_view = '''        params = {"filename": str(image_meta.get("filename") or ""), "subfolder": str(image_meta.get("subfolder") or ""), "type": str(image_meta.get("type") or "output")}
+        response = requests.get(f"{COMFY_BASE}/view", params=params, timeout=60)
+        response.raise_for_status()
+        data = response.content
+'''
+new_view = '''        filename = str(image_meta.get("filename") or "").strip()
+        subfolder = str(image_meta.get("subfolder") or "").strip()
+        if not filename:
+            raise RuntimeError("ComfyUI returned an empty output filename")
+        output_root = (COMFY_DIR / "output").resolve()
+        source = (output_root / subfolder / filename).resolve()
+        try:
+            source.relative_to(output_root)
+        except ValueError:
+            raise RuntimeError("ComfyUI output file escaped output directory")
+        if not source.is_file():
+            raise FileNotFoundError(f"ComfyUI output image was not found: {filename}")
+        data = source.read_bytes()
+'''
+if old_view in worker:
+    worker = worker.replace(old_view, new_view, 1)
+elif 'ComfyUI output file escaped output directory' not in worker:
+    raise SystemExit("Could not replace localhost /view image fetch")
 
 # Return only a basename over the relay; local full path remains private.
 if '"image_name": target.name' not in worker:
@@ -143,6 +172,7 @@ checks = [
     (remote, '"image_name"'),
     (worker, 'VERSION = "0.12.0-art-remote"'),
     (worker, '"image_name": target.name'),
+    (worker, 'ComfyUI output file escaped output directory'),
 ]
 for text, marker in checks:
     if marker not in text:
