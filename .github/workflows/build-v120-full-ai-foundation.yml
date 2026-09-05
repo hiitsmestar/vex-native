@@ -35,11 +35,13 @@ jobs:
       - name: Re-freeze and prove final Vex wants plus PC health artifact
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply learning lifecycle once then freeze without repatching
+      - name: Apply learning lifecycle and capability discovery then freeze without repatching
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           python Tools/apply_v120_learning_lifecycle.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_wants_capability_discovery.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:V120_POSTBUILD_SKIP_PATCHES = '1'
           python Tools/ci_v120_postbuild_wants_proof.py
@@ -73,6 +75,8 @@ jobs:
               'def _v120_record_resolution_lesson(',
               'def _v120_retire_orphaned_adaptive_upgrades(',
               'def _v120_retire_projects_for_closed_gaps(',
+              'V120_WANTS_CAPABILITY_DISCOVERY_v1',
+              'Always consider the access_gap class explicitly.',
               'V120_PC_HEALTH_AUTONOMY = "v0.12-pc-health-autonomy-v1"',
               'V120_IDLE_ROTATION = "v0.12-idle-productive-rotation-v1"',
               'def _v120_health_housekeeping_audit() -> dict:',
@@ -113,7 +117,7 @@ jobs:
           assert 'REMOTE_VERSION = "0.11.7.70"' in installer
           assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + event-driven lifecycle v3 + PC health autonomy final-artifact contract")
+          print("PASS v0.12 core + event-driven lifecycle v3 + Wants capability discovery + PC health autonomy final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v4
