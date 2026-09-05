@@ -18,9 +18,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -35,13 +35,15 @@ jobs:
       - name: Re-freeze and prove final Vex wants plus PC health artifact
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply learning lifecycle and capability discovery then freeze without repatching
+      - name: Apply learning lifecycle, capability discovery, and memory singleton then freeze without repatching
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           python Tools/apply_v120_learning_lifecycle.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/apply_v120_wants_capability_discovery.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_memory_singleton_fix.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:V120_POSTBUILD_SKIP_PATCHES = '1'
           python Tools/ci_v120_postbuild_wants_proof.py
@@ -83,6 +85,9 @@ jobs:
               'parsed.path == "/hardware/status"',
               'parsed.path == "/maintenance/status"',
               'parsed.path == "/maintenance/run"',
+              'V120_MEMORY_SINGLETON_GUARD = "v0.12-memory-singleton-port-guard-v1"',
+              'if not port_open and now - _MEMORY_WORKER_LAST_START > 3.0:',
+              'if attempt == 20 and not _memory_worker_port_open():',
               'close requires explicit confirmation',
               'Never claim a tool action happened unless a confirmed tool result says it did',
               'Do not invent memories, sources, files, device state, or completed actions',
@@ -117,10 +122,10 @@ jobs:
           assert 'REMOTE_VERSION = "0.11.7.70"' in installer
           assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + event-driven lifecycle v3 + Wants capability discovery + PC health autonomy final-artifact contract")
+          print("PASS v0.12 core + event-driven lifecycle v3 + Wants capability discovery + memory singleton + PC health autonomy final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Vex-Agent-Runtime-v0.12.0-FullAIFoundation
           path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
