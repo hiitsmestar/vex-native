@@ -34,6 +34,35 @@ jobs:
       - name: Apply bounded art remote render patch
         run: python Tools/apply_v120_art_remote_render.py
 
+      - name: Add GUI remote result watcher
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("Tools/VexArtWorker.py")
+          worker = path.read_text(encoding="utf-8")
+
+          if "def poll_remote_report()" not in worker:
+              run_async_marker = '    def run_async(fn, label: str) -> None:\n'
+              if run_async_marker not in worker:
+                  raise SystemExit("run_async marker missing")
+              watcher = '''    report_seen = {"mtime": 0.0}\n    try:\n        report_seen["mtime"] = REPORT_PATH.stat().st_mtime\n    except Exception:\n        pass\n\n    def poll_remote_report() -> None:\n        try:\n            mtime = REPORT_PATH.stat().st_mtime\n            if mtime > report_seen["mtime"]:\n                report_seen["mtime"] = mtime\n                result = json.loads(REPORT_PATH.read_text("utf-8"))\n                if isinstance(result, dict):\n                    show_result(result)\n        except Exception:\n            pass\n        root.after(1000, poll_remote_report)\n\n'''
+              worker = worker.replace(run_async_marker, watcher + run_async_marker, 1)
+
+          idle_marker = '    idle_loop()\n\n    def close() -> None:\n'
+          if '    poll_remote_report()\n' not in worker:
+              if idle_marker not in worker:
+                  raise SystemExit("idle_loop marker missing")
+              worker = worker.replace(idle_marker, '    idle_loop()\n    poll_remote_report()\n\n    def close() -> None:\n', 1)
+
+          old_status = '        status_var.set(f"Render finished in {result.get(\'elapsed_seconds\')}s" if result.get("ok") else f"Needs attention: {result.get(\'error_class\') or result.get(\'status\')}")\n'
+          if old_status in worker:
+              new_status = '''        if result.get("status") == "running":\n            status_var.set(str(result.get("message") or "Remote render running..."))\n        elif result.get("ok"):\n            status_var.set(f"Render finished in {result.get('elapsed_seconds')}s")\n        else:\n            status_var.set(f"Needs attention: {result.get('error_class') or result.get('status')}")\n'''
+              worker = worker.replace(old_status, new_status, 1)
+
+          path.write_text(worker, encoding="utf-8")
+          compile(worker, str(path), "exec")
+          print("PASS remote render GUI handoff watcher")
+
       - name: Verify sources
         shell: python
         run: |
@@ -53,13 +82,13 @@ jobs:
               'orientation must be portrait, landscape, or square',
           ]:
               assert marker in remote, marker
-          # Verify each sanitized relay field independently. Formatting of the
-          # allowlist is not part of the contract and may be wrapped/reordered.
           for field in ['mode', 'image_name', 'image_bytes', 'elapsed_seconds']:
               assert f'"{field}"' in remote, field
           for marker in [
               'VERSION = "0.12.0-art-remote"',
               '"image_name": target.name',
+              'def poll_remote_report()',
+              'root.after(1000, poll_remote_report)',
           ]:
               assert marker in worker, marker
           py_compile.compile("Tools/VexRemoteSupport.py", doraise=True)
@@ -100,6 +129,7 @@ jobs:
           - Current-runtime-safe patching: no stale .70/.10.0 version assumptions.
           - CPU-only art rendering remains bounded for the 8 GB no-GPU field PC.
           - Successful headless renders return only basename, dimensions, seed, mode, byte size, and elapsed time.
+          - The visible Art Worker now watches the shared local report and displays remote render progress/results automatically.
           - Remote Support adds narrow allowlisted art_worker_status, art_render_test, and art_render commands.
           - art_render accepts only prompt, orientation, and optional integer seed; no shell or arbitrary file path access.
           - Images remain local under Pictures\VexRenders.
