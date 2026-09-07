@@ -45,6 +45,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/apply_v120_memory_singleton_fix.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/refreeze_v120_memory_worker.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:V120_POSTBUILD_SKIP_PATCHES = '1'
           python Tools/ci_v120_postbuild_wants_proof.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -118,11 +120,18 @@ jobs:
           ]:
               assert marker in remote, marker
 
+          for marker in [
+              'VERSION = "0.11.4"',
+              'V120_MEMORY_WINDOWS_FILE_LOCK = "v0.12-memory-windows-file-lock-v4"',
+              'msvcrt.LK_NBLCK',
+              'file lock already held',
+          ]:
+              assert marker in worker, marker
+
           assert 'BUNDLE_VERSION = "0.12.0"' in installer
           assert 'REMOTE_VERSION = "0.11.7.70"' in installer
-          assert 'VERSION = "0.11.4"' in worker
           assert Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip").stat().st_size > 100_000
-          print("PASS v0.12 core + event-driven lifecycle v3 + Wants capability discovery + memory singleton + PC health autonomy final-artifact contract")
+          print("PASS v0.12 core + event-driven lifecycle v3 + Wants capability discovery + frozen memory singleton + PC health autonomy final-artifact contract")
 
       - name: Upload v0.12.0 Full AI Runtime
         uses: actions/upload-artifact@v7
