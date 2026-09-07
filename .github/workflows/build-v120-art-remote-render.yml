@@ -118,7 +118,7 @@ jobs:
               assert f'"{field}"' in remote, field
           for marker in [
               'VERSION = "0.12.0-art-remote"',
-              'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v1"',
+              'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v2"',
               'multiple distinct adult people',
               'each person\'s described traits',
               'do not merge identities',
