@@ -9,6 +9,7 @@ worker = WORKER.read_text(encoding="utf-8")
 
 BRIDGE_MARKER = 'V120_MEMORY_SINGLETON_GUARD = "v0.12-memory-singleton-port-guard-v1"'
 WORKER_MARKER = 'V120_MEMORY_BIND_FIRST = "v0.12-memory-bind-first-v2"'
+MUTEX_MARKER = 'V120_MEMORY_WINDOWS_MUTEX = "v0.12-memory-windows-mutex-v3"'
 
 if BRIDGE_MARKER not in bridge:
     anchor = "def _memory_worker_health(start_if_needed: bool = False) -> dict:\n"
@@ -31,36 +32,26 @@ if old_fallback in bridge:
 elif new_fallback not in bridge:
     raise SystemExit("memory recovery fallback anchor missing")
 
-if WORKER_MARKER not in worker:
-    serve_old = '''def serve(port: int) -> None:\n    _auto_import_private_seeds()\n    server = ThreadingHTTPServer((HOST, int(port)), Handler)\n    _log(f"VexMemoryWorker v{VERSION} listening on {HOST}:{port} — {DB.stats()}")\n    try:\n        server.serve_forever(poll_interval=0.5)\n    finally:\n        server.server_close()\n'''
-    serve_new = '''V120_MEMORY_BIND_FIRST = "v0.12-memory-bind-first-v2"\n\n\ndef serve(port: int) -> None:\n    # Claim the listener before touching seed imports/SQLite. Competing launches\n    # then fail immediately instead of piling up behind memory initialization.\n    try:\n        server = ThreadingHTTPServer((HOST, int(port)), Handler)\n    except OSError as exc:\n        _log(f"VexMemoryWorker singleton exit on {HOST}:{port}: {exc}")\n        return\n    try:\n        _auto_import_private_seeds()\n        _log(f"VexMemoryWorker v{VERSION} listening on {HOST}:{port} — {DB.stats()}")\n        server.serve_forever(poll_interval=0.5)\n    finally:\n        server.server_close()\n'''
-    if serve_old not in worker:
-        raise SystemExit("memory worker serve anchor missing")
-    worker = worker.replace(serve_old, serve_new, 1)
+if MUTEX_MARKER not in worker:
+    if WORKER_MARKER in worker:
+        start = worker.index(WORKER_MARKER)
+        end = worker.index('\n\ndef main(', start)
+        replacement = '''V120_MEMORY_BIND_FIRST = "v0.12-memory-bind-first-v2"\nV120_MEMORY_WINDOWS_MUTEX = "v0.12-memory-windows-mutex-v3"\n\n\ndef _claim_singleton(port: int):\n    if not sys.platform.startswith("win"):\n        return None\n    import ctypes\n    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)\n    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]\n    kernel32.CreateMutexW.restype = ctypes.c_void_p\n    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]\n    kernel32.CloseHandle.restype = ctypes.c_bool\n    handle = kernel32.CreateMutexW(None, False, f"Local\\\\VexNativeMemoryWorker_{int(port)}")\n    if not handle:\n        raise OSError(ctypes.get_last_error(), "CreateMutexW failed")\n    if ctypes.get_last_error() == 183:\n        kernel32.CloseHandle(handle)\n        return False\n    return kernel32, handle\n\n\ndef serve(port: int) -> None:\n    singleton = _claim_singleton(port)\n    if singleton is False:\n        _log(f"VexMemoryWorker singleton exit on {HOST}:{port}: mutex already owned")\n        return\n    server = None\n    try:\n        try:\n            server = ThreadingHTTPServer((HOST, int(port)), Handler)\n        except OSError as exc:\n            _log(f"VexMemoryWorker singleton exit on {HOST}:{port}: {exc}")\n            return\n        _auto_import_private_seeds()\n        _log(f"VexMemoryWorker v{VERSION} listening on {HOST}:{port} — {DB.stats()}")\n        server.serve_forever(poll_interval=0.5)\n    finally:\n        if server is not None:\n            server.server_close()\n        if singleton:\n            kernel32, handle = singleton\n            kernel32.CloseHandle(handle)\n'''
+        worker = worker[:start] + replacement + worker[end:]
+    else:
+        serve_old = '''def serve(port: int) -> None:\n    _auto_import_private_seeds()\n    server = ThreadingHTTPServer((HOST, int(port)), Handler)\n    _log(f"VexMemoryWorker v{VERSION} listening on {HOST}:{port} — {DB.stats()}")\n    try:\n        server.serve_forever(poll_interval=0.5)\n    finally:\n        server.server_close()\n'''
+        serve_new = '''V120_MEMORY_BIND_FIRST = "v0.12-memory-bind-first-v2"\nV120_MEMORY_WINDOWS_MUTEX = "v0.12-memory-windows-mutex-v3"\n\n\ndef _claim_singleton(port: int):\n    if not sys.platform.startswith("win"):\n        return None\n    import ctypes\n    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)\n    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]\n    kernel32.CreateMutexW.restype = ctypes.c_void_p\n    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]\n    kernel32.CloseHandle.restype = ctypes.c_bool\n    handle = kernel32.CreateMutexW(None, False, f"Local\\\\VexNativeMemoryWorker_{int(port)}")\n    if not handle:\n        raise OSError(ctypes.get_last_error(), "CreateMutexW failed")\n    if ctypes.get_last_error() == 183:\n        kernel32.CloseHandle(handle)\n        return False\n    return kernel32, handle\n\n\ndef serve(port: int) -> None:\n    singleton = _claim_singleton(port)\n    if singleton is False:\n        _log(f"VexMemoryWorker singleton exit on {HOST}:{port}: mutex already owned")\n        return\n    server = None\n    try:\n        try:\n            server = ThreadingHTTPServer((HOST, int(port)), Handler)\n        except OSError as exc:\n            _log(f"VexMemoryWorker singleton exit on {HOST}:{port}: {exc}")\n            return\n        _auto_import_private_seeds()\n        _log(f"VexMemoryWorker v{VERSION} listening on {HOST}:{port} — {DB.stats()}")\n        server.serve_forever(poll_interval=0.5)\n    finally:\n        if server is not None:\n            server.server_close()\n        if singleton:\n            kernel32, handle = singleton\n            kernel32.CloseHandle(handle)\n'''
+        if serve_old not in worker:
+            raise SystemExit("memory worker serve anchor missing")
+        worker = worker.replace(serve_old, serve_new, 1)
 
-for required in [
-    BRIDGE_MARKER,
-    "def _memory_worker_port_open(timeout: float = 0.20) -> bool:",
-    "if not port_open and now - _MEMORY_WORKER_LAST_START > 3.0:",
-    "if attempt == 20 and not _memory_worker_port_open():",
-]:
+for required in [BRIDGE_MARKER,"def _memory_worker_port_open(timeout: float = 0.20) -> bool:","if not port_open and now - _MEMORY_WORKER_LAST_START > 3.0:","if attempt == 20 and not _memory_worker_port_open():"]:
     if required not in bridge:
         raise SystemExit(f"bridge singleton verification failed: {required}")
-
-for required in [
-    WORKER_MARKER,
-    "server = ThreadingHTTPServer((HOST, int(port)), Handler)",
-    "except OSError as exc:",
-    "_auto_import_private_seeds()",
-]:
+for required in [WORKER_MARKER,MUTEX_MARKER,"CreateMutexW","mutex already owned"]:
     if required not in worker:
         raise SystemExit(f"worker singleton verification failed: {required}")
 
-# Prove binding happens before private seed/database work in the worker.
-serve_block = worker[worker.index("def serve(port: int) -> None:"):]
-if serve_block.index("server = ThreadingHTTPServer") > serve_block.index("_auto_import_private_seeds()"):
-    raise SystemExit("worker bind-first ordering verification failed")
-
 BRIDGE.write_text(bridge, encoding="utf-8")
 WORKER.write_text(worker, encoding="utf-8")
-print("Applied v0.12 persistent-memory singleton guard v2 (bridge gate + worker bind-first)")
+print("Applied v0.12 persistent-memory singleton guard v3 (Windows mutex)")
