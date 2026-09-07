@@ -2,9 +2,10 @@ name: Build Vex Art Remote Render v0.12
 
 on:
   push:
-    branches: [ "build/v120-art-remote-render" ]
+    branches: [ "build/v120-art-remote-render", "fix/v120-art-multisubject-identity" ]
     paths:
       - "Tools/apply_v120_art_remote_render.py"
+      - "Tools/apply_v120_art_multisubject_identity_fix.py"
       - "Tools/VexArtWorker.py"
       - ".github/workflows/build-v120-art-remote-render.yml"
   workflow_dispatch:
@@ -33,6 +34,9 @@ jobs:
 
       - name: Apply bounded art remote render patch
         run: python Tools/apply_v120_art_remote_render.py
+
+      - name: Apply multi-subject identity scoping fix
+        run: python Tools/apply_v120_art_multisubject_identity_fix.py
 
       - name: Add GUI remote result watcher
         shell: python
@@ -63,6 +67,34 @@ jobs:
           compile(worker, str(path), "exec")
           print("PASS remote render GUI handoff watcher")
 
+      - name: Verify multi-subject prompt behavior
+        shell: python
+        run: |
+          import importlib.util
+          from pathlib import Path
+          path = Path("Tools/VexArtWorker.py")
+          spec = importlib.util.spec_from_file_location("vex_art_worker_ci", path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          compiled, negative = module._smart_prompt(
+              "two adult women, first woman has black hair and a red jacket, second woman has blonde hair and a blue dress, full body photograph",
+              "portrait",
+          )
+          assert "multiple distinct adult people" in compiled
+          assert "single adult woman" not in compiled
+          assert "multiple people" not in negative.lower()
+          assert "each person's described traits" in compiled
+          assert "do not merge identities" in compiled
+
+          solo, solo_negative = module._smart_prompt(
+              "one adult woman with black hair, black platform sandals, full body photograph",
+              "portrait",
+          )
+          assert "single adult woman" in solo
+          assert solo_negative
+          print("PASS multi-subject prompt keeps requested count and removes anti-group negative")
+
       - name: Verify sources
         shell: python
         run: |
@@ -86,6 +118,10 @@ jobs:
               assert f'"{field}"' in remote, field
           for marker in [
               'VERSION = "0.12.0-art-remote"',
+              'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v1"',
+              'multiple distinct adult people',
+              'each person\'s described traits',
+              'do not merge identities',
               '"image_name": target.name',
               'def poll_remote_report()',
               'root.after(1000, poll_remote_report)',
@@ -118,7 +154,7 @@ jobs:
         shell: pwsh
         run: |
           @'
-          Vex Art Remote Render v0.12 v2
+          Vex Art Remote Render v0.12 v3
           ==============================
 
           INCLUDED
@@ -127,11 +163,12 @@ jobs:
 
           WHAT CHANGED
           - Current-runtime-safe patching: no stale .70/.10.0 version assumptions.
-          - CPU-only art rendering remains bounded for the 8 GB no-GPU field PC.
+          - Multi-subject requests no longer inherit the historical single-woman scaffold.
+          - Multi-subject requests no longer carry "multiple people" in the negative prompt.
+          - Subject-specific appearance/outfit language stays in the original per-subject wording instead of being hoisted globally.
+          - CPU-only art rendering remains bounded for the field PC.
           - Successful headless renders return only basename, dimensions, seed, mode, byte size, and elapsed time.
-          - The visible Art Worker now watches the shared local report and displays remote render progress/results automatically.
-          - Remote Support adds narrow allowlisted art_worker_status, art_render_test, and art_render commands.
-          - art_render accepts only prompt, orientation, and optional integer seed; no shell or arbitrary file path access.
+          - The visible Art Worker watches the shared local report and displays remote render progress/results automatically.
           - Images remain local under Pictures\VexRenders.
 
           INSTALL
