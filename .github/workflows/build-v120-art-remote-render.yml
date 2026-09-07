@@ -6,6 +6,7 @@ on:
     paths:
       - "Tools/apply_v120_art_remote_render.py"
       - "Tools/apply_v120_art_multisubject_identity_fix.py"
+      - "Tools/apply_v120_art_cpu_startup_fix.py"
       - "Tools/VexArtWorker.py"
       - ".github/workflows/build-v120-art-remote-render.yml"
   workflow_dispatch:
@@ -37,6 +38,9 @@ jobs:
 
       - name: Apply multi-subject identity scoping fix
         run: python Tools/apply_v120_art_multisubject_identity_fix.py
+
+      - name: Apply CPU Comfy startup fix
+        run: python Tools/apply_v120_art_cpu_startup_fix.py
 
       - name: Add GUI remote result watcher
         shell: python
@@ -119,9 +123,13 @@ jobs:
           for marker in [
               'VERSION = "0.12.0-art-remote"',
               'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v2"',
+              'V120_ART_CPU_STARTUP = "v0.12-cpu-startup-v1"',
               'multiple distinct adult people',
               'each person\'s described traits',
               'do not merge identities',
+              'cpu-safe',
+              '--disable-all-custom-nodes',
+              'invalid ComfyUI launch contract',
               '"image_name": target.name',
               'def poll_remote_report()',
               'root.after(1000, poll_remote_report)',
@@ -154,7 +162,7 @@ jobs:
         shell: pwsh
         run: |
           @'
-          Vex Art Remote Render v0.12 v3
+          Vex Art Remote Render v0.12 v4
           ==============================
 
           INCLUDED
@@ -166,16 +174,18 @@ jobs:
           - Multi-subject requests no longer inherit the historical single-woman scaffold.
           - Multi-subject requests no longer carry "multiple people" in the negative prompt.
           - Subject-specific appearance/outfit language stays in the original per-subject wording instead of being hoisted globally.
+          - CPU ComfyUI launch no longer combines mutually exclusive --cpu and --lowvram modes.
+          - CPU startup gets a bounded custom-node-disabled first attempt plus safe fallback profiles.
           - CPU-only art rendering remains bounded for the field PC.
           - Successful headless renders return only basename, dimensions, seed, mode, byte size, and elapsed time.
           - The visible Art Worker watches the shared local report and displays remote render progress/results automatically.
           - Images remain local under Pictures\VexRenders.
 
           INSTALL
-          1. Close only existing Vex Remote Support and Vex Art Worker windows.
+          1. Close only existing Vex Art Worker windows if needed.
           2. Extract this ZIP.
-          3. Put VexArtWorker.exe and VexRemoteSupport.exe together in the same folder.
-          4. Open VexRemoteSupport.exe and start the support session.
+          3. Put VexArtWorker.exe beside the existing VexRemoteSupport.exe.
+          4. Keep the existing live Remote Support session running.
           5. Remote art status/test/render can then use the existing bounded relay.
           '@ | Set-Content -Encoding UTF8 dist/README-VexArtRemoteRender-v0.12.txt
 
