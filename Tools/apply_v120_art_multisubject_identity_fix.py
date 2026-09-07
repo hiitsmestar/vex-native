@@ -51,10 +51,14 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
     parts.append("photorealistic fashion photograph" if any(k in low for k in ("photo", "photoreal", "realistic")) else "photorealistic photograph")
 
     wants_full = any(k in low for k in ("full body", "full-body", "head to toe", "feet visible", "visible feet", "platform sandals", "shoes"))
+    framing_guard = (
+        "complete visible heads and faces, eyes visible, hair visible, faces fully inside the frame, "
+        "headroom above hair, living human people, not mannequins, not faceless outfit displays"
+    )
     if multi:
-        framing = "multiple distinct adult people"
+        framing = "multiple distinct adult people, " + framing_guard
         if wants_full:
-            framing += ", full bodies visible, head to toe in frame"
+            framing += ", full bodies visible, head to toe in frame, feet visible, shoes visible, enough vertical space for heads and feet"
         framing += ", clearly different faces, clearly different hair, distinct body shapes, distinct outfits, no cloned subjects"
         parts.append(framing)
 
@@ -65,6 +69,7 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
         parts.append(remainder.strip(" ,"))
         parts.append("each person's described traits, hair, clothing, body, and accessories apply only to that person")
         parts.append("preserve subject count and subject order; do not merge identities")
+        parts.append("camera framed like a real portrait of people, not a product catalog crop")
     else:
         # Solo mode keeps the older useful attribute reinforcement behavior.
         if re.search(r"\b(man|male|guy)\b", low) and not re.search(r"\b(woman|female|girl)\b", low):
@@ -73,6 +78,7 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
             subject = "single adult woman"
         else:
             subject = "single adult person"
+        subject += ", " + framing_guard
         if wants_full:
             subject += ", full body, head to toe in frame, both arms visible, both hands visible, both legs visible, both feet visible, centered standing pose"
         parts.append(subject)
@@ -103,6 +109,7 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
         remainder = " ".join(remainder.replace(", ,", ",").split()).strip(" ,")
         if remainder:
             parts.append(remainder)
+        parts.append("camera framed like a real portrait of a person, not a product catalog crop")
 
     if "background" not in low and "backdrop" not in low:
         parts.append("simple seamless neutral backdrop")
@@ -113,13 +120,14 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
     compiled = ", ".join(p for p in parts if p)
 
     negative = REALISM_NEGATIVE + ", " + SMART_NEGATIVE
+    negative += ", mannequin, dress form, doll, headless, cropped head, cut off head, missing head, faceless, blank face, face out of frame, no face, body without head, product mannequin, clothing catalog mannequin, empty clothing display"
     if multi:
         # The historical negative contained 'multiple people', which directly fought
         # every requested group scene. Remove only that phrase and strengthen anti-clone
         # language instead.
         negative = re.sub(r"(?:^|,\s*)multiple people(?:,|$)", ", ", negative, flags=re.IGNORECASE)
         negative = re.sub(r",\s*,", ",", negative).strip(" ,")
-        negative += ", cloned face, same face on different people, duplicate identity, merged bodies"
+        negative += ", cloned face, same face on different people, duplicate identity, merged bodies, fused people"
     return compiled, negative
 '''
 
@@ -136,4 +144,4 @@ else:
 
 compile(text, str(path), "exec")
 path.write_text(text, encoding="utf-8")
-print("Applied v0.12 multi-subject identity scoping fix v2")
+print("Applied v0.12 multi-subject identity scoping fix v2 with field framing guardrails")
