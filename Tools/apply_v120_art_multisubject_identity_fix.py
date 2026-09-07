@@ -33,17 +33,17 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
 
     low = raw.lower()
 
-    # Detect explicit multi-subject intent conservatively. This is intentionally lexical:
-    # the art worker must remain local, deterministic and cheap on the field PC.
+    # Detect explicit multi-subject intent conservatively. Allow ordinary phrases such
+    # as "two adult women" as well as "two women", "two different people", etc.
     multi_patterns = (
-        r"\b(two|three|four|five|six)\s+(people|persons|adults|women|men|girls|guys|subjects|characters)\b",
+        r"\b(two|three|four|five|six|2|3|4|5|6)\s+(?:(?:distinct|different)\s+)?(?:adult\s+)?(people|persons|adults|women|men|girls|guys|subjects|characters)\b",
         r"\b(couple|pair|group|trio|crowd)\b",
-        r"\b(two|three|four|five|six)\s+distinct\b",
+        r"\b(first|1st)\s+(woman|man|person|subject|character)\b.*\b(second|2nd)\s+(woman|man|person|subject|character)\b",
         r"\bwoman\s+and\s+(a\s+)?man\b",
         r"\bman\s+and\s+(a\s+)?woman\b",
         r"\bwomen\s+and\s+men\b",
         r"\bmen\s+and\s+women\b",
-        r"\bwith\s+(another|two|three|four)\s+(adult|woman|man|person|people)\b",
+        r"\bwith\s+(another|two|three|four)\s+(?:adult\s+)?(woman|man|person|people)\b",
     )
     multi = any(re.search(p, low) for p in multi_patterns)
 
@@ -126,11 +126,14 @@ def _smart_prompt(user_prompt: str, orientation: str = "portrait") -> tuple[str,
 text = replace_function(text, "_smart_prompt", replacement)
 
 # Contract marker used by CI and field diagnostics.
-marker = 'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v1"\n'
+marker = 'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v2"\n'
 if "V120_ART_MULTISUBJECT_IDENTITY" not in text:
     version_line_end = text.find("\n", text.find("VERSION = ")) + 1
     text = text[:version_line_end] + marker + text[version_line_end:]
+else:
+    import re
+    text = re.sub(r'V120_ART_MULTISUBJECT_IDENTITY = "[^"]+"', 'V120_ART_MULTISUBJECT_IDENTITY = "v0.12-multisubject-identity-v2"', text, count=1)
 
 compile(text, str(path), "exec")
 path.write_text(text, encoding="utf-8")
-print("Applied v0.12 multi-subject identity scoping fix")
+print("Applied v0.12 multi-subject identity scoping fix v2")
