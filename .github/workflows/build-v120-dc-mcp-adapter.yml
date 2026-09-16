@@ -1,8 +1,8 @@
-name: Build Vex v0.12 Desktop Commander Adapter
+name: Build Vex v0.12 Dual Brain + Desktop Commander
 
 on:
   push:
-    branches: [ "feature/dc-mcp-adapter" ]
+    branches: [ "feature/dual-brain-router" ]
     paths:
       - "Tools/**"
       - "Bridge/**"
@@ -34,7 +34,7 @@ jobs:
       - name: Re-freeze proven post-build runtime
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply final lifecycle and Desktop Commander provider
+      - name: Apply final lifecycle, Desktop Commander, and dual-brain routing
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -46,13 +46,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/apply_v120_desktop_commander_adapter.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_dual_brain_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/refreeze_v120_memory_worker.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:V120_POSTBUILD_SKIP_PATCHES = '1'
           python Tools/ci_v120_postbuild_wants_proof.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify Desktop Commander contract
+      - name: Verify Desktop Commander and dual-brain contracts
         shell: python
         run: |
           from pathlib import Path
@@ -64,19 +66,26 @@ jobs:
               'tool.startswith("dc.")',
               '"dc.list_processes"',
               'provider": "desktop-commander-mcp"',
+              'V120_DUAL_BRAIN_ROUTER = "v0.12-dual-brain-v1"',
+              'V120_FAST_MODEL = "vex-qwen3-4b:latest"',
+              'V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"',
+              'def _v120_deep_chat',
+              'def _v120_route_cognition',
+              '_v120_route_cognition(history, message',
           ]
           for marker in required:
               assert marker in bridge, marker
           for marker in ["desktop-commander.cmd", "read-only", "127.0.0.1"]:
               assert marker in adapter, marker
+          compile(bridge, "Bridge/vex_bridge.py", "exec")
           z = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
           assert z.exists() and z.stat().st_size > 100_000
-          print("PASS bounded Desktop Commander MCP provider + v0.12 artifact")
+          print("PASS Desktop Commander + bounded 4B/35B router + v0.12 artifact")
 
-      - name: Upload Desktop Commander integrated runtime
+      - name: Upload dual-brain Desktop Commander runtime
         uses: actions/upload-artifact@v7
         with:
-          name: Vex-Agent-Runtime-v0.12.0-DesktopCommander
+          name: Vex-Agent-Runtime-v0.12.0-DualBrain-DesktopCommander
           path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
           if-no-files-found: error
           retention-days: 14
