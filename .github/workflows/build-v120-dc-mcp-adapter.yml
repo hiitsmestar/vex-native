@@ -1,0 +1,82 @@
+name: Build Vex v0.12 Desktop Commander Adapter
+
+on:
+  push:
+    branches: [ "feature/dc-mcp-adapter" ]
+    paths:
+      - "Tools/**"
+      - "Bridge/**"
+      - ".github/workflows/build-v120-dc-mcp-adapter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build cumulative Full AI Runtime
+        run: python Tools/ci_v120_full_ai_foundation.py
+
+      - name: Re-freeze proven post-build runtime
+        run: python Tools/ci_v120_postbuild_wants_proof.py
+
+      - name: Apply final lifecycle and Desktop Commander provider
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python Tools/apply_v120_learning_lifecycle.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_wants_capability_discovery.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_memory_singleton_fix.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_desktop_commander_adapter.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/refreeze_v120_memory_worker.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:V120_POSTBUILD_SKIP_PATCHES = '1'
+          python Tools/ci_v120_postbuild_wants_proof.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Desktop Commander contract
+        shell: python
+        run: |
+          from pathlib import Path
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          adapter = Path("Tools/VexDesktopCommanderAdapter.mjs").read_text(encoding="utf-8")
+          required = [
+              'V120_DC_ADAPTER = "v0.12-desktop-commander-mcp-v1"',
+              '"desktop_commander"',
+              'tool.startswith("dc.")',
+              '"dc.list_processes"',
+              'provider": "desktop-commander-mcp"',
+          ]
+          for marker in required:
+              assert marker in bridge, marker
+          for marker in ["desktop-commander.cmd", "read-only", "127.0.0.1"]:
+              assert marker in adapter, marker
+          z = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
+          assert z.exists() and z.stat().st_size > 100_000
+          print("PASS bounded Desktop Commander MCP provider + v0.12 artifact")
+
+      - name: Upload Desktop Commander integrated runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-DesktopCommander
+          path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
+          if-no-files-found: error
+          retention-days: 14
