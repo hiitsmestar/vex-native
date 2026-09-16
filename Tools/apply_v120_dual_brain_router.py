@@ -5,15 +5,20 @@ from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
-MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-dual-brain-v1"'
+MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-dual-brain-v2"'
 if MARKER in text:
     print("Dual-brain router already applied")
     raise SystemExit(0)
 
-if "def _ollama_chat(" not in text:
+old_sig = "def _ollama_chat("
+if old_sig not in text:
     raise SystemExit("Ollama cognition function missing")
 if "def _ollama_models()" not in text:
     raise SystemExit("Ollama model inventory function missing")
+
+# Rename the proven fast implementation. Existing callers resolve the new wrapper
+# at runtime, so this survives later v0.12 changes to the /llm/chat call site.
+text = text.replace(old_sig, "def _v120_fast_ollama_chat(", 1)
 
 anchor = "\n\n_BROWSER_CONTROL_LOCK = threading.Lock()"
 if anchor not in text:
@@ -21,34 +26,19 @@ if anchor not in text:
 
 helpers = r'''
 
-V120_DUAL_BRAIN_ROUTER = "v0.12-dual-brain-v1"
+V120_DUAL_BRAIN_ROUTER = "v0.12-dual-brain-v2"
 V120_FAST_MODEL = "vex-qwen3-4b:latest"
 V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"
+V120_DEEP_URL = os.environ.get("VEX_DEEP_BRAIN_URL", "http://127.0.0.1:11535").rstrip("/")
 
 
-def _v120_running_ollama_models() -> list[str]:
+def _v120_deep_health(timeout: float = 0.8) -> bool:
     try:
         import requests
-        response = requests.get(f"{OLLAMA_BASE}/api/ps", timeout=1.5)
-        if response.status_code >= 400:
-            return []
-        payload = response.json()
-        names = []
-        for item in payload.get("models") or []:
-            name = str(item.get("name") or item.get("model") or "").strip()
-            if name:
-                names.append(name)
-        return names
+        response = requests.get(f"{V120_DEEP_URL}/health", timeout=timeout)
+        return response.status_code < 400 and str((response.json() or {}).get("status") or "").lower() == "ok"
     except Exception:
-        return []
-
-
-def _v120_deep_available() -> bool:
-    return V120_DEEP_MODEL.lower() in {name.lower() for name in _ollama_models()}
-
-
-def _v120_deep_warm() -> bool:
-    return V120_DEEP_MODEL.lower() in {name.lower() for name in _v120_running_ollama_models()}
+        return False
 
 
 def _v120_deep_explicit(message: str) -> bool:
@@ -76,103 +66,69 @@ def _v120_complex_for_warm_deep(message: str) -> bool:
 
 
 def _v120_deep_chat(history: list[dict], message: str, context: dict | None = None) -> tuple[str, str] | None:
-    if not _v120_deep_available():
+    if not _v120_deep_health():
         return None
     context = context if isinstance(context, dict) else {}
-    persona = str(context.get("persona") or "").strip()[:1400]
-    user_profile = str(context.get("user_profile") or "").strip()[:900]
-    state = context.get("state") if isinstance(context.get("state"), dict) else {}
-    state_bits = []
-    for key in ("mood", "outfit", "location", "scene"):
-        value = str(state.get(key) or "").strip()
-        if value:
-            state_bits.append(f"{key}: {value[:350]}")
-
+    persona = str(context.get("persona") or "").strip()[:1200]
+    user_profile = str(context.get("user_profile") or "").strip()[:700]
     system = VEX_COGNITION_SYSTEM + """
 
 DEEP COGNITION MODE
-Reason carefully and solve the current request. Preserve established Vex/Star continuity supplied here, but do not invent facts, tool results, memories, or completed actions. Prefer a correct concrete answer over a long answer. This is a slow high-capability pass, so focus on the hard part of the request.
+Solve the current request carefully. Preserve supplied Vex/Star continuity, but never invent facts, memories, tool results, or completed actions. Prefer a correct concrete answer over a long answer.
 """
     if persona:
         system += "\nVEX PERSONA\n" + persona
     if user_profile:
         system += "\nSTAR / RELATIONSHIP CONTEXT\n" + user_profile
-    if state_bits:
-        system += "\nCURRENT VEX STATE\n" + "\n".join(state_bits)
-
-    safe_messages = [{"role": "system", "content": system}]
-    for item in history[-4:]:
+    messages = [{"role": "system", "content": system}]
+    for item in history[-3:]:
         if not isinstance(item, dict):
             continue
         role = str(item.get("role") or "").lower().strip()
         content = str(item.get("content") or "").strip()
         if role in {"user", "assistant"} and content:
-            safe_messages.append({"role": role, "content": content[:500]})
-    safe_messages.append({"role": "user", "content": str(message or "").strip()[:2400]})
-
+            messages.append({"role": role, "content": content[:400]})
+    messages.append({"role": "user", "content": str(message or "").strip()[:1800]})
     try:
         import requests
         response = requests.post(
-            f"{OLLAMA_BASE}/api/chat",
-            json={
-                "model": V120_DEEP_MODEL,
-                "messages": safe_messages,
-                "stream": False,
-                "think": False,
-                "keep_alive": "10m",
-                "options": {
-                    "temperature": 0.58,
-                    "top_p": 0.86,
-                    "num_ctx": 2048,
-                    "num_predict": 160,
-                    "repeat_penalty": 1.05,
-                },
-            },
-            timeout=420,
+            f"{V120_DEEP_URL}/v1/chat/completions",
+            json={"model": V120_DEEP_MODEL, "messages": messages, "max_tokens": 96, "temperature": 0.5},
+            timeout=300,
         )
         response.raise_for_status()
         payload = response.json()
-        raw = str(((payload.get("message") or {}).get("content")) or "")
+        choices = payload.get("choices") or []
+        raw = str((((choices[0] if choices else {}).get("message") or {}).get("content")) or "")
         reply = _strip_reasoning_markup(raw)
-        if not reply:
-            return None
-        return reply[:12000], V120_DEEP_MODEL
+        return (reply[:12000], V120_DEEP_MODEL) if reply else None
     except Exception as exc:
         print(f"[cognition] deep model failed, falling back: {exc}", flush=True)
         return None
 
 
-def _v120_route_cognition(history: list[dict], message: str, context: dict | None = None) -> tuple[str, str] | None:
-    use_deep = _v120_deep_explicit(message) or (_v120_deep_warm() and _v120_complex_for_warm_deep(message))
-    if use_deep:
-        result = _v120_deep_chat(history, message, context)
-        if result is not None:
-            return result
-    return _ollama_chat(history, message, context)
+def _ollama_chat(history: list[dict], message: str, context: dict | None = None) -> tuple[str, str] | None:
+    # Only the user-facing path supplies context. Background cognition stays on
+    # the proven fast model and cannot accidentally wake the expensive deep brain.
+    if isinstance(context, dict):
+        use_deep = _v120_deep_explicit(message) or (_v120_deep_health() and _v120_complex_for_warm_deep(message))
+        if use_deep:
+            result = _v120_deep_chat(history, message, context)
+            if result is not None:
+                return result
+    return _v120_fast_ollama_chat(history, message, context)
 
 '''
 text = text.replace(anchor, helpers + anchor, 1)
 
-old = "                result = _ollama_chat(history, message, context)\n"
-new = "                result = _v120_route_cognition(history, message, context)\n"
-if old in text:
-    text = text.replace(old, new, 1)
-else:
-    old2 = "                result = _ollama_chat(history, message)\n"
-    new2 = "                result = _v120_route_cognition(history, message, None)\n"
-    if old2 in text:
-        text = text.replace(old2, new2, 1)
-    else:
-        raise SystemExit("Cognition route callsite missing")
-
 status_marker = '                "available_models": _ollama_models(),\n'
 if status_marker in text:
-    status_new = status_marker + '                "deep_model": V120_DEEP_MODEL,\n                "deep_model_available": _v120_deep_available(),\n                "deep_model_warm": _v120_deep_warm(),\n'
+    status_new = status_marker + '                "deep_model": V120_DEEP_MODEL,\n                "deep_model_available": _v120_deep_health(),\n'
     text = text.replace(status_marker, status_new, 1)
 
 compile(text, str(BRIDGE), "exec")
-for required in [MARKER, "def _v120_deep_chat", "def _v120_route_cognition", "vex-qwen35-a3b-text:latest", "_v120_route_cognition(history, message"]:
+for required in [MARKER, "def _v120_deep_chat", "def _ollama_chat", "def _v120_fast_ollama_chat", "vex-qwen35-a3b-text:latest"]:
     if required not in text:
         raise SystemExit(f"Dual-brain verifier missing: {required}")
 BRIDGE.write_text(text, encoding="utf-8")
-print("Applied bounded 4B/35B dual-brain cognition router")
+print("Applied bounded 4B/35B dual-brain cognition router v2")
