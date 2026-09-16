@@ -16,13 +16,22 @@ if anchor not in bridge:
 layer = r'''
 V120_DC_ADAPTER = "v0.12-desktop-commander-mcp-v1"
 V120_DC_URL = os.environ.get("VEX_DC_ADAPTER_URL", "http://127.0.0.1:8776").rstrip("/")
-V120_DC_SESSION = requests.Session()
-V120_DC_SESSION.trust_env = False
+V120_DC_SESSION = None
+
+
+def _v120_dc_session():
+    global V120_DC_SESSION
+    if V120_DC_SESSION is None:
+        import requests
+        session = requests.Session()
+        session.trust_env = False
+        V120_DC_SESSION = session
+    return V120_DC_SESSION
 
 
 def _v120_dc_health(timeout: float = 1.2) -> dict:
     try:
-        response = V120_DC_SESSION.get(f"{V120_DC_URL}/health", timeout=timeout)
+        response = _v120_dc_session().get(f"{V120_DC_URL}/health", timeout=timeout)
         data = response.json() if response.content else {}
         if not isinstance(data, dict):
             data = {"value": data}
@@ -34,7 +43,7 @@ def _v120_dc_health(timeout: float = 1.2) -> dict:
 
 def _v120_dc_call(name: str, arguments: dict | None = None, timeout: float = 12.0) -> dict:
     try:
-        response = V120_DC_SESSION.post(
+        response = _v120_dc_session().post(
             f"{V120_DC_URL}/call",
             json={"tool": str(name or ""), "arguments": arguments if isinstance(arguments, dict) else {}},
             timeout=timeout,
