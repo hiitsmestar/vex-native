@@ -5,7 +5,7 @@ from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
-MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v3"'
+MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"'
 if MARKER in text:
     print("Tri-brain router already applied")
     raise SystemExit(0)
@@ -15,9 +15,11 @@ if old_sig not in text:
     raise SystemExit("Ollama cognition function missing")
 if "def _ollama_models()" not in text:
     raise SystemExit("Ollama model inventory function missing")
+if "def _v120_agent_chat(" not in text:
+    raise SystemExit("v0.12 agent chat function missing")
 
-# Preserve the proven local 4B path as the fast fallback. Existing callers keep
-# calling _ollama_chat(), which becomes the bounded router below.
+# Preserve the proven local 4B legacy path as the fast fallback. Existing legacy
+# callers keep calling _ollama_chat(), which becomes the bounded router below.
 text = text.replace(old_sig, "def _v120_fast_ollama_chat(", 1)
 
 anchor = "\n\n_BROWSER_CONTROL_LOCK = threading.Lock()"
@@ -26,7 +28,7 @@ if anchor not in text:
 
 helpers = r'''
 
-V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v3"
+V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"
 V120_FAST_MODEL = "vex-qwen3-4b:latest"
 V120_MID_MODEL = "vex-qwen35-9b:latest"
 V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"
@@ -82,6 +84,17 @@ def _v120_mid_complex(message: str) -> bool:
     return any(signal in lower for signal in signals)
 
 
+def _v120_select_agent_model(message: str) -> str | None:
+    # The user-facing v0.12 agent owns /llm/chat and posts to Ollama directly.
+    # Pick its Ollama tier here so rich memory/tool/persona grounding is preserved.
+    wants_smart = _v120_deep_explicit(message) or _v120_mid_explicit(message) or _v120_mid_complex(message)
+    if wants_smart and _v120_model_available(V120_MID_MODEL):
+        return V120_MID_MODEL
+    if _v120_model_available(V120_FAST_MODEL):
+        return V120_FAST_MODEL
+    return _choose_ollama_model()
+
+
 def _v120_context_messages(history: list[dict], message: str, context: dict | None, mode: str) -> list[dict]:
     context = context if isinstance(context, dict) else {}
     persona = str(context.get("persona") or "").strip()[:1400]
@@ -112,7 +125,9 @@ def _v120_mid_chat(history: list[dict], message: str, context: dict | None = Non
         return None
     try:
         import requests
-        response = requests.post(
+        session = requests.Session()
+        session.trust_env = False
+        response = session.post(
             f"{OLLAMA_BASE}/api/chat",
             json={
                 "model": V120_MID_MODEL,
@@ -145,7 +160,9 @@ def _v120_deep_chat(history: list[dict], message: str, context: dict | None = No
         return None
     try:
         import requests
-        response = requests.post(
+        session = requests.Session()
+        session.trust_env = False
+        response = session.post(
             f"{V120_DEEP_URL}/v1/chat/completions",
             json={
                 "model": V120_DEEP_MODEL,
@@ -186,6 +203,36 @@ def _ollama_chat(history: list[dict], message: str, context: dict | None = None)
 '''
 text = text.replace(anchor, helpers + anchor, 1)
 
+# The production /llm/chat route is owned by _v120_agent_chat, not the legacy
+# _ollama_chat helper. Patch that function surgically so 9B uses the full agent
+# prompt/memory/tool stack. Only explicit 35B requests can bypass to the direct
+# mmap server, and if it is not healthy the normal agent falls through to 9B.
+agent_start = text.find("def _v120_agent_chat(")
+agent_end = text.find("\n\ndef ", agent_start + 10)
+if agent_start < 0:
+    raise SystemExit("v0.12 agent route missing after tri-brain helper insertion")
+if agent_end < 0:
+    agent_end = len(text)
+agent = text[agent_start:agent_end]
+
+plan_anchor = "    plan = _v120_plan(message)\n"
+if plan_anchor not in agent:
+    raise SystemExit("v0.12 agent plan anchor missing")
+phone_context_expr = "phone_context" if "phone_context" in agent.splitlines()[0] else "None"
+deep_gate = (
+    "    if _v120_deep_explicit(message) and _v120_deep_health():\n"
+    f"        deep_result = _v120_deep_chat(history, message, {phone_context_expr})\n"
+    "        if deep_result is not None:\n"
+    "            return deep_result\n\n"
+)
+agent = agent.replace(plan_anchor, deep_gate + plan_anchor, 1)
+
+model_anchor = "    model = _choose_ollama_model()\n"
+if model_anchor not in agent:
+    raise SystemExit("v0.12 live agent model-selection anchor missing")
+agent = agent.replace(model_anchor, "    model = _v120_select_agent_model(message)\n", 1)
+text = text[:agent_start] + agent + text[agent_end:]
+
 status_marker = '                "available_models": _ollama_models(),\n'
 if status_marker in text:
     status_new = status_marker + (
@@ -202,12 +249,15 @@ for required in [
     MARKER,
     "def _v120_mid_chat",
     "def _v120_deep_chat",
+    "def _v120_select_agent_model",
     "def _ollama_chat",
     "def _v120_fast_ollama_chat",
+    "model = _v120_select_agent_model(message)",
+    "deep_result = _v120_deep_chat(history, message",
     "vex-qwen35-9b:latest",
     "vex-qwen35-a3b-text:latest",
 ]:
     if required not in text:
         raise SystemExit(f"Tri-brain verifier missing: {required}")
 BRIDGE.write_text(text, encoding="utf-8")
-print("Applied bounded 4B/9B/35B cognition router v3")
+print("Applied live v0.12 bounded 4B/9B/35B cognition router v4")
