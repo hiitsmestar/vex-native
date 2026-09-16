@@ -66,15 +66,18 @@ jobs:
               'tool.startswith("dc.")',
               '"dc.list_processes"',
               'provider": "desktop-commander-mcp"',
-              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v3"',
+              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"',
               'V120_FAST_MODEL = "vex-qwen3-4b:latest"',
               'V120_MID_MODEL = "vex-qwen35-9b:latest"',
               'V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"',
               'V120_DEEP_URL',
               'def _v120_mid_chat',
               'def _v120_deep_chat',
+              'def _v120_select_agent_model',
               'def _v120_fast_ollama_chat',
               'def _ollama_chat',
+              'model = _v120_select_agent_model(message)',
+              'deep_result = _v120_deep_chat(history, message',
           ]
           for marker in required:
               assert marker in bridge, marker
@@ -83,7 +86,7 @@ jobs:
           compile(bridge, "Bridge/vex_bridge.py", "exec")
           z = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
           assert z.exists() and z.stat().st_size > 100_000
-          print("PASS Desktop Commander + bounded 4B/9B/direct-35B router + v0.12 artifact")
+          print("PASS Desktop Commander + live v0.12 4B/9B/direct-35B router + artifact")
 
       - name: Upload tri-brain Desktop Commander runtime
         uses: actions/upload-artifact@v7
