@@ -1,0 +1,79 @@
+name: Build Vex Runtime v0.12.0 TriBrain Idle-Art Fix
+
+on:
+  push:
+    branches: [ "feature/dual-brain-router" ]
+    paths:
+      - "Tools/apply_v120_art_idle_on_demand.py"
+      - ".github/workflows/build-v120-tribrain-idle-art.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build cumulative v0.12 tri-brain runtime
+        run: python Tools/ci_v120_full_ai_foundation.py
+
+      - name: Re-freeze and prove Wants plus PC-health artifact
+        run: python Tools/ci_v120_postbuild_wants_proof.py
+
+      - name: Apply final learning, Wants, singleton, and idle-art semantics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python Tools/apply_v120_learning_lifecycle.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_wants_capability_discovery.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_memory_singleton_fix.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_art_idle_on_demand.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/refreeze_v120_memory_worker.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:V120_POSTBUILD_SKIP_PATCHES = '1'
+          python Tools/ci_v120_postbuild_wants_proof.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify idle-art and tri-brain contract
+        shell: python
+        run: |
+          from pathlib import Path
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          for marker in [
+              '"agent_runtime_bundle": "0.12.0"',
+              'V120_ART_IDLE_ON_DEMAND = "v0.12-art-idle-on-demand-v1"',
+              '_v120_art_idle_probe_base = _autonomy_probe_capability',
+              'installed; idle/on-demand',
+              'vex-qwen3-4b:latest',
+              'vex-qwen35-9b:latest',
+              'vex-qwen35-a3b-text:latest',
+          ]:
+              assert marker in bridge, marker
+          zip_path = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
+          assert zip_path.exists() and zip_path.stat().st_size > 100_000
+          print("PASS v0.12 tri-brain + idle-art-on-demand final contract")
+
+      - name: Upload fixed runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-TriBrain-IdleArt
+          path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
+          if-no-files-found: error
+          retention-days: 14
