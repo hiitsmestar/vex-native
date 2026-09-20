@@ -27,13 +27,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
 
-      - name: Build cumulative v0.12 tri-brain runtime
+      - name: Build cumulative Full AI Runtime
         run: python Tools/ci_v120_full_ai_foundation.py
 
-      - name: Re-freeze and prove Wants plus PC-health artifact
+      - name: Re-freeze proven post-build runtime
         run: python Tools/ci_v120_postbuild_wants_proof.py
 
-      - name: Apply final learning, Wants, singleton, and idle-art semantics
+      - name: Apply final lifecycle, Desktop Commander, tri-brain, and idle-art semantics
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -43,6 +43,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/apply_v120_memory_singleton_fix.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_desktop_commander_adapter.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_dual_brain_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/apply_v120_art_idle_on_demand.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Tools/refreeze_v120_memory_worker.py
@@ -51,29 +55,37 @@ jobs:
           python Tools/ci_v120_postbuild_wants_proof.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify idle-art and tri-brain contract
+      - name: Verify Desktop Commander, tri-brain, and idle-art contracts
         shell: python
         run: |
           from pathlib import Path
           bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          adapter = Path("Tools/VexDesktopCommanderAdapter.mjs").read_text(encoding="utf-8")
           for marker in [
               '"agent_runtime_bundle": "0.12.0"',
+              'V120_DC_ADAPTER = "v0.12-desktop-commander-mcp-v1"',
+              '"desktop_commander"',
+              'tool.startswith("dc.")',
+              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"',
+              'V120_FAST_MODEL = "vex-qwen3-4b:latest"',
+              'V120_MID_MODEL = "vex-qwen35-9b:latest"',
+              'V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"',
               'V120_ART_IDLE_ON_DEMAND = "v0.12-art-idle-on-demand-v1"',
               '_v120_art_idle_probe_base = _autonomy_probe_capability',
               'installed; idle/on-demand',
-              'vex-qwen3-4b:latest',
-              'vex-qwen35-9b:latest',
-              'vex-qwen35-a3b-text:latest',
           ]:
               assert marker in bridge, marker
+          for marker in ["desktop-commander.cmd", "read-only", "127.0.0.1"]:
+              assert marker in adapter, marker
+          compile(bridge, "Bridge/vex_bridge.py", "exec")
           zip_path = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
           assert zip_path.exists() and zip_path.stat().st_size > 100_000
-          print("PASS v0.12 tri-brain + idle-art-on-demand final contract")
+          print("PASS v0.12 Desktop Commander + tri-brain + idle-art-on-demand final contract")
 
       - name: Upload fixed runtime
         uses: actions/upload-artifact@v7
         with:
-          name: Vex-Agent-Runtime-v0.12.0-TriBrain-IdleArt
+          name: Vex-Agent-Runtime-v0.12.0-TriBrain-DesktopCommander-IdleArt
           path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
           if-no-files-found: error
           retention-days: 14
