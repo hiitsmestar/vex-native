@@ -1,10 +1,10 @@
-name: Build Vex Runtime v0.12.0 TriBrain Idle-Art Fix
+name: Build Vex Runtime v0.12.0 TriBrain Q6 + Idle-Art Fix
 
 on:
   push:
     branches: [ "feature/dual-brain-router" ]
     paths:
-      - "Tools/apply_v120_art_idle_on_demand.py"
+      - "Tools/apply_v120_art_idle_on_demand.py"\n      - "Tools/apply_v120_dual_brain_router.py"
       - ".github/workflows/build-v120-tribrain-idle-art.yml"
   workflow_dispatch:
 
@@ -66,9 +66,9 @@ jobs:
               'V120_DC_ADAPTER = "v0.12-desktop-commander-mcp-v1"',
               '"desktop_commander"',
               'tool.startswith("dc.")',
-              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"',
+              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v5"',
               'V120_FAST_MODEL = "vex-qwen3-4b:latest"',
-              'V120_MID_MODEL = "vex-qwen35-9b:latest"',
+              'V120_MID_MODEL = "vex-qwen35-9b-q6:latest"',
               'V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"',
               'V120_ART_IDLE_ON_DEMAND = "v0.12-art-idle-on-demand-v1"',
               '_v120_art_idle_probe_base = _autonomy_probe_capability',
@@ -85,7 +85,7 @@ jobs:
       - name: Upload fixed runtime
         uses: actions/upload-artifact@v7
         with:
-          name: Vex-Agent-Runtime-v0.12.0-TriBrain-DesktopCommander-IdleArt
+          name: Vex-Agent-Runtime-v0.12.0-TriBrain-Q6-DesktopCommander-IdleArt
           path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
           if-no-files-found: error
           retention-days: 14
