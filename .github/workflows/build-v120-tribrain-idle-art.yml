@@ -4,7 +4,8 @@ on:
   push:
     branches: [ "feature/dual-brain-router" ]
     paths:
-      - "Tools/apply_v120_art_idle_on_demand.py"\n      - "Tools/apply_v120_dual_brain_router.py"
+      - "Tools/apply_v120_art_idle_on_demand.py"
+      - "Tools/apply_v120_dual_brain_router.py"
       - ".github/workflows/build-v120-tribrain-idle-art.yml"
   workflow_dispatch:
 
