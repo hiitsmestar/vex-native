@@ -37,15 +37,15 @@ if MARKER not in text:
 brain = BRAIN.read_text(encoding="utf-8")
 brain_marker = "// V131_BRAIN_DYNAMIC_TYPE_CAP"
 if brain_marker not in brain:
-    anchor = '        // V128_RUNTIME_WANTS_AUTREFRESH = "v0.12.8-brain-open-refresh-v1"\n'
-    if anchor not in brain:
-        raise SystemExit("v0.13.1 BrainView modifier anchor missing")
-    brain = brain.replace(
-        anchor,
-        '        .dynamicTypeSize(.small ... .large)\n'
-        '        // V131_BRAIN_DYNAMIC_TYPE_CAP\n'
-        + anchor,
-        1,
+    anchor = "        .fileImporter(\n"
+    anchor_at = brain.find(anchor)
+    if anchor_at < 0:
+        raise SystemExit("v0.13.1 BrainView fileImporter anchor missing")
+    brain = (
+        brain[:anchor_at]
+        + "        .dynamicTypeSize(.small ... .large)\n"
+        + "        // V131_BRAIN_DYNAMIC_TYPE_CAP\n"
+        + brain[anchor_at:]
     )
     BRAIN.write_text(brain, encoding="utf-8")
 
