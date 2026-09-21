@@ -1,0 +1,89 @@
+name: Build Vex Runtime v0.12.0 Q6 Deep Ollama
+
+on:
+  push:
+    branches: [ "feature/q6-deep-ollama" ]
+    paths:
+      - "Tools/apply_v120_q6_deep_ollama.py"
+      - ".github/workflows/build-v120-q6-deep-ollama.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller requests beautifulsoup4 pypdf cryptography edge-tts winrt-Windows.Media.Control yt-dlp pillow
+
+      - name: Build cumulative Full AI Runtime
+        run: python Tools/ci_v120_full_ai_foundation.py
+
+      - name: Re-freeze proven post-build runtime
+        run: python Tools/ci_v120_postbuild_wants_proof.py
+
+      - name: Apply stable tri-brain, Desktop Commander, idle-art, and Q6 deep backend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python Tools/apply_v120_learning_lifecycle.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_wants_capability_discovery.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_memory_singleton_fix.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_desktop_commander_adapter.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_dual_brain_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_art_idle_on_demand.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/apply_v120_q6_deep_ollama.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/refreeze_v120_memory_worker.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:V120_POSTBUILD_SKIP_PATCHES = '1'
+          python Tools/ci_v120_postbuild_wants_proof.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Q6 deep contract
+        shell: python
+        run: |
+          from pathlib import Path
+          bridge = Path("Bridge/vex_bridge.py").read_text(encoding="utf-8")
+          for marker in [
+              '"agent_runtime_bundle": "0.12.0"',
+              'V120_DC_ADAPTER = "v0.12-desktop-commander-mcp-v1"',
+              'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"',
+              'V120_FAST_MODEL = "vex-qwen3-4b:latest"',
+              'V120_MID_MODEL = "vex-qwen35-9b:latest"',
+              'V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"',
+              'V120_ART_IDLE_ON_DEMAND = "v0.12-art-idle-on-demand-v1"',
+              'V120_Q6_DEEP_OLLAMA = "v0.12-q6-deep-ollama-v1"',
+              'keep_alive": "30m"',
+              'timeout=600',
+          ]:
+              assert marker in bridge, marker
+          compile(bridge, "Bridge/vex_bridge.py", "exec")
+          zip_path = Path("Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip")
+          assert zip_path.exists() and zip_path.stat().st_size > 100_000
+          print("PASS Q6 deep Ollama contract")
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: Vex-Agent-Runtime-v0.12.0-Q6-Deep-Ollama
+          path: Vex-Agent-Runtime-v0.12.0-FullAIFoundation.zip
+          if-no-files-found: error
+          retention-days: 14
