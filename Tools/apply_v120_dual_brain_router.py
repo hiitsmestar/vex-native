@@ -5,7 +5,7 @@ from pathlib import Path
 
 BRIDGE = Path("Bridge/vex_bridge.py")
 text = BRIDGE.read_text(encoding="utf-8")
-MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"'
+MARKER = 'V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v5"'
 if MARKER in text:
     print("Tri-brain router already applied")
     raise SystemExit(0)
@@ -28,9 +28,9 @@ if anchor not in text:
 
 helpers = r'''
 
-V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v4"
+V120_DUAL_BRAIN_ROUTER = "v0.12-tri-brain-v5"
 V120_FAST_MODEL = "vex-qwen3-4b:latest"
-V120_MID_MODEL = "vex-qwen35-9b:latest"
+V120_MID_MODEL = "vex-qwen35-9b-q6:latest"
 V120_DEEP_MODEL = "vex-qwen35-a3b-text:latest"
 V120_DEEP_URL = os.environ.get("VEX_DEEP_BRAIN_URL", "http://127.0.0.1:11535").rstrip("/")
 
@@ -254,10 +254,10 @@ for required in [
     "def _v120_fast_ollama_chat",
     "model = _v120_select_agent_model(message)",
     "deep_result = _v120_deep_chat(history, message",
-    "vex-qwen35-9b:latest",
+    "vex-qwen35-9b-q6:latest",
     "vex-qwen35-a3b-text:latest",
 ]:
     if required not in text:
         raise SystemExit(f"Tri-brain verifier missing: {required}")
 BRIDGE.write_text(text, encoding="utf-8")
-print("Applied live v0.12 bounded 4B/9B/35B cognition router v4")
+print("Applied live v0.12 bounded 4B/Q6-9B/35B cognition router v5")
