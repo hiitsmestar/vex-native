@@ -1,0 +1,104 @@
+name: Build VexNative v0.13.0 Control Surface
+
+on:
+  push:
+    branches: [ "build/v130-control-surface" ]
+    paths:
+      - "Tools/apply_v130_control_surface.py"
+      - "Tools/build_v130_control_surface.py"
+      - ".github/workflows/build-v130-control-surface.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-v130-control-surface:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble v0.12.7 chain plus v0.13.0 control surface
+        run: python3 Tools/build_v130_control_surface.py
+
+      - name: Verify v0.13.0 source
+        run: |
+          grep -q 'V130_CONTROL_SURFACE = "v0.13.0-control-surface-v1"' VexNative/ContentView.swift
+          grep -q 'struct VexChatView: View' VexNative/ContentView.swift
+          grep -q 'Label("System", systemImage: "network")' VexNative/ContentView.swift
+          grep -q 'Label("Art", systemImage: "sparkles.rectangle.stack")' VexNative/ContentView.swift
+          grep -q 'Label("Memory", systemImage: "brain.head.profile")' VexNative/ContentView.swift
+          grep -q 'Label("Phone", systemImage: "iphone")' VexNative/ContentView.swift
+          grep -q '/autonomy/requests' VexNative/ContentView.swift
+          grep -q '/adaptive/status' VexNative/ContentView.swift
+          grep -q '/art/health' VexNative/ContentView.swift
+          ! grep -q 'LOCAL GIRLFRIEND ENGINE' VexNative/ContentView.swift
+
+      - name: Resolve local Swift package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=130 \
+            MARKETING_VERSION=0.13.0 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add permissions and verify build identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string VexNative uses your local network to connect privately to paired Vex Bridge computers, memory, tools, art, and voice providers." "$INFO_PLIST"
+
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string VexNative uses the camera only when you choose camera features or ask Vex to use the flashlight." "$INFO_PLIST"
+
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string VexNative uses the microphone while voice mode is enabled so Vex can hear your conversation." "$INFO_PLIST"
+
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string VexNative uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
+
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.13.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "130"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.13.0-control-surface.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.13.0-control-surface.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.13.0-Control-Surface
+          path: VexNative-v0.13.0-control-surface.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VexNative-v0.13.0-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
