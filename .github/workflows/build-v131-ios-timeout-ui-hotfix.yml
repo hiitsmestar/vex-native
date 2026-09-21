@@ -1,0 +1,103 @@
+name: Build VexNative v0.13.1 Timeout UI Hotfix
+
+on:
+  push:
+    branches: [ "build/v131-ios-timeout-ui-hotfix" ]
+    paths:
+      - "Tools/apply_v131_ios_timeout_ui_hotfix.py"
+      - "Tools/build_v131_ios_timeout_ui_hotfix.py"
+      - ".github/workflows/build-v131-ios-timeout-ui-hotfix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-hotfix:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble v0.13.1 hotfix
+        run: python3 Tools/build_v131_ios_timeout_ui_hotfix.py
+
+      - name: Verify timeout and UI regression gates
+        run: |
+          grep -q 'V131_TIMEOUT_UI_HOTFIX = "v0.13.1-timeout-ui-v1"' VexNative/ContentView.swift
+          grep -q 'PCArtRouter.tryHandle' VexNative/ContentView.swift
+          grep -q 'PhoneToolRouter.tryHandle' VexNative/ContentView.swift
+          grep -q 'import Vision' VexNative/ContentView.swift
+          grep -q 'CameraCaptureView' VexNative/ContentView.swift
+          grep -q 'request.timeoutInterval = 90' VexNative/ContentView.swift
+          grep -q 'configuration.timeoutIntervalForRequest = 95' VexNative/VexNativeApp.swift
+          grep -q 'configuration.timeoutIntervalForResource = 100' VexNative/VexNativeApp.swift
+          grep -q 'configuration.timeoutIntervalForRequest = 180' VexNative/VexNativeApp.swift
+          grep -q 'configuration.timeoutIntervalForResource = 240' VexNative/VexNativeApp.swift
+          grep -q 'V131_BRAIN_DYNAMIC_TYPE_CAP' VexNative/Views/BrainView.swift
+          grep -q 'dynamicTypeSize(.small ... .large)' VexNative/ContentView.swift
+          grep -q 'dynamicTypeSize(.small ... .large)' VexNative/Views/BrainView.swift
+          grep -q 'V127_INLINE_STAGE_DIRECTION_FIX_IOS = "v0.12.7-inline-stage-direction-v1"' VexNative/AppModel.swift
+
+      - name: Resolve local Swift package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild \
+            -project VexNative.xcodeproj \
+            -scheme VexNative \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/VexDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            CURRENT_PROJECT_VERSION=131 \
+            MARKETING_VERSION=0.13.1 \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add permissions and verify build identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string VexNative uses your local network to connect privately to paired Vex Bridge computers, memory, tools, runtime status, art, and voice providers." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSCameraUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string VexNative uses the camera only when you choose camera features." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string VexNative uses the microphone while voice mode is enabled." "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string VexNative uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.13.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "131"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.13.1-timeout-ui-hotfix.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.13.1-timeout-ui-hotfix.ipa"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.13.1-Timeout-UI-Hotfix
+          path: VexNative-v0.13.1-timeout-ui-hotfix.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.13.1-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
