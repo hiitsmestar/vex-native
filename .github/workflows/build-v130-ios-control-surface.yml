@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Assemble v0.12.7 field baseline plus v0.13 control surface
+      - name: Assemble proven phone stack plus v0.13 control surface
         run: python3 Tools/build_v130_ios_control_surface.py
 
       - name: Verify v0.13 source invariants
@@ -27,13 +27,17 @@ jobs:
           grep -q 'V130_CONTROL_SURFACE = "v0.13.0-control-surface-v1"' VexNative/ContentView.swift
           grep -q 'struct VexChatView: View' VexNative/ContentView.swift
           grep -q 'struct ContentView: View' VexNative/ContentView.swift
-          grep -q 'Text("VEXNATIVE")' VexNative/ContentView.swift
+          grep -q 'Text("VEXNATIVE // CHAT")' VexNative/ContentView.swift
+          grep -q 'PCArtRouter.tryHandle' VexNative/ContentView.swift
+          grep -q 'PhoneToolRouter.tryHandle' VexNative/ContentView.swift
+          grep -q 'import Vision' VexNative/ContentView.swift
+          grep -q 'CameraCaptureView' VexNative/ContentView.swift
           grep -q '"/autonomy/requests"' VexNative/ContentView.swift
           grep -q '"/adaptive/status"' VexNative/ContentView.swift
-          grep -q '"/art/generate"' VexNative/ContentView.swift
-          grep -q 'UNUserNotificationCenter' VexNative/ContentView.swift
+          grep -q '"/art/health"' VexNative/ContentView.swift
           ! grep -q 'LOCAL GIRLFRIEND ENGINE' VexNative/ContentView.swift
           grep -q 'V127_INLINE_STAGE_DIRECTION_FIX_IOS = "v0.12.7-inline-stage-direction-v1"' VexNative/AppModel.swift
+          grep -q 'enum MemoryKind: String, Codable, Sendable, CaseIterable' VexNative/Core/BrainModels.swift
 
       - name: Resolve local Swift package
         run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies

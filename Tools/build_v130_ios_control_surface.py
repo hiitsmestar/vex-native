@@ -18,12 +18,13 @@ run("Tools/apply_v130_ios_control_surface.py")
 
 content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
 app = (ROOT / "VexNative" / "AppModel.swift").read_text(encoding="utf-8")
+models = (ROOT / "VexNative" / "Core" / "BrainModels.swift").read_text(encoding="utf-8")
 
 for marker in [
     'V130_CONTROL_SURFACE = "v0.13.0-control-surface-v1"',
     "struct VexChatView: View",
     "struct ContentView: View",
-    'Text("VEXNATIVE")',
+    'Text("VEXNATIVE // CHAT")',
     'Label("Chat"',
     'Label("System"',
     'Label("Art"',
@@ -31,10 +32,11 @@ for marker in [
     'Label("Phone"',
     '"/adaptive/status"',
     '"/autonomy/requests"',
-    '"/memory/status"',
     '"/art/health"',
-    '"/art/generate"',
-    "UNUserNotificationCenter",
+    "PCArtRouter.tryHandle",
+    "PhoneToolRouter.tryHandle",
+    "import Vision",
+    "CameraCaptureView",
 ]:
     if marker not in content:
         raise SystemExit(f"final v0.13.0 content marker missing: {marker}")
@@ -48,6 +50,9 @@ for marker in [
     "enforceCompletedVisibleReply",
 ]:
     if marker not in app:
-        raise SystemExit(f"v0.12.7 inherited marker missing: {marker}")
+        raise SystemExit(f"inherited dialogue marker missing: {marker}")
+
+if "enum MemoryKind: String, Codable, Sendable, CaseIterable" not in models:
+    raise SystemExit("MemoryKind CaseIterable upgrade missing")
 
 print("PASS v0.13.0 VexNative control-surface chain")
