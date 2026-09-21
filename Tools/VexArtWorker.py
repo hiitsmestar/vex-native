@@ -16,7 +16,7 @@ from typing import Any
 import requests
 import VexVisualQA
 
-VERSION = "0.10.12"
+VERSION = "0.10.13"
 COMFY_BASE = "http://127.0.0.1:8188"
 CHECKPOINT_NAME = "RealVisXL_V5.0_Lightning_fp16.safetensors"
 LITE_CHECKPOINT_NAME = "v1-5-pruned-emaonly-fp16.safetensors"
@@ -1069,12 +1069,13 @@ def main() -> int:
         stop_owned_comfy()
         return 0 if result.get("ok") else 2
     if args.prompt:
+        cli_vex_preset = (not args.no_vex_preset) and ("vex" in args.prompt.lower())
         result = reviewed_render(
             args.prompt,
             orientation=args.orientation,
             seed=args.seed,
             smart_prompt=not args.raw_prompt,
-            vex_preset=not args.no_vex_preset,
+            vex_preset=cli_vex_preset,
             visual_review=not args.no_visual_review,
         )
         if args.result_file:
