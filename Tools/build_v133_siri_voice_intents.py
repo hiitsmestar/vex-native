@@ -14,7 +14,7 @@ def run(path: str) -> None:
         raise SystemExit(result.returncode)
 
 run("Tools/build_v132_phone_command_relay.py")
-run("Tools/apply_v133_siri_voice_intents.py")
+run("Tools/apply_v133_siri_voice_intents.py")\nrun("Tools/apply_v1331_siri_phrase_hotfix.py")
 
 voice = (ROOT / "VexNative" / "VexVoiceIntents.swift").read_text(encoding="utf-8")
 app = (ROOT / "VexNative" / "VexNativeApp.swift").read_text(encoding="utf-8")
