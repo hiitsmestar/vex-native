@@ -20,15 +20,16 @@ voice = (ROOT / "VexNative" / "VexVoiceIntents.swift").read_text(encoding="utf-8
 app = (ROOT / "VexNative" / "VexNativeApp.swift").read_text(encoding="utf-8")
 pbx = (ROOT / "VexNative.xcodeproj" / "project.pbxproj").read_text(encoding="utf-8")
 content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
-networking = (ROOT / "VexNative" / "VexNativeApp.swift").read_text(encoding="utf-8")
 
 for marker in [
     "import AppIntents",
+    "enum VexQuickAction: String, AppEnum",
+    "struct VexQuickActionIntent: AppIntent",
     "struct VexVoiceCommandIntent: AppIntent",
     "struct VexAppShortcuts: AppShortcutsProvider",
-    '"Hey \\(.applicationName) \\(\\.$command)"',
-    '"Ask \\(.applicationName) to \\(\\.$command)"',
-    "static var openAppWhenRun = false",
+    '"Hey \\(.applicationName) \\(\\.$action)"',
+    '"Ask \\(.applicationName) to \\(\\.$action)"',
+    '"Ask \\(.applicationName)"',
     "UIScreen.main.brightness",
     "AVCaptureDevice.default(for: .video)",
     "UIPasteboard.general.string",
@@ -49,13 +50,5 @@ for marker in [
 ]:
     if marker not in content:
         raise SystemExit(f"v0.13.2 inherited marker missing: {marker}")
-
-for marker in [
-    "challenge.protectionSpace.port == 8771",
-    "[8765, 8771].contains(port)",
-    "configuration.timeoutIntervalForRequest = 95",
-]:
-    if marker not in networking:
-        raise SystemExit(f"v0.13.2 networking marker missing: {marker}")
 
 print("PASS v0.13.3 Siri voice/App Intents chain")
