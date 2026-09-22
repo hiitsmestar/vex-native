@@ -64,7 +64,7 @@ if "VexBadQueryProbeView()" not in content:
         raise SystemExit("v0.13.5 System-view anchor missing")
     content = content.replace(
         anchor,
-        '                    VexBadQueryProbeView()\\n\\n' + anchor,
+        '                    VexBadQueryProbeView()\n\n' + anchor,
         1,
     )
 CONTENT.write_text(content, encoding="utf-8")

@@ -9,12 +9,12 @@ private func vex_bad_query_grant_read(_ path: UnsafePointer<CChar>) -> Int64
 @_silgen_name("vex_bad_query_release")
 private func vex_bad_query_release(_ handle: Int64)
 
-private enum VexBadQueryTargetKind {
+private enum VexBadQueryTargetKind: Sendable {
     case file
     case directory
 }
 
-private struct VexBadQueryTarget {
+private struct VexBadQueryTarget: Sendable {
     let label: String
     let path: String
     let kind: VexBadQueryTargetKind
@@ -85,8 +85,9 @@ final class VexBadQueryDiagnostics: ObservableObject {
         isRunning = true
         note = "Running two fixed read-only checks…"
 
+        let targets = Self.targets
         Task.detached(priority: .userInitiated) {
-            let values = Self.targets.map(Self.probe)
+            let values = targets.map(Self.probe)
             await MainActor.run {
                 self.results = values
                 self.lastRun = Date()
