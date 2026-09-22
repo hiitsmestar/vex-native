@@ -5,8 +5,8 @@ on:
     branches: [ "build/v133-siri-voice-intents" ]
     paths:
       - "Tools/apply_v133_siri_voice_intents.py"
-      - "Tools/build_v133_siri_voice_intents.py"\n      - "Tools/apply_v1331_siri_phrase_hotfix.py"
-      - "Tools/VexVoiceIntents.swift"
+      - "Tools/apply_v1331_siri_phrase_hotfix.py"
+      - "Tools/build_v133_siri_voice_intents.py"
       - ".github/workflows/build-v133-siri-voice-intents.yml"
   workflow_dispatch:
 
@@ -26,11 +26,14 @@ jobs:
       - name: Verify Siri/App Intents source
         run: |
           test -f VexNative/VexVoiceIntents.swift
+          grep -q 'import AppIntents' VexNative/VexVoiceIntents.swift
           grep -q 'enum VexQuickAction: String, AppEnum' VexNative/VexVoiceIntents.swift
           grep -q 'struct VexQuickActionIntent: AppIntent' VexNative/VexVoiceIntents.swift
           grep -q 'struct VexVoiceCommandIntent: AppIntent' VexNative/VexVoiceIntents.swift
-          grep -Fq '"Hey \(.applicationName) \(\.$action)"' VexNative/VexVoiceIntents.swift
+          grep -q 'struct VexAppShortcuts: AppShortcutsProvider' VexNative/VexVoiceIntents.swift
+          grep -Fq '"\(.applicationName) \(\.$action)"' VexNative/VexVoiceIntents.swift
           grep -Fq '"Ask \(.applicationName) to \(\.$action)"' VexNative/VexVoiceIntents.swift
+          grep -Fq '"Hey \(.applicationName)"' VexNative/VexVoiceIntents.swift
           grep -Fq '"Ask \(.applicationName)"' VexNative/VexVoiceIntents.swift
           grep -q 'VexAppShortcuts.updateAppShortcutParameters()' VexNative/VexNativeApp.swift
           grep -q 'VexVoiceIntents.swift in Sources' VexNative.xcodeproj/project.pbxproj
