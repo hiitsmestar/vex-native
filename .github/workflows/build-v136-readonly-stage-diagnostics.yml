@@ -1,0 +1,61 @@
+name: Build VexNative v0.13.6 Read-Only Stage Diagnostics
+
+on:
+  push:
+    branches: [ "build/v136-readonly-stage-diagnostics" ]
+    paths:
+      - "Tools/VexBadQueryProbeV136.c"
+      - "Tools/VexBadQueryDiagnosticsV136.swift"
+      - "Tools/apply_v136_stage_diagnostics.py"
+      - "Tools/build_v136_stage_diagnostics.py"
+      - ".github/workflows/build-v136-readonly-stage-diagnostics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-stage-diagnostics:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - name: Assemble v0.13.6
+        run: python3 Tools/build_v136_stage_diagnostics.py
+      - name: Verify read-only diagnostics
+        run: |
+          grep -q 'v0.13.6-read-only-stage-diagnostics-v1' VexNative/VexBadQueryDiagnostics.swift
+          grep -q 'vex_bad_query_grant_read_stage' VexNative/VexBadQueryProbe.c
+          grep -q 'MobileGestalt /private' VexNative/VexBadQueryDiagnostics.swift
+          grep -q 'Applications /private' VexNative/VexBadQueryDiagnostics.swift
+          ! grep -q 'O_WRONLY' VexNative/VexBadQueryProbe.c
+          ! grep -q 'O_RDWR' VexNative/VexBadQueryProbe.c
+          ! grep -q 'unlink(' VexNative/VexBadQueryProbe.c
+          ! grep -q 'rename(' VexNative/VexBadQueryProbe.c
+      - name: Resolve package
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build unsigned device app
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=136 MARKETING_VERSION=0.13.6 build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Verify identity
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          INFO="$APP_PATH/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")" = "0.13.6"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")" = "136"
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.13.6-read-only-stage-diagnostics.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.13.6-read-only-stage-diagnostics.ipa"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.13.6-Read-Only-Stage-Diagnostics
+          path: VexNative-v0.13.6-read-only-stage-diagnostics.ipa
+          retention-days: 14
