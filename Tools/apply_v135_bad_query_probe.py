@@ -7,6 +7,7 @@ TOOLS = ROOT / "Tools"
 APP = ROOT / "VexNative"
 PBX = ROOT / "VexNative.xcodeproj" / "project.pbxproj"
 CONTENT = APP / "ContentView.swift"
+APPFILE = APP / "VexNativeApp.swift"
 
 C_TEMPLATE = TOOLS / "VexBadQueryProbe.c"
 SWIFT_TEMPLATE = TOOLS / "VexBadQueryDiagnostics.swift"
@@ -69,6 +70,22 @@ if "VexBadQueryProbeView()" not in content:
     )
 CONTENT.write_text(content, encoding="utf-8")
 
+app_text = APPFILE.read_text(encoding="utf-8")
+if "VEX_BAD_QUERY_AUTORUN" not in app_text:
+    anchor = '                .preferredColorScheme(.dark)'
+    replacement = anchor + '\n' + \
+        '                .task {\n' + \
+        '                    print("VEX_BAD_QUERY_AUTORUN|start")\n' + \
+        '                    await MainActor.run {\n' + \
+        '                        let diagnostics = VexBadQueryDiagnostics()\n' + \
+        '                        diagnostics.run()\n' + \
+        '                    }\n' + \
+        '                }'
+    if anchor not in app_text:
+        raise SystemExit("v0.13.5 app autorun anchor missing")
+    app_text = app_text.replace(anchor, replacement, 1)
+APPFILE.write_text(app_text, encoding="utf-8")
+
 pbx_final = PBX.read_text(encoding="utf-8")
 content_final = CONTENT.read_text(encoding="utf-8")
 swift_final = SWIFT_DEST.read_text(encoding="utf-8")
@@ -86,8 +103,9 @@ for marker in [
     "VexBadQueryProbeView()",
     "vex_bad_query_grant_read",
     "vex_bad_query_release",
+    "VEX_BAD_QUERY_AUTORUN",
 ]:
-    haystack = swift_final + "\n" + content_final + "\n" + c_final
+    haystack = swift_final + "\n" + content_final + "\n" + c_final + "\n" + APPFILE.read_text(encoding="utf-8")
     if marker not in haystack:
         raise SystemExit(f"v0.13.5 marker missing: {marker}")
 
