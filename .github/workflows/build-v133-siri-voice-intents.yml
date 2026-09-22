@@ -5,7 +5,7 @@ on:
     branches: [ "build/v133-siri-voice-intents" ]
     paths:
       - "Tools/apply_v133_siri_voice_intents.py"
-      - "Tools/build_v133_siri_voice_intents.py"
+      - "Tools/build_v133_siri_voice_intents.py"\n      - "Tools/apply_v1331_siri_phrase_hotfix.py"
       - "Tools/VexVoiceIntents.swift"
       - ".github/workflows/build-v133-siri-voice-intents.yml"
   workflow_dispatch:
