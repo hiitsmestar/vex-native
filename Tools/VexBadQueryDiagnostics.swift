@@ -62,8 +62,28 @@ final class VexBadQueryDiagnostics: ObservableObject {
             kind: .file
         ),
         .init(
+            label: "Shortcuts database",
+            path: "/private/var/mobile/Library/Shortcuts/Shortcuts.sqlite",
+            kind: .file
+        ),
+        .init(
+            label: "Shortcuts directory",
+            path: "/private/var/mobile/Library/Shortcuts",
+            kind: .directory
+        ),
+        .init(
             label: "Application containers",
             path: "/var/mobile/Containers/Data/Application",
+            kind: .directory
+        ),
+        .init(
+            label: "Internal daemon containers",
+            path: "/var/mobile/Containers/Data/InternalDaemon",
+            kind: .directory
+        ),
+        .init(
+            label: "PluginKit containers",
+            path: "/var/mobile/Containers/Data/PluginKitPlugin",
             kind: .directory
         ),
     ]
@@ -83,7 +103,7 @@ final class VexBadQueryDiagnostics: ObservableObject {
         }
 
         isRunning = true
-        note = "Running two fixed read-only checks…"
+        note = "Running fixed read-only capability checks…"
 
         let targets = Self.targets
         Task.detached(priority: .userInitiated) {
@@ -159,7 +179,7 @@ struct VexBadQueryProbeView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Device access probe")
                         .font(.headline)
-                    Text("Read-only • two fixed paths • iOS 26.0–26.6.1")
+                    Text("Read-only • fixed system paths • iOS 26.0–26.6.1")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
