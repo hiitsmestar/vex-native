@@ -1,0 +1,59 @@
+name: Build Vex Native System Shortcuts
+
+on:
+  push:
+    branches: [ "build/v134-native-system-shortcuts" ]
+    paths:
+      - "Tools/generate_v134_native_system_shortcuts.py"
+      - ".github/workflows/build-v134-native-system-shortcuts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-shortcuts:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Generate native shortcuts
+        run: python3 Tools/generate_v134_native_system_shortcuts.py
+
+      - name: Validate shortcut plists
+        run: |
+          plutil -lint "Artifacts/VexNativeShortcuts/Hey Vex turn on the flashlight.shortcut"
+          plutil -lint "Artifacts/VexNativeShortcuts/Hey Vex turn off the flashlight.shortcut"
+          /usr/libexec/PlistBuddy -c 'Print :WFWorkflowActions:0:WFWorkflowActionIdentifier' "Artifacts/VexNativeShortcuts/Hey Vex turn on the flashlight.shortcut" | grep -Fx 'is.workflow.actions.flashlight'
+          /usr/libexec/PlistBuddy -c 'Print :WFWorkflowActions:0:WFWorkflowActionParameters:WFFlashlightSetting' "Artifacts/VexNativeShortcuts/Hey Vex turn on the flashlight.shortcut" | grep -Fx 'On'
+          /usr/libexec/PlistBuddy -c 'Print :WFWorkflowActions:0:WFWorkflowActionParameters:WFFlashlightSetting' "Artifacts/VexNativeShortcuts/Hey Vex turn off the flashlight.shortcut" | grep -Fx 'Off'
+
+      - name: Check Shortcuts CLI
+        run: |
+          which shortcuts
+          shortcuts --help
+
+      - name: Sign shortcuts for anyone
+        run: |
+          mkdir -p Artifacts/VexNativeShortcutsSigned
+          shortcuts sign --mode anyone --input "Artifacts/VexNativeShortcuts/Hey Vex turn on the flashlight.shortcut" --output "Artifacts/VexNativeShortcutsSigned/Hey Vex turn on the flashlight.shortcut"
+          shortcuts sign --mode anyone --input "Artifacts/VexNativeShortcuts/Hey Vex turn off the flashlight.shortcut" --output "Artifacts/VexNativeShortcutsSigned/Hey Vex turn off the flashlight.shortcut"
+          test -s "Artifacts/VexNativeShortcutsSigned/Hey Vex turn on the flashlight.shortcut"
+          test -s "Artifacts/VexNativeShortcutsSigned/Hey Vex turn off the flashlight.shortcut"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.13.4-Native-System-Shortcuts
+          path: Artifacts/VexNativeShortcutsSigned/*.shortcut
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload unsigned shortcuts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.13.4-Unsigned-System-Shortcuts
+          path: Artifacts/VexNativeShortcuts/*.shortcut
+          if-no-files-found: ignore
+          retention-days: 7
