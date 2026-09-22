@@ -112,6 +112,10 @@ final class VexBadQueryDiagnostics: ObservableObject {
                 self.results = values
                 self.lastRun = Date()
                 self.note = "Complete. No files were changed."
+                for result in values {
+                    print("VEX_BAD_QUERY_REPORT|\(result.label)|grant=\(result.grantCode)|exists=\(result.exists)|readable=\(result.readable)|entries=\(result.entryCount.map(String.init) ?? "-")|path=\(result.path)")
+                }
+                print("VEX_BAD_QUERY_REPORT|COMPLETE|count=\(values.count)")
                 self.isRunning = false
             }
         }
@@ -225,5 +229,10 @@ struct VexBadQueryProbeView: View {
         .padding(16)
         .background(.white.opacity(0.055))
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .task {
+            if diagnostics.results.isEmpty && !diagnostics.isRunning {
+                diagnostics.run()
+            }
+        }
     }
 }
