@@ -116,9 +116,19 @@ final class VexBadQueryDiagnostics: ObservableObject {
                     print("VEX_BAD_QUERY_REPORT|\(result.label)|grant=\(result.grantCode)|exists=\(result.exists)|readable=\(result.readable)|entries=\(result.entryCount.map(String.init) ?? "-")|path=\(result.path)")
                 }
                 print("VEX_BAD_QUERY_REPORT|COMPLETE|count=\(values.count)")
+                Self.persistReport(values)
                 self.isRunning = false
             }
         }
+    }
+
+    private nonisolated static func persistReport(_ values: [VexBadQueryProbeResult]) {
+        let lines = values.map { result in
+            "VEX_BAD_QUERY_REPORT|\(result.label)|grant=\(result.grantCode)|exists=\(result.exists)|readable=\(result.readable)|entries=\(result.entryCount.map(String.init) ?? "-")|path=\(result.path)"
+        } + ["VEX_BAD_QUERY_REPORT|COMPLETE|count=\(values.count)"]
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let path = docs.appendingPathComponent("vex_bad_query_report.txt").path
+        try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }
 
     private nonisolated static func isSupportedOS(_ version: OperatingSystemVersion) -> Bool {
