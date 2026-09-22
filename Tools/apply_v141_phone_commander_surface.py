@@ -49,7 +49,12 @@ insert = '''        if lower.contains("clipboard") && (lower.contains("copy ") |
         if let query = browserSearchQuery(original: original, lower: lower) {
             var parts = URLComponents(string: "https://www.google.com/search")!
             parts.queryItems = [URLQueryItem(name: "q", value: query)]
-            let ok = parts.url.map { await openURL($0) } ?? false
+            let ok: Bool
+            if let url = parts.url {
+                ok = await openURL(url)
+            } else {
+                ok = false
+            }
             appendExchange(user: original, assistant: ok ? "Done — I opened that search on the iPhone." : "The iPhone did not open that browser search.", app: app)
             return true
         }
@@ -90,7 +95,7 @@ helper_anchor = '''    private static func openURL(_ url: URL) async -> Bool {
     }
 
     private static func firstNumber(in text: String) -> Double? {'''
-helpers = '''    private static func openURL(_ url: URL) async -> Bool {
+helpers = r'''    private static func openURL(_ url: URL) async -> Bool {
         await withCheckedContinuation { continuation in
             UIApplication.shared.open(url, options: [:]) { opened in
                 continuation.resume(returning: opened)
