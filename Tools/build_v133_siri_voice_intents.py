@@ -15,7 +15,6 @@ def run(path: str) -> None:
 
 run("Tools/build_v132_phone_command_relay.py")
 run("Tools/apply_v133_siri_voice_intents.py")
-run("Tools/apply_v1331_siri_phrase_hotfix.py")
 
 voice = (ROOT / "VexNative" / "VexVoiceIntents.swift").read_text(encoding="utf-8")
 app = (ROOT / "VexNative" / "VexNativeApp.swift").read_text(encoding="utf-8")
@@ -30,7 +29,7 @@ for marker in [
     "struct VexVoiceCommandIntent: AppIntent",
     "struct VexAppShortcuts: AppShortcutsProvider",
     '"\\(.applicationName) \\(\\.$action)"',
-    '"Hey \\(.applicationName)"',
+    '"Hey \\(.applicationName) \\(\\.$action)"',
     '"Ask \\(.applicationName)"',
     "static var openAppWhenRun = false",
     "UIScreen.main.brightness",
