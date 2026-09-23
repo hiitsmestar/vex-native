@@ -19,6 +19,7 @@ combined = "\n".join([
     (ROOT/"VexNative"/"VexErosionBadQueryDiagnostics.swift").read_text(encoding="utf-8"),
     (ROOT/"VexNative"/"ContentView.swift").read_text(encoding="utf-8"),
     (ROOT/"VexNative"/"VexNativeApp.swift").read_text(encoding="utf-8"),
+    (ROOT/"VexNative"/"VexBackgroundAgent.swift").read_text(encoding="utf-8"),
 ])
 for marker in [
     "v0.14.5-erosion-bad-query-readonly-v1",
