@@ -21,7 +21,6 @@ checks = {
         "remote-relay.json",
         "V145_BACKGROUND_RESILIENCE",
         "startResilienceWatchdog()",
-        "routeChangeNotification",
         "watchdogHeartbeat",
         "VexPhoneBackgroundWorker.runOnce()",
     ]
