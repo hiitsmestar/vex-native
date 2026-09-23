@@ -9,84 +9,54 @@ if "V145_BACKGROUND_RESILIENCE" in text:
     print("PASS v0.14.5 background resilience already applied")
     raise SystemExit(0)
 
+if 'private let V140_PERSISTENT_PHONE_AGENT = "v0.14.0-persistent-phone-agent-v1"' not in text:
+    raise SystemExit("v0.14.5 persistent-agent marker missing")
+
 text = text.replace(
     'private let V140_PERSISTENT_PHONE_AGENT = "v0.14.0-persistent-phone-agent-v1"\n',
     'private let V140_PERSISTENT_PHONE_AGENT = "v0.14.0-persistent-phone-agent-v1"\n'
-    'private let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v3"\n',
+    'private let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v4"\n',
     1,
 )
 
+if "private var heartbeatBuffer: AVAudioPCMBuffer?" not in text:
+    raise SystemExit("v0.14.5 heartbeat buffer anchor missing")
 text = text.replace(
-    '''    private var persistentAgentStarted = false
-    private var heartbeatBuffer: AVAudioPCMBuffer?''',
-    '''    private var persistentAgentStarted = false
-    private var heartbeatBuffer: AVAudioPCMBuffer?
-    private var resilienceWatchdogTask: Task<Void, Never>?''',
+    "private var heartbeatBuffer: AVAudioPCMBuffer?",
+    "private var heartbeatBuffer: AVAudioPCMBuffer?\n    private var resilienceWatchdogTask: Task<Void, Never>?",
     1,
 )
 
-old_init_tail = '''            if type == .ended {
-                self.restartPersistentAudio()
-            }
-        }
-    }
-
-    func startPersistentAgent() {'''
-
-new_init_tail = '''            if type == .ended {
-                self.restartPersistentAudio()
-                self.startResilienceWatchdog()
-            }
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.restartPersistentAudio()
-            self.startResilienceWatchdog()
-        }
-    }
-
-    func startPersistentAgent() {'''
-
-if old_init_tail not in text:
-    raise SystemExit("v0.14.5 init/notification anchor missing")
-text = text.replace(old_init_tail, new_init_tail, 1)
-
-text = text.replace(
-    '''        guard !persistentAgentStarted else {
+old_guard = '''        guard !persistentAgentStarted else {
             if !audioEngine.isRunning || !audioPlayer.isPlaying {
                 restartPersistentAudio()
             }
             startForegroundLoop()
             return
-        }''',
-    '''        guard !persistentAgentStarted else {
+        }'''
+new_guard = '''        guard !persistentAgentStarted else {
             if !audioEngine.isRunning || !audioPlayer.isPlaying {
                 restartPersistentAudio()
             }
             startForegroundLoop()
             startResilienceWatchdog()
             return
-        }''',
-    1,
-)
+        }'''
+if old_guard not in text:
+    raise SystemExit("v0.14.5 persistent-agent guard anchor missing")
+text = text.replace(old_guard, new_guard, 1)
 
-text = text.replace(
-    '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
-            startForegroundLoop()''',
-    '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
+old_success = '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
+            startForegroundLoop()'''
+new_success = '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
             startForegroundLoop()
-            startResilienceWatchdog()''',
-    1,
-)
+            startResilienceWatchdog()'''
+if old_success not in text:
+    raise SystemExit("v0.14.5 persistent-agent success anchor missing")
+text = text.replace(old_success, new_success, 1)
 
 anchor = '''    func startForegroundLoop() {
         guard foregroundTask == nil else { return }'''
-
 insert = '''    func startResilienceWatchdog() {
         guard resilienceWatchdogTask == nil else { return }
 
@@ -112,28 +82,28 @@ insert = '''    func startResilienceWatchdog() {
 
     func startForegroundLoop() {
         guard foregroundTask == nil else { return }'''
-
 if anchor not in text:
     raise SystemExit("v0.14.5 foreground loop anchor missing")
 text = text.replace(anchor, insert, 1)
 
-text = text.replace(
-    '''        VexBackgroundAgent.shared.startPersistentAgent()
-        VexBackgroundAgent.shared.startForegroundLoop()''',
-    '''        VexBackgroundAgent.shared.startPersistentAgent()
+# Make the background transition explicitly kick the watchdog too.
+bg_anchor = '''        VexBackgroundAgent.shared.startPersistentAgent()
         VexBackgroundAgent.shared.startForegroundLoop()
-        VexBackgroundAgent.shared.startResilienceWatchdog()''',
-    1,
-)
+        VexBackgroundAgent.shared.startBackgroundGrace(using: application)'''
+bg_new = '''        VexBackgroundAgent.shared.startPersistentAgent()
+        VexBackgroundAgent.shared.startForegroundLoop()
+        VexBackgroundAgent.shared.startResilienceWatchdog()
+        VexBackgroundAgent.shared.startBackgroundGrace(using: application)'''
+if bg_anchor in text:
+    text = text.replace(bg_anchor, bg_new, 1)
 
 BG.write_text(text, encoding="utf-8")
 
 final = BG.read_text(encoding="utf-8")
 for marker in [
-    'V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v3"',
+    'V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v4"',
     "resilienceWatchdogTask",
     "startResilienceWatchdog()",
-    "AVAudioSession.routeChangeNotification",
     "vex.phone.background.watchdogHeartbeat",
     "restartPersistentAudio()",
     "VexPhoneBackgroundWorker.runOnce()",
