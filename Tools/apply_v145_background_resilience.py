@@ -2,200 +2,142 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "VexNative" / "VexNativeApp.swift"
+BG = ROOT / "VexNative" / "VexBackgroundAgent.swift"
 
-text = APP.read_text(encoding="utf-8")
+text = BG.read_text(encoding="utf-8")
 if "V145_BACKGROUND_RESILIENCE" in text:
     print("PASS v0.14.5 background resilience already applied")
     raise SystemExit(0)
 
-if "import SwiftUI" not in text:
-    raise SystemExit("SwiftUI import anchor missing")
 text = text.replace(
-    "import SwiftUI",
-    "import SwiftUI\nimport UIKit\nimport BackgroundTasks",
+    'private let V140_PERSISTENT_PHONE_AGENT = "v0.14.0-persistent-phone-agent-v1"\n',
+    'private let V140_PERSISTENT_PHONE_AGENT = "v0.14.0-persistent-phone-agent-v1"\n'
+    'private let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v3"\n',
     1,
 )
 
-anchor = "@main\nstruct VexNativeApp: App {"
-if anchor not in text:
-    raise SystemExit("VexNativeApp anchor missing")
+text = text.replace(
+    '''    private var persistentAgentStarted = false
+    private var heartbeatBuffer: AVAudioPCMBuffer?''',
+    '''    private var persistentAgentStarted = false
+    private var heartbeatBuffer: AVAudioPCMBuffer?
+    private var resilienceWatchdogTask: Task<Void, Never>?''',
+    1,
+)
 
-coordinator = r'''
-@MainActor
-private enum VexBackgroundCoordinator {
-    static let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v2"
-    static let refreshIdentifier = "local.star.vexnative.background.refresh"
-    static let processingIdentifier = "local.star.vexnative.background.processing"
-
-    private static var registered = false
-    private static var graceTask: UIBackgroundTaskIdentifier = .invalid
-
-    static func register() {
-        guard !registered else { return }
-        registered = true
-
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: refreshIdentifier,
-            using: nil
-        ) { task in
-            guard let refresh = task as? BGAppRefreshTask else {
-                task.setTaskCompleted(success: false)
-                return
-            }
-            Task { @MainActor in
-                handleRefresh(refresh)
+old_init_tail = '''            if type == .ended {
+                self.restartPersistentAudio()
             }
         }
+    }
 
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: processingIdentifier,
-            using: nil
-        ) { task in
-            guard let processing = task as? BGProcessingTask else {
-                task.setTaskCompleted(success: false)
-                return
-            }
-            Task { @MainActor in
-                handleProcessing(processing)
+    func startPersistentAgent() {'''
+
+new_init_tail = '''            if type == .ended {
+                self.restartPersistentAudio()
+                self.startResilienceWatchdog()
             }
         }
 
         NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
             queue: .main
-        ) { _ in
-            Task { @MainActor in
-                appBecameActive()
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.restartPersistentAudio()
+            self.startResilienceWatchdog()
+        }
+    }
+
+    func startPersistentAgent() {'''
+
+if old_init_tail not in text:
+    raise SystemExit("v0.14.5 init/notification anchor missing")
+text = text.replace(old_init_tail, new_init_tail, 1)
+
+text = text.replace(
+    '''        guard !persistentAgentStarted else {
+            if !audioEngine.isRunning || !audioPlayer.isPlaying {
+                restartPersistentAudio()
             }
-        }
-
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            Task { @MainActor in
-                appEnteredBackground()
+            startForegroundLoop()
+            return
+        }''',
+    '''        guard !persistentAgentStarted else {
+            if !audioEngine.isRunning || !audioPlayer.isPlaying {
+                restartPersistentAudio()
             }
-        }
+            startForegroundLoop()
+            startResilienceWatchdog()
+            return
+        }''',
+    1,
+)
 
-        scheduleAll()
-    }
+text = text.replace(
+    '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
+            startForegroundLoop()''',
+    '''            UserDefaults.standard.set(Date(), forKey: "vex.phone.persistentAgent.startedAt")
+            startForegroundLoop()
+            startResilienceWatchdog()''',
+    1,
+)
 
-    static func appBecameActive() {
-        scheduleAll()
-        Task {
-            _ = await VexBackgroundAgent.runOnce()
-        }
-    }
+anchor = '''    func startForegroundLoop() {
+        guard foregroundTask == nil else { return }'''
 
-    static func appEnteredBackground() {
-        scheduleAll()
-        beginGraceWindow()
-    }
+insert = '''    func startResilienceWatchdog() {
+        guard resilienceWatchdogTask == nil else { return }
 
-    private static func handleRefresh(_ task: BGAppRefreshTask) {
-        scheduleRefresh()
-        let work = Task {
-            let ok = await VexBackgroundAgent.runOnce()
-            task.setTaskCompleted(success: ok)
-        }
-        task.expirationHandler = {
-            work.cancel()
-        }
-    }
+        resilienceWatchdogTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
 
-    private static func handleProcessing(_ task: BGProcessingTask) {
-        scheduleProcessing()
-        let work = Task {
-            let ok = await VexBackgroundAgent.runOnce()
-            task.setTaskCompleted(success: ok)
-        }
-        task.expirationHandler = {
-            work.cancel()
-        }
-    }
-
-    private static func scheduleAll() {
-        scheduleRefresh()
-        scheduleProcessing()
-    }
-
-    private static func scheduleRefresh() {
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshIdentifier)
-        let request = BGAppRefreshTaskRequest(identifier: refreshIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
-    }
-
-    private static func scheduleProcessing() {
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: processingIdentifier)
-        let request = BGProcessingTaskRequest(identifier: processingIdentifier)
-        request.requiresNetworkConnectivity = true
-        request.requiresExternalPower = false
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 20 * 60)
-        try? BGTaskScheduler.shared.submit(request)
-    }
-
-    private static func beginGraceWindow() {
-        if graceTask != .invalid {
-            UIApplication.shared.endBackgroundTask(graceTask)
-            graceTask = .invalid
-        }
-
-        graceTask = UIApplication.shared.beginBackgroundTask(
-            withName: "VexRemoteRelayGrace"
-        ) {
-            if graceTask != .invalid {
-                UIApplication.shared.endBackgroundTask(graceTask)
-                graceTask = .invalid
-            }
-        }
-
-        Task {
-            defer {
-                if graceTask != .invalid {
-                    UIApplication.shared.endBackgroundTask(graceTask)
-                    graceTask = .invalid
+                await MainActor.run {
+                    if !self.audioEngine.isRunning || !self.audioPlayer.isPlaying {
+                        self.restartPersistentAudio()
+                    }
+                    UserDefaults.standard.set(
+                        Date(),
+                        forKey: "vex.phone.background.watchdogHeartbeat"
+                    )
                 }
-            }
 
-            for _ in 0..<3 {
-                guard !Task.isCancelled else { break }
-                _ = await VexBackgroundAgent.runOnce()
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                _ = await VexPhoneBackgroundWorker.runOnce()
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
             }
         }
     }
-}
 
-'''
+    func startForegroundLoop() {
+        guard foregroundTask == nil else { return }'''
 
-text = text.replace(anchor, coordinator + anchor, 1)
+if anchor not in text:
+    raise SystemExit("v0.14.5 foreground loop anchor missing")
+text = text.replace(anchor, insert, 1)
 
-struct_anchor = "struct VexNativeApp: App {"
-init_injection = '''struct VexNativeApp: App {
-    init() {
-        VexBackgroundCoordinator.register()
-    }'''
-if text.count(struct_anchor) != 1:
-    raise SystemExit("unexpected VexNativeApp declaration count")
-text = text.replace(struct_anchor, init_injection, 1)
+text = text.replace(
+    '''        VexBackgroundAgent.shared.startPersistentAgent()
+        VexBackgroundAgent.shared.startForegroundLoop()''',
+    '''        VexBackgroundAgent.shared.startPersistentAgent()
+        VexBackgroundAgent.shared.startForegroundLoop()
+        VexBackgroundAgent.shared.startResilienceWatchdog()''',
+    1,
+)
 
-APP.write_text(text, encoding="utf-8")
+BG.write_text(text, encoding="utf-8")
 
-final = APP.read_text(encoding="utf-8")
+final = BG.read_text(encoding="utf-8")
 for marker in [
-    "V145_BACKGROUND_RESILIENCE",
-    "BGTaskScheduler.shared.register",
-    "BGAppRefreshTaskRequest",
-    "BGProcessingTaskRequest",
-    "beginBackgroundTask",
-    "UIApplication.didEnterBackgroundNotification",
-    "UIApplication.didBecomeActiveNotification",
-    "VexBackgroundAgent.runOnce()",
+    'V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v3"',
+    "resilienceWatchdogTask",
+    "startResilienceWatchdog()",
+    "AVAudioSession.routeChangeNotification",
+    "vex.phone.background.watchdogHeartbeat",
+    "restartPersistentAudio()",
+    "VexPhoneBackgroundWorker.runOnce()",
+    "refreshRoamingBootstrap()",
 ]:
     if marker not in final:
         raise SystemExit(f"missing v0.14.5 marker: {marker}")
