@@ -15,17 +15,16 @@ run("Tools/build_v144_github_roaming_bootstrap.py")
 run("Tools/apply_v145_background_resilience.py")
 
 checks = {
-    "VexNative/VexNativeApp.swift": [
-        "V145_BACKGROUND_RESILIENCE",
-        "BGTaskScheduler.shared.register",
-        "beginBackgroundTask",
-        "VexBackgroundAgent.runOnce()",
-    ],
     "VexNative/VexBackgroundAgent.swift": [
         "V144_GITHUB_ROAMING_BOOTSTRAP",
         "refreshRoamingBootstrap()",
         "remote-relay.json",
-    ],
+        "V145_BACKGROUND_RESILIENCE",
+        "startResilienceWatchdog()",
+        "routeChangeNotification",
+        "watchdogHeartbeat",
+        "VexPhoneBackgroundWorker.runOnce()",
+    ]
 }
 
 for filename, markers in checks.items():
