@@ -22,14 +22,19 @@ if anchor not in text:
     raise SystemExit("VexNativeApp anchor missing")
 
 coordinator = r'''
+@MainActor
 private enum VexBackgroundCoordinator {
-    static let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v1"
+    static let V145_BACKGROUND_RESILIENCE = "v0.14.5-background-resilience-v2"
     static let refreshIdentifier = "local.star.vexnative.background.refresh"
     static let processingIdentifier = "local.star.vexnative.background.processing"
 
+    private static var registered = false
     private static var graceTask: UIBackgroundTaskIdentifier = .invalid
 
     static func register() {
+        guard !registered else { return }
+        registered = true
+
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: refreshIdentifier,
             using: nil
@@ -38,7 +43,9 @@ private enum VexBackgroundCoordinator {
                 task.setTaskCompleted(success: false)
                 return
             }
-            handleRefresh(refresh)
+            Task { @MainActor in
+                handleRefresh(refresh)
+            }
         }
 
         BGTaskScheduler.shared.register(
@@ -49,8 +56,32 @@ private enum VexBackgroundCoordinator {
                 task.setTaskCompleted(success: false)
                 return
             }
-            handleProcessing(processing)
+            Task { @MainActor in
+                handleProcessing(processing)
+            }
         }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                appBecameActive()
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                appEnteredBackground()
+            }
+        }
+
+        scheduleAll()
     }
 
     static func appBecameActive() {
@@ -93,12 +124,14 @@ private enum VexBackgroundCoordinator {
     }
 
     private static func scheduleRefresh() {
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshIdentifier)
         let request = BGAppRefreshTaskRequest(identifier: refreshIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
 
     private static func scheduleProcessing() {
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: processingIdentifier)
         let request = BGProcessingTaskRequest(identifier: processingIdentifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
@@ -142,50 +175,14 @@ private enum VexBackgroundCoordinator {
 
 text = text.replace(anchor, coordinator + anchor, 1)
 
-old_struct = '''struct VexNativeApp: App {
-    @StateObject private var appModel = AppModel()
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(appModel)
-                .preferredColorScheme(.dark)
-        }
-    }
-}'''
-
-new_struct = '''struct VexNativeApp: App {
-    @StateObject private var appModel = AppModel()
-    @Environment(\\.scenePhase) private var scenePhase
-
+struct_anchor = "struct VexNativeApp: App {"
+init_injection = '''struct VexNativeApp: App {
     init() {
         VexBackgroundCoordinator.register()
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(appModel)
-                .preferredColorScheme(.dark)
-        }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .active:
-                VexBackgroundCoordinator.appBecameActive()
-            case .background:
-                VexBackgroundCoordinator.appEnteredBackground()
-            case .inactive:
-                break
-            @unknown default:
-                break
-            }
-        }
-    }
-}'''
-
-if old_struct not in text:
-    raise SystemExit("VexNativeApp body anchor missing")
-text = text.replace(old_struct, new_struct, 1)
+    }'''
+if text.count(struct_anchor) != 1:
+    raise SystemExit("unexpected VexNativeApp declaration count")
+text = text.replace(struct_anchor, init_injection, 1)
 
 APP.write_text(text, encoding="utf-8")
 
@@ -196,8 +193,9 @@ for marker in [
     "BGAppRefreshTaskRequest",
     "BGProcessingTaskRequest",
     "beginBackgroundTask",
+    "UIApplication.didEnterBackgroundNotification",
+    "UIApplication.didBecomeActiveNotification",
     "VexBackgroundAgent.runOnce()",
-    "scenePhase",
 ]:
     if marker not in final:
         raise SystemExit(f"missing v0.14.5 marker: {marker}")
