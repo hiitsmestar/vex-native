@@ -1,4 +1,4 @@
-name: Build VexNative v0.14.6 Foreground URL Handoff
+name: Build VexNative v0.14.7 Foreground URL Handoff
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Assemble v0.14.6
+      - name: Assemble v0.14.7
         run: python3 Tools/build_v146_foreground_handoff.py
 
       - name: Resolve packages
@@ -29,7 +29,7 @@ jobs:
         run: |
           set -o pipefail
           rm -rf "$RUNNER_TEMP/VexDerivedData"
-          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=146 MARKETING_VERSION=0.14.6 build | tee "$RUNNER_TEMP/xcodebuild.log"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=147 MARKETING_VERSION=0.14.7 build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add background permissions
         run: |
@@ -44,8 +44,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers array" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:0 string local.star.vexnative.background.refresh" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:1 string local.star.vexnative.background.processing" "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.14.6"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "146"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.14.7"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "147"
 
       - name: Package
         run: |
@@ -53,12 +53,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.14.6-foreground-handoff.ipa" Payload
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.14.7-foreground-handoff.ipa" Payload
 
       - uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.14.6-Foreground-Handoff
-          path: VexNative-v0.14.6-foreground-handoff.ipa
+          name: VexNative-v0.14.7-Foreground-Handoff
+          path: VexNative-v0.14.7-foreground-handoff.ipa
           if-no-files-found: error
           retention-days: 14
 
@@ -66,7 +66,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.14.6-build-log
+          name: VexNative-v0.14.7-build-log
           path: ${{ runner.temp }}/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
