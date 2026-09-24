@@ -27,3 +27,5 @@ if "static var openAppWhenRun = false" not in quick:
     raise SystemExit("quick actions must remain background-capable")
 
 print("PASS v0.14.6 foreground command handoff")
+
+# retrigger after inherited check fix
