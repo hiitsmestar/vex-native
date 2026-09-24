@@ -12,11 +12,17 @@ if "V148_ACTIVE_FOREGROUND_COMMAND_GATE" in text:
 anchor = '''            guard envelope.ok else { return false }
             guard let remote = envelope.command else { return true }
 
-            let outcome = await execute(remote.command)'''
-replacement = '''            guard envelope.ok else { return false }
-            guard let remote = envelope.command else { return true }
+                let outcome = await execute(remote.command)'''
+replacement = '''                guard envelope.ok else {
+                    lastError = "relay returned ok=false"
+                    continue
+                }
+                guard let remote = envelope.command else {
+                    UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
+                    return true
+                }
 
-            // V148_ACTIVE_FOREGROUND_COMMAND_GATE
+                // V148_ACTIVE_FOREGROUND_COMMAND_GATE
             if requiresForeground(remote.command) {
                 let deadline = Date().addingTimeInterval(20)
                 while Date() < deadline {
