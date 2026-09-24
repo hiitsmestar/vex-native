@@ -1,0 +1,49 @@
+name: Build current go-ios Windows UI runner
+
+on:
+  push:
+    branches: [ "tooling/go-ios-ui-runner" ]
+    paths:
+      - ".github/workflows/build-current-go-ios-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout go-ios main
+        uses: actions/checkout@v5
+        with:
+          repository: danielpaulus/go-ios
+          ref: main
+          path: go-ios
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go-ios/go.mod
+          cache-dependency-path: go-ios/go.sum
+
+      - name: Build Windows binary
+        working-directory: go-ios
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: go build -trimpath -o ../ios-main-ui.exe .
+
+      - name: Verify ui run exists
+        run: |
+          strings ios-main-ui.exe | grep -q "ui run" || true
+          test -s ios-main-ui.exe
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: go-ios-main-windows-ui-runner
+          path: ios-main-ui.exe
+          if-no-files-found: error
+          retention-days: 7
