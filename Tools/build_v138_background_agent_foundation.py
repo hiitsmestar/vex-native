@@ -40,8 +40,12 @@ for marker in [
 
 if "VexHeadlessBrain.reply(to: command)" not in voice:
     raise SystemExit("v0.13.8 voice headless route missing")
-if voice.count("static var openAppWhenRun = false") < 2:
-    raise SystemExit("v0.13.8 Siri intents must remain background-first")
+quick = voice.split("struct VexQuickActionIntent: AppIntent", 1)[1].split("struct VexVoiceCommandIntent: AppIntent", 1)[0]
+command_intent = voice.split("struct VexVoiceCommandIntent: AppIntent", 1)[1]
+if "static var openAppWhenRun = false" not in quick:
+    raise SystemExit("v0.13.8 quick actions must remain background-first")
+if "V146_FOREGROUND_COMMAND_HANDOFF" in voice and "static var openAppWhenRun = true" not in command_intent:
+    raise SystemExit("v0.14.6 Ask Vex must foreground for app handoff")
 if "VexBackgroundAgent.swift in Sources" not in pbx:
     raise SystemExit("v0.13.8 background source not in Xcode project")
 
