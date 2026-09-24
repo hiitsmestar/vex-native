@@ -9,45 +9,37 @@ if "V148_ACTIVE_FOREGROUND_COMMAND_GATE" in text:
     print("PASS v0.14.8 active foreground command gate already applied")
     raise SystemExit(0)
 
-anchor = '''            guard envelope.ok else { return false }
-            guard let remote = envelope.command else { return true }
+anchor = """                let outcome = await execute(remote.command)
+                await postResult(id: remote.id, ok: outcome.ok, result: outcome.result)"""
 
-                let outcome = await execute(remote.command)'''
-replacement = '''                guard envelope.ok else {
-                    lastError = "relay returned ok=false"
-                    continue
-                }
-                guard let remote = envelope.command else {
-                    UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
-                    return true
+replacement = """                // V148_ACTIVE_FOREGROUND_COMMAND_GATE
+                if requiresForeground(remote.command) {
+                    let deadline = Date().addingTimeInterval(20)
+                    while Date() < deadline {
+                        if await applicationIsActive() { break }
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                    }
+                    guard await applicationIsActive() else {
+                        await postResult(
+                            id: remote.id,
+                            ok: false,
+                            result: "Foreground activation timed out."
+                        )
+                        return false
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                 }
 
-                // V148_ACTIVE_FOREGROUND_COMMAND_GATE
-            if requiresForeground(remote.command) {
-                let deadline = Date().addingTimeInterval(20)
-                while Date() < deadline {
-                    if await applicationIsActive() { break }
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                }
-                guard await applicationIsActive() else {
-                    await postResult(
-                        id: remote.id,
-                        ok: false,
-                        result: "Foreground activation timed out."
-                    )
-                    return false
-                }
-                // Give UIKit a brief moment to finish scene activation before opening another app.
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
+                let outcome = await execute(remote.command)
+                await postResult(id: remote.id, ok: outcome.ok, result: outcome.result)"""
 
-            let outcome = await execute(remote.command)'''
 if anchor not in text:
-    raise SystemExit("v0.14.8 runOnce anchor missing")
+    raise SystemExit("v0.14.8 execute anchor missing")
 text = text.replace(anchor, replacement, 1)
 
-anchor = '''    private static func phoneTargeted(_ command: String) -> String {'''
-insert = '''    private static func applicationIsActive() async -> Bool {
+anchor = """    private static func phoneTargeted(_ command: String) -> String {"""
+
+insert = """    private static func applicationIsActive() async -> Bool {
         await MainActor.run {
             UIApplication.shared.applicationState == .active
         }
@@ -64,7 +56,8 @@ insert = '''    private static func applicationIsActive() async -> Bool {
         return markers.contains(where: { lower.contains($0) })
     }
 
-    private static func phoneTargeted(_ command: String) -> String {'''
+    private static func phoneTargeted(_ command: String) -> String {"""
+
 if anchor not in text:
     raise SystemExit("v0.14.8 phoneTargeted anchor missing")
 text = text.replace(anchor, insert, 1)
