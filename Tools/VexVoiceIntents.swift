@@ -238,7 +238,9 @@ struct VexQuickActionIntent: AppIntent {
 struct VexVoiceCommandIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Vex"
     static var description = IntentDescription("Give Vex a spoken iPhone command.")
-    static var openAppWhenRun = false
+    // V146_FOREGROUND_COMMAND_HANDOFF: foreground Vex so queued relay commands
+    // can legally hand off foreground app/URL opens through UIApplication.
+    static var openAppWhenRun = true
 
     @Parameter(
         title: "Command",
