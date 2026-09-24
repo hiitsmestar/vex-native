@@ -72,9 +72,7 @@ helper = '''    private static func foregroundOpenURL(_ command: String) -> URL?
         }
 
         for word in command.split(whereSeparator: { $0.isWhitespace }) {
-            let raw = String(word).trimmingCharacters(
-                in: CharacterSet(charactersIn: ",.;!?)\"]}")
-            )
+            let raw = String(word)
             if raw.lowercased().hasPrefix("https://") || raw.lowercased().hasPrefix("http://") {
                 return URL(string: raw)
             }
