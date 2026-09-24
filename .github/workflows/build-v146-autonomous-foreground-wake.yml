@@ -1,0 +1,72 @@
+name: Build VexNative v0.14.6 Autonomous Foreground Wake
+
+on:
+  push:
+    branches: [ "build/v146-autonomous-foreground-wake" ]
+    paths:
+      - "Tools/apply_v146_autonomous_foreground_wake.py"
+      - "Tools/build_v146_autonomous_foreground_wake.py"
+      - ".github/workflows/build-v146-autonomous-foreground-wake.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-autonomous-foreground-wake:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble v0.14.6
+        run: python3 Tools/build_v146_autonomous_foreground_wake.py
+
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+
+      - name: Build
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=146 MARKETING_VERSION=0.14.6 build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Add background permissions
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          INFO_PLIST="$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string fetch" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:2 string processing" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :BGTaskSchedulerPermittedIdentifiers" "$INFO_PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers array" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:0 string local.star.vexnative.background.refresh" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Add :BGTaskSchedulerPermittedIdentifiers:1 string local.star.vexnative.background.processing" "$INFO_PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.14.6"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "146"
+
+      - name: Package
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.14.6-autonomous-foreground-wake.ipa" Payload
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.14.6-Autonomous-Foreground-Wake
+          path: VexNative-v0.14.6-autonomous-foreground-wake.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.14.6-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
