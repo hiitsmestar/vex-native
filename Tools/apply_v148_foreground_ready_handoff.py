@@ -25,14 +25,12 @@ voice = voice.replace(old, new, 1)
 VOICE.write_text(voice, encoding="utf-8")
 
 bg = BG.read_text(encoding="utf-8")
-anchor = '''    func applicationWillEnterForeground(_ application: UIApplication) {
-        VexBackgroundAgent.shared.endBackgroundGrace(using: application)
-        VexBackgroundAgent.shared.startPersistentAgent()
-        VexBackgroundAgent.shared.schedule()
+old_active = '''    func applicationDidBecomeActive(_ application: UIApplication) {
+        VexBackgroundAgent.shared.startForegroundLoop()
     }'''
-replacement = anchor + '''
+new_active = '''    func applicationDidBecomeActive(_ application: UIApplication) {
+        VexBackgroundAgent.shared.startForegroundLoop()
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
         let defaults = UserDefaults.standard
         guard defaults.bool(forKey: "vex.phone.foregroundWake.pending") else { return }
         defaults.set(false, forKey: "vex.phone.foregroundWake.pending")
@@ -42,9 +40,9 @@ replacement = anchor + '''
             _ = await VexPhoneBackgroundWorker.runOnce()
         }
     }'''
-if anchor not in bg:
-    raise SystemExit("v0.14.8 foreground lifecycle anchor missing")
-bg = bg.replace(anchor, replacement, 1)
+if old_active not in bg:
+    raise SystemExit("v0.14.8 active lifecycle anchor missing")
+bg = bg.replace(old_active, new_active, 1)
 BG.write_text(bg, encoding="utf-8")
 
 final_voice = VOICE.read_text(encoding="utf-8")
