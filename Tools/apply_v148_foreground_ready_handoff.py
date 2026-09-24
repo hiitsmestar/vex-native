@@ -26,9 +26,11 @@ VOICE.write_text(voice, encoding="utf-8")
 
 bg = BG.read_text(encoding="utf-8")
 old_active = '''    func applicationDidBecomeActive(_ application: UIApplication) {
+        VexBackgroundAgent.shared.startPersistentAgent()
         VexBackgroundAgent.shared.startForegroundLoop()
     }'''
 new_active = '''    func applicationDidBecomeActive(_ application: UIApplication) {
+        VexBackgroundAgent.shared.startPersistentAgent()
         VexBackgroundAgent.shared.startForegroundLoop()
 
         let defaults = UserDefaults.standard
