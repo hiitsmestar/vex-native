@@ -17,11 +17,17 @@ Copy-Item -Force $RepoServer $TargetServer
 
 $python = (Get-Command python).Source
 $taskName = "VexNativeMCP"
-$taskCmd = '"' + $python + '" "' + $TargetServer + '" streamable-http >> "' + $Log + '" 2>&1'
 
-schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
-schtasks.exe /Create /TN $taskName /SC ONLOGON /RL LIMITED /TR $taskCmd /F | Out-Null
-schtasks.exe /Run /TN $taskName | Out-Null
+$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($existing) {
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+}
+
+$action = New-ScheduledTaskAction -Execute $python -Argument ('"' + $TargetServer + '" streamable-http') -WorkingDirectory $Root
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Description "VexNative private MCP tool server" | Out-Null
+Start-ScheduledTask -TaskName $taskName
 
 Start-Sleep -Seconds 3
 try {
