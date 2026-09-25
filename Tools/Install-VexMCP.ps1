@@ -16,18 +16,18 @@ python -m pip install --user "mcp==1.26.0"
 Copy-Item -Force $RepoServer $TargetServer
 
 $python = (Get-Command python).Source
-$taskName = "VexNativeMCP"
+$runKey = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+$runName = "VexNativeMCP"
+$runValue = '"' + $python + '" "' + $TargetServer + '" streamable-http'
 
-$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if ($existing) {
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+New-Item -Path $runKey -Force | Out-Null
+New-ItemProperty -Path $runKey -Name $runName -Value $runValue -PropertyType String -Force | Out-Null
+
+# Start it for the current session if it is not already running.
+$existing = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*VexMCPServer.py*' }
+if (-not $existing) {
+    Start-Process -FilePath $python -ArgumentList @($TargetServer, "streamable-http") -WindowStyle Hidden
 }
-
-$action = New-ScheduledTaskAction -Execute $python -Argument ('"' + $TargetServer + '" streamable-http') -WorkingDirectory $Root
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Description "VexNative private MCP tool server" | Out-Null
-Start-ScheduledTask -TaskName $taskName
 
 Start-Sleep -Seconds 3
 try {
@@ -39,4 +39,4 @@ try {
 
 Write-Host "VexNative MCP installed at $TargetServer"
 Write-Host "Local endpoint: http://127.0.0.1:$Port/mcp"
-Write-Host "Task: $taskName"
+Write-Host "Startup: HKCU Run\\VexNativeMCP"
