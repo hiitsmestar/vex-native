@@ -67,10 +67,10 @@ patch(
 patch_regex(
     "VexNative/AppModel.swift",
     r'''        if isQwen3 \{
-            maxNewTokens = \d+
-            temperature = [0-9.]+
-            topP = [0-9.]+
-            topK = \d+''',
+            maxNewTokens = [^\n]+
+            temperature = [^\n]+
+            topP = [^\n]+
+            topK = [^\n]+''',
     '''        if isQwen3 {
             // V155_LOCAL_DIRECT_BRAIN
             // V155_LOCAL_DIRECT_GENERATION
