@@ -24,12 +24,14 @@ final class ModelLibrary {
         string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q3_k_m.gguf?download=true"
     )!
 
+    // v0.15.5 local-direct fallback: refusal-suppressed Qwen3 GGUF.
+    // PC Ollama remains the higher-quality brain; this one is small enough for the iPhone.
     static let qwen3ModelURL = URL(
-        string: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/1208e45d782fe18602c5eaf10e5758d5b0f24c03/Qwen3-0.6B-Q4_K_M.gguf?download=true"
+        string: "https://huggingface.co/jaahas/Qwen3-0.6B-abliterated-Q4_K_M-GGUF/resolve/main/qwen3-0.6b-abliterated-q4_k_m.gguf?download=true"
     )!
 
     static let qwen3FallbackURL = URL(
-        string: "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf?download=true"
+        string: "https://huggingface.co/bartowski/mlabonne_Qwen3-0.6B-abliterated-GGUF/resolve/main/mlabonne_Qwen3-0.6B-abliterated-Q4_K_M.gguf?download=true"
     )!
 
     func importedModelURL(filename: String?) -> URL? {
@@ -78,13 +80,13 @@ final class ModelLibrary {
         do {
             return try await download(
                 from: Self.qwen3ModelURL,
-                filename: "Qwen3-0.6B-Q4_K_M.gguf",
+                filename: "qwen3-0.6b-abliterated-q4_k_m.gguf",
                 minimumBytes: 300_000_000
             )
         } catch {
             return try await download(
                 from: Self.qwen3FallbackURL,
-                filename: "Qwen3-0.6B-Q4_0.gguf",
+                filename: "mlabonne_Qwen3-0.6B-abliterated-Q4_K_M.gguf",
                 minimumBytes: 300_000_000
             )
         }
