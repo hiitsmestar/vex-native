@@ -440,7 +440,7 @@ final class WebBrain: ObservableObject {
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "language", value: "en-US"),
-            URLQueryItem(name: "safesearch", value: "0")
+            URLQueryItem(name: "safesearch", value: "1")
         ])
         components.queryItems = items
         guard let url = components.url else { throw WebBrainError.invalidEndpoint }
