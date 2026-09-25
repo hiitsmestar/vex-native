@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -14,6 +15,18 @@ def patch(path: str, old: str, new: str, label: str) -> None:
     if old not in text:
         raise SystemExit(f"missing v0.15.5 patch anchor: {label} in {path}")
     target.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print(f"PASS patched: {label}")
+
+def patch_regex(path: str, pattern: str, replacement: str, label: str) -> None:
+    target = ROOT / path
+    text = target.read_text(encoding="utf-8")
+    if "V155_LOCAL_DIRECT_GENERATION" in text and "generation" in label.lower():
+        print(f"PASS already patched: {label}")
+        return
+    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"missing v0.15.5 regex anchor: {label} in {path}")
+    target.write_text(updated, encoding="utf-8")
     print(f"PASS patched: {label}")
 
 # Phone fallback model: small abliterated Qwen3 GGUF.
@@ -51,31 +64,31 @@ patch(
 
 # Generation settings recommended for this Qwen3 abliteration, with enough room
 # to act like an assistant instead of a fortune cookie.
-patch(
+patch_regex(
     "VexNative/AppModel.swift",
-    '''        if isQwen3 {
-            maxNewTokens = 56
-            temperature = 0.80
-            topP = 0.90
-            topK = 40''',
+    r'''        if isQwen3 \{
+            maxNewTokens = \d+
+            temperature = [0-9.]+
+            topP = [0-9.]+
+            topK = \d+''',
     '''        if isQwen3 {
             // V155_LOCAL_DIRECT_BRAIN
+            // V155_LOCAL_DIRECT_GENERATION
             maxNewTokens = 160
             temperature = 0.60
             topP = 0.95
             topK = 20''',
     "Qwen3 primary generation",
 )
-patch(
+patch_regex(
     "VexNative/AppModel.swift",
-    '''                    maxNewTokens: 44,
-                    temperature: 0.86,
-                    topP: 0.92,
-                    topK: 50''',
-    '''                    maxNewTokens: 120,
-                    temperature: 0.66,
-                    topP: 0.95,
-                    topK: 20''',
+    r'''(?s)(retryRaw = try\? await engine\.complete\(
+                    prompt: retryPrompt,
+                    maxNewTokens: )\d+(,
+                    temperature: )[0-9.]+(,
+                    topP: )[0-9.]+(,
+                    topK: )\d+''',
+    r'''\g<1>120\g<2>0.66\g<3>0.95\g<4>20''',
     "Qwen3 retry generation",
 )
 
