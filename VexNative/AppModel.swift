@@ -197,12 +197,10 @@ final class AppModel: ObservableObject {
         let topK: Int32
 
         if isQwen3 {
-            // v0.15.5: tuned for the abliterated Qwen3 fallback instead of the old
-            // ultra-short stock-model settings.
-            maxNewTokens = 160
-            temperature = 0.60
-            topP = 0.95
-            topK = 20
+            maxNewTokens = 56
+            temperature = 0.80
+            topP = 0.90
+            topK = 40
         } else if isTinyQwen25 {
             maxNewTokens = 180
             temperature = 0.80
@@ -247,10 +245,10 @@ final class AppModel: ObservableObject {
 
                 if let retryRaw = try? await engine.complete(
                     prompt: retryPrompt,
-                    maxNewTokens: 120,
-                    temperature: 0.66,
-                    topP: 0.95,
-                    topK: 20
+                    maxNewTokens: 44,
+                    temperature: 0.86,
+                    topP: 0.92,
+                    topK: 50
                 ) {
                     let retryAnswer = repairQwen3RoleTerms(cleanGeneratedReply(retryRaw))
                     if candidateBadness(
