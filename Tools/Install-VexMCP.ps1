@@ -23,11 +23,9 @@ $runValue = '"' + $python + '" "' + $TargetServer + '" streamable-http'
 New-Item -Path $runKey -Force | Out-Null
 New-ItemProperty -Path $runKey -Name $runName -Value $runValue -PropertyType String -Force | Out-Null
 
-# Start it for the current session if it is not already running.
-$existing = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*VexMCPServer.py*' }
-if (-not $existing) {
-    Start-Process -FilePath $python -ArgumentList @($TargetServer, "streamable-http") -WindowStyle Hidden
-}
+# Start it for the current session. Re-running the installer may start another
+# instance briefly; only one process can bind the loopback port, so extras exit.
+Start-Process -FilePath $python -ArgumentList @($TargetServer, "streamable-http") -WindowStyle Hidden
 
 Start-Sleep -Seconds 3
 try {
