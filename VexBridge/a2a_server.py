@@ -239,6 +239,9 @@ async def send_a2a(base_url: str, payload: dict[str, Any] | str) -> str:
 
 async def cognition_agent(text: str) -> str:
     payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    if action in {"status", "health"}:
+        return json.dumps(brain_status(), indent=2, ensure_ascii=False, default=str)
     prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
     if not prompt:
         raise ValueError("prompt is required")
