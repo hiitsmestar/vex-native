@@ -6,11 +6,12 @@ It uses the official A2A Python SDK and protocol 1.0. The server binds to
 `127.0.0.1` by default and publishes six standard A2A agents:
 
 - coordinator
+- cognition (local Ollama fast/deep brain routing)
 - memory (ICM)
 - verification (Unlazy)
 - renderer (ComfyUI)
 - phone (VexNative iPhone relay)
-- coding (Antigravity/VexBridge process dispatch)
+- system (VexBridge MCP tool delegation)
 
 Each agent exposes an A2A Agent Card at:
 `/<agent>/.well-known/agent-card.json`
