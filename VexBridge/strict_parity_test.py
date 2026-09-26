@@ -12,8 +12,8 @@ async def main():
             await s.initialize()
             listed=await s.list_tools()
             tools={t.name:t for t in listed.tools}
-            assert len(tools)==36
-            expected={'ping','list_devices','who_am_i','get_prompts','give_feedback_to_desktop_commander','get_config','set_config_value','read_file','read_multiple_files','write_file','write_pdf','create_directory','list_directory','move_file','start_search','get_more_search_results','stop_search','list_searches','get_file_info','edit_block','start_process','read_process_output','interact_with_process','force_terminate','list_sessions','list_processes','kill_process','get_usage_stats','get_recent_tool_calls','shutdown','integration_status','icm_store','icm_recall','icm_stats','unlazy_status','unlazy_lint'}
+            assert len(tools)==41
+            expected={'ping','list_devices','who_am_i','get_prompts','give_feedback_to_desktop_commander','get_config','set_config_value','read_file','read_multiple_files','write_file','write_pdf','create_directory','list_directory','move_file','start_search','get_more_search_results','stop_search','list_searches','get_file_info','edit_block','start_process','read_process_output','interact_with_process','force_terminate','list_sessions','list_processes','kill_process','get_usage_stats','get_recent_tool_calls','shutdown','integration_status','icm_store','icm_recall','icm_stats','unlazy_status','unlazy_lint','a2a_status','a2a_agents','a2a_card','a2a_send','a2a_rpc'}
             assert set(tools)==expected
             remote=expected-{'list_devices','who_am_i'}
             for name in remote:
@@ -79,6 +79,6 @@ async def main():
             assert filtered and all(x.get('tool')=='write_file' for x in filtered)
             await call('get_usage_stats',{'deviceId':DEVICE})
             print('VEXBRIDGE_STRICT_PARITY=PASS')
-            print('TOOL_COUNT=36')
+            print('TOOL_COUNT=41')
 
 asyncio.run(main())
