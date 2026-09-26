@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -24,22 +24,52 @@ const expected = [
   "get_usage_stats", "get_recent_tool_calls", "get_prompts"
 ];
 
+const guard = setTimeout(() => {
+  console.error("FAIL global parity test timeout");
+  process.exit(99);
+}, 120000);
+guard.unref();
+
 function env(extra = {}) {
   return { ...process.env, VEX_DESKTOP_PARITY_ROOT: ROOT, ...extra };
 }
 
+function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function timed(promise, label, ms = 20000) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout: " + label)), ms);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function stdioClient(script, name) {
+  console.log("STEP connect " + name);
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [script],
     env: env()
   });
   const client = new Client({ name, version: "0.15.6" }, { capabilities: {} });
-  await client.connect(transport);
+  await timed(client.connect(transport), "connect " + name, 25000);
+  console.log("PASS connect " + name);
   return { client, transport };
 }
 
-function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+async function closePair(pair, label) {
+  if (!pair) return;
+  console.log("STEP close " + label);
+  try { await timed(pair.client.close(), "client close " + label, 5000); } catch (e) { console.warn(String(e)); }
+  try { await timed(pair.transport.close(), "transport close " + label, 5000); } catch (e) { console.warn(String(e)); }
+  console.log("PASS close " + label);
+}
 
 fs.writeFileSync(path.join(ROOT, "node-config.json"), JSON.stringify({
   version: "0.15.6",
@@ -53,16 +83,23 @@ let gateway = null;
 
 try {
   direct = await stdioClient(NODE_SCRIPT, "vex-parity-ci-direct");
-  const directTools = await direct.client.listTools();
+
+  console.log("STEP direct list_tools");
+  const directTools = await timed(direct.client.listTools(), "direct list_tools", 25000);
   const directNames = new Set((directTools.tools || []).map((x) => x.name));
   for (const name of expected) assert(directNames.has(name), "missing direct tool: " + name);
   assert(directNames.has("__vex_node_identity"), "missing node identity control");
+  console.log("PASS direct tool parity " + directNames.size);
 
-  const directConfig = await direct.client.callTool({ name: "get_config", arguments: {} });
+  console.log("STEP direct get_config");
+  const directConfig = await timed(direct.client.callTool({ name: "get_config", arguments: {} }), "direct get_config", 20000);
   assert(Array.isArray(directConfig.content), "direct get_config returned no content");
-  await direct.client.close();
+  console.log("PASS direct get_config");
+
+  await closePair(direct, "direct");
   direct = null;
 
+  console.log("STEP start authenticated node HTTP gateway");
   gateway = spawn("python", [
     "-m", "mcp_stdio", "serve",
     "--host", "127.0.0.1",
@@ -75,10 +112,13 @@ try {
     stdio: ["ignore", "pipe", "pipe"]
   });
 
+  let gatewayStdout = "";
   let gatewayStderr = "";
+  gateway.stdout.on("data", (d) => { gatewayStdout += d.toString(); });
   gateway.stderr.on("data", (d) => { gatewayStderr += d.toString(); });
-  await sleep(3500);
-  assert.equal(gateway.exitCode, null, "node HTTP gateway exited early: " + gatewayStderr.slice(-1200));
+  await wait(3500);
+  assert.equal(gateway.exitCode, null, "node HTTP gateway exited early: " + gatewayStderr.slice(-1600));
+  console.log("PASS gateway process alive");
 
   fs.writeFileSync(path.join(ROOT, "nodes.json"), JSON.stringify({
     version: "0.15.6",
@@ -91,9 +131,10 @@ try {
   }, null, 2));
 
   hub = await stdioClient(HUB_SCRIPT, "vex-parity-ci-hub");
-  const hubTools = await hub.client.listTools();
-  const hubMap = new Map((hubTools.tools || []).map((x) => [x.name, x]));
 
+  console.log("STEP hub list_tools");
+  const hubTools = await timed(hub.client.listTools(), "hub list_tools", 30000);
+  const hubMap = new Map((hubTools.tools || []).map((x) => [x.name, x]));
   for (const name of ["list_devices", "who_am_i", "ping", "shutdown", ...expected]) {
     assert(hubMap.has(name), "missing hub tool: " + name);
   }
@@ -102,26 +143,43 @@ try {
     assert(schema.properties && schema.properties.deviceId, "deviceId not injected for " + name);
     assert(Array.isArray(schema.required) && schema.required.includes("deviceId"), "deviceId not required for " + name);
   }
+  console.log("PASS hub tool parity " + hubMap.size);
 
-  const devicesResult = await hub.client.callTool({ name: "list_devices", arguments: {} });
+  console.log("STEP hub list_devices");
+  const devicesResult = await timed(hub.client.callTool({ name: "list_devices", arguments: {} }), "hub list_devices", 20000);
   const devicesText = (devicesResult.content || []).find((x) => x.type === "text")?.text || "{}";
   const devices = JSON.parse(devicesText).devices || [];
   assert.equal(devices.length, 1, "hub did not return exactly one CI node");
   assert.equal(devices[0].deviceId, "ci-node-1", "hub did not preserve node device ID");
   assert.equal(devices[0].online, true, "CI node was not online");
+  console.log("PASS hub list_devices");
 
-  const routedConfig = await hub.client.callTool({ name: "get_config", arguments: { deviceId: "ci-node-1" } });
+  console.log("STEP routed get_config");
+  const routedConfig = await timed(hub.client.callTool({ name: "get_config", arguments: { deviceId: "ci-node-1" } }), "routed get_config", 20000);
   assert(Array.isArray(routedConfig.content), "hub routed get_config returned no content");
+  console.log("PASS routed get_config");
 
-  const pingResult = await hub.client.callTool({ name: "ping", arguments: { deviceId: "ci-node-1" } });
+  console.log("STEP routed ping");
+  const pingResult = await timed(hub.client.callTool({ name: "ping", arguments: { deviceId: "ci-node-1" } }), "routed ping", 20000);
   const pingText = (pingResult.content || []).find((x) => x.type === "text")?.text || "{}";
   assert.equal(JSON.parse(pingText).deviceId, "ci-node-1", "hub ping routed to wrong node");
+  console.log("PASS routed ping");
 
-  console.log("PASS Vex Desktop Parity v0.15.6: exact upstream tool proxy + multi-device routing");
+  console.log("PASS Vex Desktop Parity v0.15.6: upstream tool proxy + authenticated multi-device routing");
 } finally {
-  try { await hub?.client.close(); } catch {}
-  try { await direct?.client.close(); } catch {}
-  if (gateway && gateway.exitCode === null) gateway.kill();
+  clearTimeout(guard);
+  await closePair(hub, "hub");
+  await closePair(direct, "direct-final");
+
+  if (gateway && gateway.exitCode === null) {
+    console.log("STEP stop gateway tree");
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/PID", String(gateway.pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      gateway.kill("SIGKILL");
+    }
+  }
+
   for (const name of ["node-config.json", "nodes.json", "node-disabled.flag"]) {
     try { fs.rmSync(path.join(ROOT, name), { force: true }); } catch {}
   }
