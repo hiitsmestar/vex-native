@@ -141,7 +141,7 @@ function Test-McpEndpoint {
     param([string]$Token, [string]$Url, [string]$Label)
     $job = Start-Job -ScriptBlock {
         param($PythonExe, $Bearer, $Endpoint)
-        & $PythonExe -m mcp_stdio --bearer-token $Bearer --check $Endpoint
+        & $PythonExe -m mcp_stdio --bearer-token $Bearer --check $Endpoint *> $null
         if ($null -eq $LASTEXITCODE) { return 1 }
         return [int]$LASTEXITCODE
     } -ArgumentList $python, $Token, $Url
