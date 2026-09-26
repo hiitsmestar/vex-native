@@ -4,12 +4,16 @@ $SourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP'
 $McpSource = Join-Path $SourceRoot 'VexBridgeMCP'
 $RelaySource = Join-Path $SourceRoot 'VexBridgeRelay'
+$ClientSource = Join-Path $SourceRoot 'VexBridgeRelayClient'
 
 if(-not (Test-Path (Join-Path $McpSource 'VexBridgeMCP.exe'))){
   throw 'VexBridgeMCP packaged folder is missing.'
 }
 if(-not $SkipRelay -and -not (Test-Path (Join-Path $RelaySource 'VexBridgeRelay.exe'))){
   throw 'VexBridgeRelay packaged folder is missing.'
+}
+if(-not (Test-Path (Join-Path $ClientSource 'VexBridgeRelayClient.exe'))){
+  throw 'VexBridgeRelayClient packaged folder is missing.'
 }
 
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
@@ -25,6 +29,7 @@ $Stage = Join-Path $env:TEMP ("VexBridgeMCP-install-" + $PID)
 Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item $McpSource (Join-Path $Stage 'MCP') -Recurse -Force
+Copy-Item $ClientSource (Join-Path $Stage 'Client') -Recurse -Force
 if(-not $SkipRelay){ Copy-Item $RelaySource (Join-Path $Stage 'Relay') -Recurse -Force }
 
 Remove-Item $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -108,6 +113,7 @@ if(-not $SkipRelay){
 
 Write-Host "VexBridgeMCP installed: $McpExe"
 Write-Host "Local MCP endpoint: http://127.0.0.1:$Port/mcp"
+Write-Host ("Relay client: " + (Join-Path $InstallRoot 'Client\VexBridgeRelayClient.exe'))
 Write-Host ("Allowed roots: " + ($Roots -join ', '))
 if($SkipRelay){ Write-Host 'Encrypted relay skipped by request.' }
 elseif($RelayStarted){ Write-Host 'Encrypted GitHub relay started and persisted.' }
