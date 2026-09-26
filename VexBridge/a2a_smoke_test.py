@@ -46,8 +46,8 @@ async def main():
         registry=(await http.get(BASE+"/registry")).json()
         assert health["ok"] is True
         assert health["protocol"]=="A2A 1.0"
-        assert {"coordinator","cognition","memory","verification","system","node"} <= set(registry["local"])
-        for suffix in ["","/cognition","/memory","/verification","/system","/node"]:
+        assert {"coordinator","cognition","memory","verification","system","node","renderer","phone","coding"} <= set(registry["local"])
+        for suffix in ["","/cognition","/memory","/verification","/system","/node","/renderer","/phone","/coding"]:
             card=await A2ACardResolver(httpx_client=http,base_url=BASE+suffix).get_agent_card()
             assert card.name.startswith("Vex ")
 
