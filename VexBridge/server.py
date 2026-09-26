@@ -28,7 +28,7 @@ from typing import Any, Literal
 import httpx
 import psutil
 from a2a.client import A2ACardResolver, ClientConfig, create_client
-from a2a.helpers import get_stream_response_text, new_text_message
+from a2a.helpers import new_text_message
 from a2a.types import Role, SendMessageRequest
 from docx import Document
 from mcp.server.fastmcp import FastMCP
@@ -338,6 +338,36 @@ def _a2a_artifact_text(value: Any) -> list[str]:
             out.extend(_a2a_artifact_text(item))
     return out
 
+
+def _a2a_stream_text(chunk: Any) -> str:
+    found: list[str] = []
+    try:
+        if chunk.HasField("message"):
+            found.extend(
+                part.text for part in chunk.message.parts
+                if getattr(part, "text", "")
+            )
+        if chunk.HasField("artifact_update"):
+            artifact = chunk.artifact_update.artifact
+            found.extend(
+                part.text for part in artifact.parts
+                if getattr(part, "text", "")
+            )
+        if chunk.HasField("task"):
+            for artifact in chunk.task.artifacts:
+                found.extend(
+                    part.text for part in artifact.parts
+                    if getattr(part, "text", "")
+                )
+        if chunk.HasField("status_update") and chunk.status_update.status.HasField("message"):
+            found.extend(
+                part.text for part in chunk.status_update.status.message.parts
+                if getattr(part, "text", "")
+            )
+    except Exception:
+        pass
+    return "\n".join(found)
+
 async def _a2a_send_async(base_url: str, message: str) -> dict[str, Any]:
     timeout = httpx.Timeout(240.0, connect=15.0)
     async with httpx.AsyncClient(timeout=timeout) as http:
@@ -351,7 +381,7 @@ async def _a2a_send_async(base_url: str, message: str) -> dict[str, Any]:
             events: list[dict[str, Any]] = []
             texts: list[str] = []
             async for chunk in client.send_message(request):
-                extracted = get_stream_response_text(chunk)
+                extracted = _a2a_stream_text(chunk)
                 if extracted:
                     texts.append(extracted)
                 events.append({"value": str(chunk)})
