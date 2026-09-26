@@ -29,6 +29,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeMCP --collect-all mcp --collect-all starlette --collect-all uvicorn --collect-all pydantic --collect-all pydantic_settings --collect-all jsonschema --collect-all reportlab --collect-all docx --collect-all openpyxl --collect-all pypdf --collect-all PIL --collect-all psutil VexBridge/server.py
           pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeRelay --collect-all mcp --collect-all cryptography VexBridge/relay_worker.py
+          pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeRelayClient --collect-all cryptography VexBridge/relay_client.py
       - name: Start packaged MCP and run strict parity
         shell: pwsh
         run: |
@@ -54,16 +55,20 @@ jobs:
           $env:VEXBRIDGE_TEST_DEVICE = "runner"
           python VexBridge/strict_parity_test.py
           if(-not $p.HasExited){Stop-Process $p.Id -Force}
-      - name: Smoke packaged relay
+      - name: Smoke packaged relay and client
         shell: pwsh
         run: |
           if(-not (Test-Path ".\dist\VexBridgeRelay\VexBridgeRelay.exe")){ throw "VexBridgeRelay.exe missing" }
+          if(-not (Test-Path ".\dist\VexBridgeRelayClient\VexBridgeRelayClient.exe")){ throw "VexBridgeRelayClient.exe missing" }
+          & ".\dist\VexBridgeRelayClient\VexBridgeRelayClient.exe" --help | Out-Null
+          if($LASTEXITCODE -ne 0){ throw "VexBridgeRelayClient packaged help smoke failed" }
       - name: Assemble artifact
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item dist\VexBridgeMCP package\VexBridgeMCP -Recurse
           Copy-Item dist\VexBridgeRelay package\VexBridgeRelay -Recurse
+          Copy-Item dist\VexBridgeRelayClient package\VexBridgeRelayClient -Recurse
           Copy-Item VexBridge\install-windows.ps1 package\install-windows.ps1
           Copy-Item VexBridge\README.md package\README.md
           Compress-Archive -Path package\* -DestinationPath VexBridgeMCP-Windows.zip -Force
