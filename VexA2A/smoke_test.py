@@ -40,7 +40,6 @@ async def main() -> None:
         rendered = "\n".join(rendered_parts)
         assert "coordinator" in rendered
         assert "memory" in rendered
-        await client.close()
 
         local = (
             await http.post(
@@ -50,6 +49,7 @@ async def main() -> None:
         ).json()
         assert local["ok"] is True
         assert "memory" in local["result"]["agents"]
+        await client.close()
 
     print("VEXA2A_SMOKE=PASS")
     print("AGENT_COUNT=6")
