@@ -21,15 +21,16 @@ jobs:
           python -m pip install -r VexBridge/requirements.txt
           python -m pip install pyinstaller typer
       - name: Compile source
-        run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/relay_client.py VexBridge/relay_interop_test.py VexBridge/strict_parity_test.py
+        run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/relay_client.py VexBridge/relay_interop_test.py VexBridge/strict_parity_test.py VexBridge/a2a_server.py VexBridge/a2a_smoke_test.py
       - name: Verify relay client/worker crypto interoperability
         run: python VexBridge/relay_interop_test.py
       - name: Build Windows onedir executables
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeMCP --collect-all mcp --collect-all starlette --collect-all uvicorn --collect-all pydantic --collect-all pydantic_settings --collect-all jsonschema --collect-all reportlab --collect-all docx --collect-all openpyxl --collect-all pypdf --collect-all PIL --collect-all psutil VexBridge/server.py
+          pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeMCP --collect-all mcp --collect-all a2a --collect-all starlette --collect-all uvicorn --collect-all pydantic --collect-all pydantic_settings --collect-all jsonschema --collect-all reportlab --collect-all docx --collect-all openpyxl --collect-all pypdf --collect-all PIL --collect-all psutil VexBridge/server.py
           pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeRelay --collect-all mcp --collect-all cryptography VexBridge/relay_worker.py
           pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeRelayClient --collect-all cryptography VexBridge/relay_client.py
+          pyinstaller --noconfirm --clean --onedir --noupx --console --name VexA2A --collect-all a2a --collect-all mcp --collect-all starlette --collect-all uvicorn VexBridge/a2a_server.py
       - name: Start packaged MCP and run strict parity
         shell: pwsh
         run: |
@@ -53,7 +54,24 @@ jobs:
           $env:VEXBRIDGE_TEST_URL = "http://127.0.0.1:8798/mcp"
           $env:VEXBRIDGE_TEST_ROOT = "$env:RUNNER_TEMP\VexBridgeStrictParity"
           $env:VEXBRIDGE_TEST_DEVICE = "runner"
+          $env:VEXBRIDGE_MCP_URL = "http://127.0.0.1:8798/mcp"
+          $env:VEX_A2A_HOST = "127.0.0.1"
+          $env:VEX_A2A_PORT = "8808"
+          $env:VEX_A2A_BASE_URL = "http://127.0.0.1:8808"
+          $a2a = Start-Process ".\dist\VexA2A\VexA2A.exe" -PassThru -WindowStyle Hidden
+          $a2aReady = $false
+          for ($i=0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8808/health" -TimeoutSec 2
+              if($r.StatusCode -eq 200){$a2aReady=$true; break}
+            } catch {}
+          }
+          if(-not $a2aReady){ if(-not $a2a.HasExited){Stop-Process $a2a.Id -Force}; if(-not $p.HasExited){Stop-Process $p.Id -Force}; throw "Packaged VexA2A did not become healthy" }
+          $env:VEX_A2A_TEST_URL = "http://127.0.0.1:8808"
           python VexBridge/strict_parity_test.py
+          python VexBridge/a2a_smoke_test.py
+          if(-not $a2a.HasExited){Stop-Process $a2a.Id -Force}
           if(-not $p.HasExited){Stop-Process $p.Id -Force}
       - name: Smoke packaged relay and client
         shell: pwsh
@@ -69,19 +87,24 @@ jobs:
           Copy-Item dist\VexBridgeMCP package\VexBridgeMCP -Recurse
           Copy-Item dist\VexBridgeRelay package\VexBridgeRelay -Recurse
           Copy-Item dist\VexBridgeRelayClient package\VexBridgeRelayClient -Recurse
+          Copy-Item dist\VexA2A package\VexA2A -Recurse
           Copy-Item VexBridge\install-windows.ps1 package\install-windows.ps1
           Copy-Item VexBridge\README.md package\README.md
           Compress-Archive -Path package\* -DestinationPath VexBridgeMCP-Windows.zip -Force
       - name: Test packaged installer
         shell: pwsh
         run: |
-          & .\package\install-windows.ps1 -SkipRelay -Port 8799
+          & .\package\install-windows.ps1 -SkipRelay -Port 8799 -A2APort 8810
           $ready = Get-NetTCPConnection -LocalPort 8799 -State Listen -ErrorAction SilentlyContinue
           if(-not $ready){ throw "Installer test did not leave MCP listening on 8799" }
           $startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'VexBridgeMCP.cmd'
           if(-not (Test-Path $startup)){ throw "Installer test did not create startup entry" }
           $installed = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\MCP\VexBridgeMCP.exe'
           if(-not (Test-Path $installed)){ throw "Installer test did not install VexBridgeMCP.exe" }
+          $a2aExe = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\A2A\VexA2A.exe'
+          if(-not (Test-Path $a2aExe)){ throw "Installer test did not install VexA2A.exe" }
+          $a2aHealth = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8810/health' -TimeoutSec 5
+          if($a2aHealth.StatusCode -ne 200){ throw "Installed VexA2A health check failed" }
           $client = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\Client\VexBridgeRelayClient.exe'
           if(-not (Test-Path $client)){ throw "Installer test did not install VexBridgeRelayClient.exe" }
           & $client --help | Out-Null
