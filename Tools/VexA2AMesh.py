@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import uvicorn
 from a2a.client import A2ACardResolver, ClientConfig, create_client
-from a2a.helpers import get_message_text, new_agent_text_message, new_text_message
+from a2a.helpers import get_message_text, new_text_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -332,7 +332,7 @@ class VexExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         query = get_message_text(context.message) if context.message else ""
         result = await HANDLERS[self.name](query or "")
-        await event_queue.enqueue_event(new_agent_text_message(result))
+        await event_queue.enqueue_event(new_text_message(result, role=Role.ROLE_AGENT))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise NotImplementedError("This Vex A2A agent does not expose cancellable long-running tasks yet.")
