@@ -42,7 +42,9 @@ DEFAULT_CONFIG = {
 if not CONFIG_PATH.exists():
     CONFIG_PATH.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
 
-mcp = FastMCP("VexBridge", stateless_http=True, json_response=True)
+MCP_HOST = os.environ.get("VEXBRIDGE_HOST", "127.0.0.1")
+MCP_PORT = int(os.environ.get("VEXBRIDGE_PORT", "8765"))
+mcp = FastMCP("VexBridge", host=MCP_HOST, port=MCP_PORT, stateless_http=True, json_response=True)
 
 def audit(tool: str, ok: bool, detail: dict[str, Any] | None = None) -> None:
     rec = {"ts": time.time(), "tool": tool, "ok": ok, "detail": detail or {}}
@@ -467,8 +469,4 @@ def shutdown() -> dict[str, Any]:
     return {"ok": True, "message": "VexBridge shutting down"}
 
 if __name__ == "__main__":
-    host = os.environ.get("VEXBRIDGE_HOST", "127.0.0.1")
-    port = int(os.environ.get("VEXBRIDGE_PORT", "8765"))
-    os.environ.setdefault("FASTMCP_HOST", host)
-    os.environ.setdefault("FASTMCP_PORT", str(port))
     mcp.run(transport="streamable-http")
