@@ -23,7 +23,8 @@ jobs:
       - name: Build onedir agent
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onedir --noupx --name VexBridgeMCP --collect-all mcp --collect-all pydantic_settings --collect-all reportlab VexBridge/server.py
+          pyinstaller --noconfirm --clean --onedir --noupx --name VexBridgeMCP --collect-all mcp --collect-all a2a --collect-all pydantic_settings --collect-all reportlab VexBridge/server.py
+          pyinstaller --noconfirm --clean --onedir --noupx --name VexA2A --collect-all a2a --collect-all mcp --collect-all starlette --collect-all uvicorn VexBridge/a2a_server.py
       - name: Smoke packaged agent
         shell: pwsh
         run: |
@@ -43,17 +44,33 @@ jobs:
           }
           if (-not $ready) { throw "Packaged VexBridge did not listen" }
           python VexBridge/smoke_client.py
+          $env:VEXBRIDGE_MCP_URL = "http://127.0.0.1:8795/mcp"
+          $env:VEX_A2A_HOST = "127.0.0.1"
+          $env:VEX_A2A_PORT = "8800"
+          $env:VEX_A2A_BASE_URL = "http://127.0.0.1:8800"
+          $a = Start-Process ".\dist\VexA2A\VexA2A.exe" -PassThru -WindowStyle Hidden
+          $aReady=$false
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $r=Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8800/health" -TimeoutSec 2
+              if($r.StatusCode -eq 200){$aReady=$true;break}
+            } catch {}
+          }
+          if(-not $aReady){ throw "Packaged VexA2A did not become healthy" }
+          $env:VEX_A2A_TEST_URL="http://127.0.0.1:8800"
+          python VexBridge/a2a_smoke_test.py
+          Stop-Process -Id $a.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-      - name: Add launcher
+      - name: Assemble package
         shell: pwsh
         run: |
-          '@echo off' | Set-Content dist\VexBridgeMCP\START-VEXBRIDGE.cmd -Encoding ASCII
-          'set VEXBRIDGE_HOST=127.0.0.1' | Add-Content dist\VexBridgeMCP\START-VEXBRIDGE.cmd -Encoding ASCII
-          'set VEXBRIDGE_PORT=8795' | Add-Content dist\VexBridgeMCP\START-VEXBRIDGE.cmd -Encoding ASCII
-          'start "" /min "%~dp0VexBridgeMCP.exe"' | Add-Content dist\VexBridgeMCP\START-VEXBRIDGE.cmd -Encoding ASCII
-      - name: Archive package
-        shell: pwsh
-        run: Compress-Archive -Path dist\VexBridgeMCP\* -DestinationPath VexBridgeMCP-Windows.zip -Force
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist\VexBridgeMCP package\VexBridgeMCP -Recurse
+          Copy-Item dist\VexA2A package\VexA2A -Recurse
+          Copy-Item VexBridge\install-windows.ps1 package\install-windows.ps1
+          Copy-Item VexBridge\README.md package\README.md
+          Compress-Archive -Path package\* -DestinationPath VexBridgeMCP-Windows.zip -Force
       - uses: actions/upload-artifact@v4
         with:
           name: VexBridgeMCP-Windows
