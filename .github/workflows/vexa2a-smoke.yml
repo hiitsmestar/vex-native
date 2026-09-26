@@ -1,0 +1,48 @@
+name: VexA2A Smoke
+
+on:
+  push:
+    branches: [vexbridge-a2a]
+    paths:
+      - "VexA2A/**"
+      - ".github/workflows/vexa2a-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r VexA2A/requirements.txt
+      - name: Compile
+        run: python -m py_compile VexA2A/server.py VexA2A/smoke_test.py
+      - name: Start A2A service
+        shell: pwsh
+        run: |
+          $env:VEXA2A_HOST='127.0.0.1'
+          $env:VEXA2A_PORT='8797'
+          $p=Start-Process python -ArgumentList 'VexA2A/server.py' -PassThru
+          $p.Id | Set-Content "$env:RUNNER_TEMP\vexa2a.pid"
+          $ready=$false
+          for($i=0;$i -lt 40;$i++){
+            Start-Sleep -Milliseconds 500
+            try{
+              $h=Invoke-RestMethod 'http://127.0.0.1:8797/health' -TimeoutSec 2
+              if($h.ok){$ready=$true;break}
+            }catch{}
+          }
+          if(-not $ready){throw 'VexA2A did not become healthy'}
+      - name: A2A protocol smoke
+        env:
+          VEXA2A_TEST_URL: http://127.0.0.1:8797
+        run: python VexA2A/smoke_test.py
+      - name: Stop A2A service
+        if: always()
+        shell: pwsh
+        run: |
+          $f="$env:RUNNER_TEMP\vexa2a.pid"
+          if(Test-Path $f){Stop-Process -Id ([int](Get-Content $f)) -Force -ErrorAction SilentlyContinue}
