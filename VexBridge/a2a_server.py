@@ -14,6 +14,7 @@ import uvicorn
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import (
     get_message_text,
+    get_stream_response_text,
     new_task_from_user_message,
     new_text_message,
     new_text_part,
@@ -185,43 +186,26 @@ def _artifact_text(value: Any) -> list[str]:
 
 
 async def send_a2a(base_url: str, payload: dict[str, Any] | str) -> str:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        card = await A2ACardResolver(httpx_client=client, base_url=base_url).get_agent_card()
-    a2a_client = await create_client(agent=card, client_config=ClientConfig(streaming=False))
-    try:
-        text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
-        request = SendMessageRequest(message=new_text_message(text, role=Role.ROLE_USER))
-        chunks: list[dict[str, Any]] = []
-        async for chunk in a2a_client.send_message(request):
-            if hasattr(chunk, "model_dump"):
-                chunks.append(chunk.model_dump(mode="json"))
-            else:
-                chunks.append({"value": str(chunk)})
-        texts = _artifact_text(chunks)
-        return "\n".join(texts) if texts else json.dumps(chunks, ensure_ascii=False)
-    finally:
-        await a2a_client.close()
-
-
-async def cognition_agent(text: str) -> str:
-    payload = parse_payload(text)
-    action = str(payload.get("action") or "").lower()
-    if action in {"status", "ping", "health"}:
-        return json.dumps(brain_status(), indent=2, ensure_ascii=False, default=str)
-    prompt = str(payload.get("prompt") or payload.get("text") or text or "").strip()
-    mode = str(payload.get("mode") or "auto").lower()
-    if mode not in {"auto", "fast", "deep"}:
-        raise ValueError("mode must be auto, fast, or deep")
-    result = await asyncio.to_thread(
-        brain_chat,
-        prompt,
-        mode,
-        payload.get("system"),
-        float(payload.get("temperature", 0.7)),
-        int(payload.get("max_tokens", 4096)),
-    )
-    return json.dumps(result, indent=2, ensure_ascii=False, default=str)
-
+    timeout = httpx.Timeout(240.0, connect=15.0)
+    async with httpx.AsyncClient(timeout=timeout) as http:
+        card = await A2ACardResolver(httpx_client=http, base_url=base_url).get_agent_card()
+        a2a_client = await create_client(
+            agent=card,
+            client_config=ClientConfig(streaming=False, httpx_client=http),
+        )
+        try:
+            text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+            request = SendMessageRequest(message=new_text_message(text, role=Role.ROLE_USER))
+            texts: list[str] = []
+            events: list[str] = []
+            async for chunk in a2a_client.send_message(request):
+                extracted = get_stream_response_text(chunk)
+                if extracted:
+                    texts.append(extracted)
+                events.append(str(chunk))
+            return "\n".join(texts) if texts else json.dumps(events, ensure_ascii=False)
+        finally:
+            await a2a_client.close()
 
 async def memory_agent(text: str) -> str:
     payload = parse_payload(text)

@@ -28,7 +28,7 @@ from typing import Any, Literal
 import httpx
 import psutil
 from a2a.client import A2ACardResolver, ClientConfig, create_client
-from a2a.helpers import new_text_message
+from a2a.helpers import get_stream_response_text, new_text_message
 from a2a.types import Role, SendMessageRequest
 from docx import Document
 from mcp.server.fastmcp import FastMCP
@@ -339,23 +339,30 @@ def _a2a_artifact_text(value: Any) -> list[str]:
     return out
 
 async def _a2a_send_async(base_url: str, message: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60.0) as http:
+    timeout = httpx.Timeout(240.0, connect=15.0)
+    async with httpx.AsyncClient(timeout=timeout) as http:
         card = await A2ACardResolver(httpx_client=http, base_url=base_url).get_agent_card()
-    client = await create_client(agent=card, client_config=ClientConfig(streaming=False))
-    try:
-        request = SendMessageRequest(message=new_text_message(message, role=Role.ROLE_USER))
-        chunks: list[dict[str, Any]] = []
-        async for chunk in client.send_message(request):
-            chunks.append(chunk.model_dump(mode="json") if hasattr(chunk, "model_dump") else {"value": str(chunk)})
-        texts = _a2a_artifact_text(chunks)
-        return {
-            "agent": card.name,
-            "url": base_url,
-            "text": "\n".join(texts),
-            "events": chunks,
-        }
-    finally:
-        await client.close()
+        client = await create_client(
+            agent=card,
+            client_config=ClientConfig(streaming=False, httpx_client=http),
+        )
+        try:
+            request = SendMessageRequest(message=new_text_message(message, role=Role.ROLE_USER))
+            events: list[dict[str, Any]] = []
+            texts: list[str] = []
+            async for chunk in client.send_message(request):
+                extracted = get_stream_response_text(chunk)
+                if extracted:
+                    texts.append(extracted)
+                events.append({"value": str(chunk)})
+            return {
+                "agent": card.name,
+                "url": base_url,
+                "text": "\n".join(texts),
+                "events": events,
+            }
+        finally:
+            await client.close()
 
 A2A_JOBS: dict[str, dict[str, Any]] = {}
 A2A_JOBS_LOCK = threading.Lock()
