@@ -29,7 +29,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridge"
+APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridgeDC"
 CONFIG_PATH = APP_DIR / "config.json"
 AUDIT_PATH = APP_DIR / "audit.jsonl"
 APP_DIR.mkdir(parents=True, exist_ok=True)
