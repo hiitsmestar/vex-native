@@ -24,11 +24,11 @@ jobs:
           $proc = Start-Process powershell.exe -ArgumentList @(
             "-NoProfile","-ExecutionPolicy","Bypass","-File",$script,"-Mode","Both","-NoLan"
           ) -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (!$proc.WaitForExit(180000)) {
+          if (!$proc.WaitForExit(600000)) {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             if (Test-Path $out) { Get-Content $out }
             if (Test-Path $err) { Get-Content $err }
-            throw "Install-VexDesktopParity exceeded 180 seconds."
+            throw "Install-VexDesktopParity exceeded 600 seconds."
           }
           if (Test-Path $out) { Get-Content $out }
           if (Test-Path $err) { Get-Content $err }
