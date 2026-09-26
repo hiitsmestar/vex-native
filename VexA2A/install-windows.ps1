@@ -8,18 +8,22 @@ New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 Copy-Item "$SourceRoot\server.py" "$InstallRoot\server.py" -Force
 Copy-Item "$SourceRoot\requirements.txt" "$InstallRoot\requirements.txt" -Force
 if(-not (Get-Command py -ErrorAction SilentlyContinue)){throw "Python launcher 'py' was not found"}
-$Venv=Join-Path $InstallRoot '.venv'
+$Venv=Join-Path $InstallRoot 'venv'
 if(-not(Test-Path "$Venv\Scripts\python.exe")){& py -3 -m venv $Venv}
 & "$Venv\Scripts\python.exe" -m pip install -r "$InstallRoot\requirements.txt"
 if($LASTEXITCODE -ne 0){throw 'VexA2A dependency install failed'}
 
 $Launcher=Join-Path $InstallRoot 'run-vexa2a.ps1'
 @(
-  '$env:VEXA2A_HOST="127.0.0.1"',
-  ('$env:VEXA2A_PORT="' + $Port + '"'),
-  ('$env:VEXBRIDGE_MCP_URL="http://127.0.0.1:8795/mcp"'),
+  '$env:VEX_A2A_HOST="127.0.0.1"',
+  ('$env:VEX_A2A_PORT="' + $Port + '"'),
+  '$env:VEX_A2A_MCP_URL="http://127.0.0.1:8795/mcp"',
   ('& "' + $Venv + '\Scripts\python.exe" "' + $InstallRoot + '\server.py"')
 ) | Set-Content $Launcher -Encoding UTF8
+
+$ToolsRoot=Join-Path $env:USERPROFILE 'Documents\VexNativeTools'
+New-Item -ItemType Directory -Force -Path $ToolsRoot | Out-Null
+Copy-Item "$SourceRoot\Start-VexA2A.ps1" (Join-Path $ToolsRoot 'Start-VexA2A.ps1') -Force
 
 $Startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'VexA2A.cmd'
 @(
