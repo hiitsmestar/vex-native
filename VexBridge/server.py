@@ -43,7 +43,7 @@ if not CONFIG_PATH.exists():
     CONFIG_PATH.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
 
 MCP_HOST = os.environ.get("VEXBRIDGE_HOST", "127.0.0.1")
-MCP_PORT = int(os.environ.get("VEXBRIDGE_PORT", "8765"))
+MCP_PORT = int(os.environ.get("VEXBRIDGE_PORT", "8795"))
 mcp = FastMCP("VexBridge", host=MCP_HOST, port=MCP_PORT, stateless_http=True, json_response=True)
 
 def audit(tool: str, ok: bool, detail: dict[str, Any] | None = None) -> None:
