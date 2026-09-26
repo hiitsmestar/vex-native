@@ -1,0 +1,26 @@
+name: v156 Desktop Parity checks
+on:
+  push:
+    branches:
+      - build/v156-desktop-parity
+  workflow_dispatch:
+jobs:
+  source-checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install parity runtime
+        shell: powershell
+        run: .\Tools\Install-VexDesktopParity.ps1 -Mode Both -NoLan
+      - name: Install Dropbox bridge
+        shell: powershell
+        run: .\Tools\Install-VexDropboxParityBridge.ps1 -DropboxRoot "$env:RUNNER_TEMP\VexRemoteBridge"
+      - name: Run parity checks
+        shell: powershell
+        run: .\Tools\Test-VexDesktopParity.ps1
