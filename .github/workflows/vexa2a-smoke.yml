@@ -40,6 +40,20 @@ jobs:
         env:
           VEXA2A_TEST_URL: http://127.0.0.1:8797
         run: python VexA2A/smoke_test.py
+      - name: Windows installer smoke
+        shell: pwsh
+        run: |
+          $root=Join-Path $env:RUNNER_TEMP 'VexA2AInstall'
+          & .\VexA2A\install-windows.ps1 -Port 8798 -InstallRoot $root
+          if($LASTEXITCODE -ne 0){ throw 'VexA2A installer failed' }
+          $h=Invoke-RestMethod 'http://127.0.0.1:8798/health' -TimeoutSec 5
+          if(-not $h.ok -or $h.protocol -ne '1.0'){ throw 'Installed VexA2A health failed' }
+          $tools=Join-Path $env:USERPROFILE 'Documents\VexNativeTools\Start-VexA2A.ps1'
+          if(-not(Test-Path $tools)){ throw 'VexNative A2A launcher missing' }
+          Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like "*$root\server.py*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Write-Host 'VEXA2A_INSTALLER_SMOKE=PASS'
       - name: Stop A2A service
         if: always()
         shell: pwsh
