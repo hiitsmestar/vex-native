@@ -3,22 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
+import socket
+import ssl
 import subprocess
-import sys
 import time
-from collections.abc import Awaitable, Callable
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
-import httpx
 import uvicorn
-from a2a.helpers import (
-    get_message_text,
-    new_task_from_user_message,
-    new_text_message,
-    new_text_part,
-)
+from a2a.helpers import get_message_text, new_task_from_user_message, new_text_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -30,463 +27,289 @@ from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from starlette.applications import Starlette
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-BIND_HOST = os.environ.get("VEXA2A_HOST", "127.0.0.1")
-PORT = int(os.environ.get("VEXA2A_PORT", "8796"))
-PUBLIC_URL = os.environ.get("VEXA2A_PUBLIC_URL", f"http://127.0.0.1:{PORT}")
-MCP_URL = os.environ.get("VEXBRIDGE_MCP_URL", "http://127.0.0.1:8795/mcp")
-TOOLS_ROOT = Path(
-    os.environ.get(
-        "VEX_TOOLS_ROOT",
-        str(Path.home() / "Documents" / "VexNativeTools"),
-    )
-)
-PHONE_COMMAND = TOOLS_ROOT / "PhoneRelay" / "VexPhoneCommand.py"
-AGY = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "agy" / "bin" / "agy.exe"
+HOST = os.environ.get("VEX_A2A_HOST", os.environ.get("VEXA2A_HOST", "127.0.0.1"))
+PORT = int(os.environ.get("VEX_A2A_PORT", os.environ.get("VEXA2A_PORT", "8796")))
+PUBLIC_URL = os.environ.get("VEX_A2A_PUBLIC_URL", os.environ.get("VEXA2A_PUBLIC_URL", f"http://127.0.0.1:{PORT}"))
+MCP_URL = os.environ.get("VEX_A2A_MCP_URL", os.environ.get("VEXBRIDGE_MCP_URL", "http://127.0.0.1:8795/mcp"))
+OLLAMA = os.environ.get("VEX_A2A_OLLAMA", "http://127.0.0.1:11434")
+FAST_MODEL = os.environ.get("VEX_A2A_FAST_MODEL", "vex-qwen35-9b-q6:latest")
+DEEP_MODEL = os.environ.get("VEX_A2A_DEEP_MODEL", "vex-qwen35-a3b-text:latest")
+RENDER_SCRIPT = Path(os.environ.get("VEX_A2A_RENDER_SCRIPT", str(Path.home() / "Documents" / "VexAutoRender.py")))
+PHONE_CONFIG = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridge" / "config.json"
+PHONE_BASE = "https://127.0.0.1:8771"
+SYSTEM_PROMPT = os.environ.get("VEX_A2A_SYSTEM_PROMPT", "You are the local VexNative cognition worker. Be concise, tool-aware, and return only the requested result.")
 
-Handler = Callable[[str], Awaitable[dict[str, Any] | list[Any] | str]]
-
-AGENT_SPECS: dict[str, dict[str, Any]] = {
-    "coordinator": {
-        "name": "Vex Coordinator",
-        "description": "Routes work across VexNative specialist agents.",
-        "skill": "coordinate",
-        "skill_name": "Coordinate Vex agents",
-        "tags": ["vexnative", "coordination", "routing"],
-        "examples": ["list agents", '{"agent":"memory","message":"recall VexBridge"}'],
-    },
-    "memory": {
-        "name": "Vex Memory",
-        "description": "ICM-backed auxiliary memory retrieval and storage.",
-        "skill": "memory",
-        "skill_name": "Recall and store Vex memory",
-        "tags": ["vexnative", "icm", "memory"],
-        "examples": ['{"action":"recall","query":"VexBridge"}', '{"action":"stats"}'],
-    },
-    "verification": {
-        "name": "Vex Verification",
-        "description": "Unlazy acceptance-ledger status and lint verification.",
-        "skill": "verification",
-        "skill_name": "Verify acceptance gates",
-        "tags": ["vexnative", "unlazy", "verification"],
-        "examples": ['{"action":"status","gate_file":"C:\\\\work\\\\GATES.md"}'],
-    },
-    "renderer": {
-        "name": "Vex Renderer",
-        "description": "ComfyUI renderer health and queue specialist.",
-        "skill": "renderer",
-        "skill_name": "Inspect renderer state",
-        "tags": ["vexnative", "comfyui", "renderer"],
-        "examples": ["status", "queue"],
-    },
-    "phone": {
-        "name": "Vex Phone",
-        "description": "Dispatches authorized VexNative iPhone commands.",
-        "skill": "phone",
-        "skill_name": "Control the VexNative phone endpoint",
-        "tags": ["vexnative", "iphone", "phone"],
-        "examples": ['{"action":"status"}', '{"action":"command","command":"open YouTube on my phone"}'],
-    },
-    "coding": {
-        "name": "Vex Coding",
-        "description": "Coding-worker discovery and explicit VexBridge process dispatch.",
-        "skill": "coding",
-        "skill_name": "Run coding and process work",
-        "tags": ["vexnative", "coding", "antigravity"],
-        "examples": ['{"action":"status"}', '{"action":"process","command":"python -V"}'],
-    },
-}
-
-
-def parse_request(text: str) -> dict[str, Any]:
-    text = (text or "").strip()
-    if not text:
-        return {}
-    if text.startswith("{"):
-        try:
-            value = json.loads(text)
-            if isinstance(value, dict):
-                return value
-        except json.JSONDecodeError:
-            pass
-    return {"text": text}
-
+def as_json(text: str) -> dict[str, Any] | None:
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else None
+    except Exception:
+        return None
 
 async def mcp_call(tool: str, arguments: dict[str, Any]) -> Any:
     async with streamablehttp_client(MCP_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
+            names = {t.name for t in (await session.list_tools()).tools}
+            if tool not in names:
+                raise ValueError(f"unknown VexBridge tool: {tool}")
             result = await session.call_tool(tool, arguments)
             if getattr(result, "isError", False):
-                raise RuntimeError(
-                    "\n".join(getattr(item, "text", "") for item in result.content)
-                )
+                raise RuntimeError("\n".join(getattr(x, "text", "") for x in result.content))
             structured = getattr(result, "structuredContent", None)
             if structured:
                 return structured.get("result", structured)
-            text = "\n".join(
-                getattr(item, "text", "") for item in result.content
-            ).strip()
-            if not text:
-                return None
+            text = "\n".join(getattr(x, "text", "") for x in result.content)
             try:
                 return json.loads(text)
-            except json.JSONDecodeError:
+            except Exception:
                 return text
 
+def url_json(url: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", **(headers or {})})
+    context = ssl._create_unverified_context() if url.startswith("https://127.0.0.1") else None
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+        return json.loads(response.read().decode("utf-8"))
 
-async def memory_handler(text: str) -> Any:
-    req = parse_request(text)
-    action = str(req.get("action") or ("recall" if req.get("text") else "stats")).lower()
-    if action == "stats":
-        return await mcp_call("icm_stats", {})
-    if action == "store":
-        content = str(req.get("content") or "")
-        topic = str(req.get("topic") or "vex-native:a2a")
-        if not content:
-            return {"ok": False, "error": "content is required"}
-        return await mcp_call(
-            "icm_store",
-            {
-                "topic": topic,
-                "content": content,
-                "importance": str(req.get("importance") or "medium"),
-                "keywords": req.get("keywords"),
-            },
-        )
-    query = str(req.get("query") or req.get("text") or "")
-    if not query:
-        return {"ok": False, "error": "query is required"}
-    return await mcp_call(
-        "icm_recall",
-        {
-            "query": query,
-            "topic": req.get("topic"),
-            "limit": int(req.get("limit") or 5),
-            "keyword": req.get("keyword"),
-            "project": req.get("project"),
-        },
-    )
+async def memory_agent(text: str) -> str:
+    req = as_json(text)
+    if req and req.get("action") == "store":
+        result = await mcp_call("icm_store", {k: v for k, v in req.items() if k in {"topic", "content", "importance", "keywords", "raw"}})
+    else:
+        query = str((req or {}).get("query") or text)
+        args = {"query": query, "limit": int((req or {}).get("limit", 5))}
+        for key in ("topic", "keyword", "project"):
+            if (req or {}).get(key) is not None:
+                args[key] = req[key]
+        result = await mcp_call("icm_recall", args)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
-
-async def verification_handler(text: str) -> Any:
-    req = parse_request(text)
-    action = str(req.get("action") or "status").lower()
-    gate_file = str(req.get("gate_file") or req.get("gateFile") or "")
-    if not gate_file:
-        return {
-            "ok": False,
-            "error": "gate_file is required",
-            "actions": ["status", "lint"],
-        }
+async def verification_agent(text: str) -> str:
+    req = as_json(text) or {"gate_file": text.strip()}
+    action = str(req.get("action", "status")).lower()
+    gate = str(req.get("gate_file") or "")
+    if not gate:
+        raise ValueError("gate_file is required")
     if action == "lint":
-        return await mcp_call(
-            "unlazy_lint",
-            {"gate_file": gate_file, "strict": bool(req.get("strict", True))},
-        )
-    return await mcp_call(
-        "unlazy_status",
-        {
-            "gate_file": gate_file,
-            "root": req.get("root"),
-            "scope": req.get("scope"),
-        },
-    )
+        result = await mcp_call("unlazy_lint", {"gate_file": gate, "strict": bool(req.get("strict", True))})
+    else:
+        args: dict[str, Any] = {"gate_file": gate}
+        if req.get("root"):
+            args["root"] = req["root"]
+        if req.get("scope"):
+            args["scope"] = req["scope"]
+        result = await mcp_call("unlazy_status", args)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
+async def system_agent(text: str) -> str:
+    req = as_json(text)
+    if not req or not req.get("tool"):
+        raise ValueError('system agent expects JSON: {"tool":"read_file","arguments":{...}}')
+    tool = str(req["tool"])
+    if tool in {"shutdown", "a2a_send", "a2a_agents", "a2a_health"}:
+        raise ValueError(f"tool blocked from A2A system recursion: {tool}")
+    result = await mcp_call(tool, dict(req.get("arguments") or {}))
+    return json.dumps(result, ensure_ascii=False, indent=2, default=str)
 
-async def renderer_handler(text: str) -> Any:
-    req = parse_request(text)
-    action = str(req.get("action") or req.get("text") or "status").lower()
-    endpoint = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
-    path = "/queue" if "queue" in action else "/system_stats"
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            response = await client.get(endpoint + path)
-            response.raise_for_status()
-            data = response.json()
-        return {"ok": True, "endpoint": endpoint, "action": action, "data": data}
-    except Exception as exc:
-        return {
-            "ok": False,
-            "endpoint": endpoint,
-            "action": action,
-            "error": f"{type(exc).__name__}: {exc}",
-        }
+def phone_sync(command: str, wait_seconds: int) -> Any:
+    cfg = json.loads(PHONE_CONFIG.read_text(encoding="utf-8-sig"))
+    token = str(cfg.get("token") or "")
+    if not token:
+        raise RuntimeError("PhoneRelay token missing")
+    query = urllib.parse.urlencode({"token": token})
+    queued = url_json(PHONE_BASE + "/phone/command?" + query, {"command": command, "source": "vex-a2a"}, timeout=10)
+    item = queued["command"]
+    if wait_seconds <= 0:
+        return item
+    deadline = time.time() + wait_seconds
+    while time.time() < deadline:
+        time.sleep(1)
+        try:
+            result = url_json(PHONE_BASE + "/phone/result?" + urllib.parse.urlencode({"token": token, "id": item["id"]}), timeout=10)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            raise
+        item = result.get("command") or {}
+        if item.get("state") in {"completed", "failed"}:
+            return item
+    return {"id": item.get("id"), "state": "timeout"}
 
+async def phone_agent(text: str) -> str:
+    req = as_json(text)
+    command = str((req or {}).get("command") or text)
+    wait_seconds = int((req or {}).get("wait", 120))
+    result = await asyncio.to_thread(phone_sync, command, wait_seconds)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
-async def phone_handler(text: str) -> Any:
-    req = parse_request(text)
-    action = str(req.get("action") or "command").lower()
-    if action == "status" or not req:
-        return {
-            "ok": PHONE_COMMAND.exists(),
-            "commandHelper": str(PHONE_COMMAND),
-            "available": PHONE_COMMAND.exists(),
-        }
-    command = str(req.get("command") or req.get("text") or "")
-    if not command:
-        return {"ok": False, "error": "command is required"}
-    if not PHONE_COMMAND.exists():
-        return {"ok": False, "error": f"phone helper missing: {PHONE_COMMAND}"}
+def render_sync(req: dict[str, Any]) -> dict[str, Any]:
+    if not RENDER_SCRIPT.exists():
+        raise FileNotFoundError(str(RENDER_SCRIPT))
+    prompt = str(req.get("prompt") or "")
+    if not prompt:
+        raise ValueError("render prompt is required")
+    argv = ["py", "-3.12", str(RENDER_SCRIPT), prompt, "--mode", str(req.get("mode", "normal")), "--orientation", str(req.get("orientation", "portrait"))]
+    if int(req.get("seed", 0)):
+        argv += ["--seed", str(int(req["seed"]))]
+    run = subprocess.run(argv, text=True, capture_output=True, timeout=int(req.get("timeout", 3600)), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    out = ((run.stdout or "") + "\n" + (run.stderr or "")).strip()
+    if run.returncode != 0:
+        raise RuntimeError(out[-4000:])
+    return {"ok": True, "output": out[-8000:]}
 
-    def run() -> dict[str, Any]:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                str(PHONE_COMMAND),
-                command,
-                "--source",
-                "vexa2a",
-                "--wait",
-                str(max(5, min(int(req.get("wait") or 120), 600))),
-            ],
-            text=True,
-            capture_output=True,
-            timeout=max(10, min(int(req.get("wait") or 120) + 15, 615)),
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        output = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")).strip()
-        return {"ok": proc.returncode == 0, "returncode": proc.returncode, "output": output[-12000:]}
+async def renderer_agent(text: str) -> str:
+    req = as_json(text) or {"prompt": text}
+    result = await asyncio.to_thread(render_sync, req)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
-    return await asyncio.to_thread(run)
+def ollama_sync(req: dict[str, Any]) -> str:
+    mode = str(req.get("mode", "fast")).lower()
+    model = str(req.get("model") or (DEEP_MODEL if mode == "deep" else FAST_MODEL))
+    payload = {"model": model, "prompt": str(req.get("prompt") or ""), "system": SYSTEM_PROMPT, "stream": False, "options": {"num_ctx": int(req.get("num_ctx", 4096))}}
+    result = url_json(OLLAMA + "/api/generate", payload, timeout=int(req.get("timeout", 600)))
+    return str(result.get("response") or "")
 
+async def cognition_agent(text: str) -> str:
+    req = as_json(text) or {"prompt": text}
+    if "prompt" not in req:
+        req["prompt"] = text
+    return await asyncio.to_thread(ollama_sync, req)
 
-async def coding_handler(text: str) -> Any:
-    req = parse_request(text)
-    action = str(req.get("action") or "status").lower()
-    if action == "status":
-        return {
+def a2a_post_sync(agent: str, text: str) -> str:
+    body = {"jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": "SendMessage", "params": {"message": {"messageId": uuid.uuid4().hex, "role": "ROLE_USER", "parts": [{"text": text}]}, "configuration": {"acceptedOutputModes": ["text/plain"], "returnImmediately": False}}}
+    result = url_json(f"{PUBLIC_URL}/{agent}", body, headers={"A2A-Version": "1.0"}, timeout=900)
+    if result.get("error"):
+        raise RuntimeError(json.dumps(result["error"]))
+    payload = result.get("result") or {}
+    message = payload.get("message")
+    if message:
+        return "\n".join(str(p.get("text", "")) for p in message.get("parts", []) if p.get("text"))
+    task = payload.get("task") or payload
+    texts: list[str] = []
+    for artifact in task.get("artifacts") or []:
+        for part in artifact.get("parts") or []:
+            if part.get("text"):
+                texts.append(str(part["text"]))
+    return "\n".join(texts) or json.dumps(payload, ensure_ascii=False)
+
+async def coordinator_agent(text: str) -> str:
+    raw = text.strip()
+    low = raw.lower()
+    if low in {"agents", "list agents", "status", "help", ""}:
+        return json.dumps({
             "ok": True,
-            "antigravity": {"path": str(AGY), "available": AGY.exists()},
-            "python": sys.version.split()[0],
-            "vexbridge": MCP_URL,
-        }
-    if action == "process":
-        command = str(req.get("command") or "")
-        if not command:
-            return {"ok": False, "error": "command is required"}
-        return await mcp_call(
-            "start_process",
-            {
-                "timeout_ms": int(req.get("timeout_ms") or 5000),
-                "command": command,
-                "shell": req.get("shell"),
-            },
-        )
-    return {"ok": False, "error": f"unsupported coding action: {action}"}
+            "protocol": "1.0",
+            "agents": [p.strip("/") for p, _, _ in AGENTS],
+        })
+    explicit = {"memory:": "memory", "verify:": "verification", "verification:": "verification", "phone:": "phone", "render:": "renderer", "system:": "system", "cognition:": "cognition", "think:": "cognition"}
+    for prefix, agent in explicit.items():
+        if low.startswith(prefix):
+            return await asyncio.to_thread(a2a_post_sync, agent, raw[len(prefix):].strip())
+    if low.startswith("{") and '"tool"' in low:
+        agent = "system"
+    elif any(x in low for x in ("remember ", "recall ", "memory ", "what do you remember")):
+        agent = "memory"
+    elif any(x in low for x in ("unlazy", "gate", "verify acceptance", "verification ledger")):
+        agent = "verification"
+    elif any(x in low for x in ("on my phone", "iphone", "phone command")):
+        agent = "phone"
+    elif any(x in low for x in ("render ", "comfyui", "generate image")):
+        agent = "renderer"
+    else:
+        agent = "cognition"
+    return await asyncio.to_thread(a2a_post_sync, agent, raw)
 
-
-def route_text(text: str) -> str:
-    lower = text.lower()
-    if any(word in lower for word in ("remember", "recall", "memory", "icm")):
-        return "memory"
-    if any(word in lower for word in ("verify", "gate", "unlazy", "acceptance", "lint")):
-        return "verification"
-    if any(word in lower for word in ("render", "image", "comfy", "comfyui")):
-        return "renderer"
-    if any(word in lower for word in ("iphone", "phone", "ios")):
-        return "phone"
-    if any(word in lower for word in ("code", "coding", "antigravity", "agy", "process")):
-        return "coding"
-    return "coordinator"
-
-
-async def coordinator_handler(text: str) -> Any:
-    req = parse_request(text)
-    requested = str(req.get("agent") or "").lower().strip()
-    message = req.get("message")
-    if requested:
-        if requested == "coordinator":
-            return {"ok": False, "error": "coordinator cannot dispatch to itself"}
-        if requested not in HANDLERS:
-            return {"ok": False, "error": f"unknown agent: {requested}", "agents": sorted(HANDLERS)}
-        payload = message if isinstance(message, str) else json.dumps(message if message is not None else req)
-        return {"agent": requested, "result": await HANDLERS[requested](payload)}
-    raw = str(req.get("text") or "")
-    if raw.lower().strip() in {"agents", "list agents", "status", "help", ""}:
-        return {
-            "ok": True,
-            "protocol": "A2A 1.0",
-            "agents": sorted(AGENT_SPECS),
-            "bind": f"{BIND_HOST}:{PORT}",
-        }
-    target = route_text(raw)
-    if target == "coordinator":
-        return {
-            "ok": True,
-            "agent": "coordinator",
-            "message": "No specialist matched. Send JSON with agent + message for explicit routing.",
-            "agents": sorted(HANDLERS),
-        }
-    return {"agent": target, "result": await HANDLERS[target](raw)}
-
-
-HANDLERS: dict[str, Handler] = {
-    "memory": memory_handler,
-    "verification": verification_handler,
-    "renderer": renderer_handler,
-    "phone": phone_handler,
-    "coding": coding_handler,
-}
-HANDLERS["coordinator"] = coordinator_handler
-
+Handler = Callable[[str], Awaitable[str]]
 
 class VexAgentExecutor(AgentExecutor):
-    def __init__(self, agent_id: str, handler: Handler) -> None:
-        self.agent_id = agent_id
+    def __init__(self, handler: Handler) -> None:
         self.handler = handler
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-        if context.current_task:
-            task = context.current_task
-        else:
+        task = context.current_task
+        if task is None:
             task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
-        updater = TaskUpdater(
-            event_queue=event_queue,
-            task_id=task.id,
-            context_id=task.context_id,
-        )
-        await updater.update_status(
-            state=TaskState.TASK_STATE_WORKING,
-            message=new_text_message(f"{self.agent_id} working"),
-        )
+        updater = TaskUpdater(event_queue=event_queue, task_id=task.id, context_id=task.context_id)
+        await updater.update_status(state=TaskState.TASK_STATE_WORKING, message=new_text_message("working"))
         query = get_message_text(context.message) or ""
         try:
             result = await self.handler(query)
-            rendered = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
-            await updater.add_artifact(
-                parts=[new_text_part(text=rendered, media_type="application/json" if not isinstance(result, str) else "text/plain")]
-            )
-            await updater.update_status(
-                state=TaskState.TASK_STATE_COMPLETED,
-                message=new_text_message("Done"),
-            )
+            await updater.add_artifact(parts=[new_text_part(text=result, media_type="text/plain")])
+            await updater.update_status(state=TaskState.TASK_STATE_COMPLETED, message=new_text_message("done"))
         except Exception as exc:
-            await updater.add_artifact(
-                parts=[new_text_part(text=json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}), media_type="application/json")]
-            )
-            await updater.update_status(
-                state=TaskState.TASK_STATE_FAILED,
-                message=new_text_message("Failed"),
-            )
+            await updater.add_artifact(parts=[new_text_part(text=f"{type(exc).__name__}: {exc}", media_type="text/plain")])
+            await updater.update_status(state=TaskState.TASK_STATE_FAILED, message=new_text_message("failed"))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-        raise NotImplementedError("Cancel is not supported")
+        raise NotImplementedError("cancel not supported")
 
+def card(path: str, name: str, description: str, examples: list[str]) -> AgentCard:
+    return AgentCard(name=name, description=description, version="1.0.0", default_input_modes=["text/plain"], default_output_modes=["text/plain"], capabilities=AgentCapabilities(streaming=True), supported_interfaces=[AgentInterface(protocol_binding="JSONRPC", url=f"{PUBLIC_URL}{path}", protocol_version="1.0")], skills=[AgentSkill(id=path.strip("/"), name=name, description=description, input_modes=["text/plain"], output_modes=["text/plain"], tags=["vexnative", "a2a", path.strip("/")], examples=examples)])
 
-def build_card(agent_id: str) -> AgentCard:
-    spec = AGENT_SPECS[agent_id]
-    path = f"/{agent_id}"
-    return AgentCard(
-        name=spec["name"],
-        description=spec["description"],
-        version="1.0.0",
-        default_input_modes=["text/plain", "application/json"],
-        default_output_modes=["text/plain", "application/json"],
-        capabilities=AgentCapabilities(streaming=False),
-        supported_interfaces=[
-            AgentInterface(
-                protocol_binding="JSONRPC",
-                url=f"{PUBLIC_URL}{path}",
-                protocol_version="1.0",
-            )
-        ],
-        skills=[
-            AgentSkill(
-                id=spec["skill"],
-                name=spec["skill_name"],
-                description=spec["description"],
-                input_modes=["text/plain", "application/json"],
-                output_modes=["text/plain", "application/json"],
-                tags=spec["tags"],
-                examples=spec["examples"],
-            )
-        ],
-    )
+AGENTS: list[tuple[str, AgentCard, VexAgentExecutor]] = [
+    ("/coordinator", card("/coordinator", "Vex Coordinator", "Routes work to VexNative specialist agents over A2A.", ["memory: recall VexBridge state", "phone: open YouTube"]), VexAgentExecutor(coordinator_agent)),
+    ("/cognition", card("/cognition", "Vex Cognition", "Local Ollama reasoning worker with fast/deep model modes.", ["Explain this code", '{"prompt":"plan the upgrade","mode":"deep"}']), VexAgentExecutor(cognition_agent)),
+    ("/memory", card("/memory", "Vex Memory", "ICM-backed auxiliary memory recall/store agent.", ["recall VexBridge", '{"action":"store","topic":"x","content":"y"}']), VexAgentExecutor(memory_agent)),
+    ("/verification", card("/verification", "Vex Verification", "Unlazy acceptance-ledger status and lint agent.", ['{"gate_file":"C:\\\\path\\\\GATES.md"}']), VexAgentExecutor(verification_agent)),
+    ("/phone", card("/phone", "Vex Phone", "Queues natural-language commands through VexPhoneRelay.", ["open YouTube on my phone"]), VexAgentExecutor(phone_agent)),
+    ("/renderer", card("/renderer", "Vex Renderer", "Queues prompt-driven ComfyUI renders through VexAutoRender.", ["neon club portrait"]), VexAgentExecutor(renderer_agent)),
+    ("/system", card("/system", "Vex System", "Delegates explicit VexBridge MCP tool calls.", ['{"tool":"ping","arguments":{}}']), VexAgentExecutor(system_agent)),
+]
 
+HANDLERS: dict[str, Handler] = {
+    "coordinator": coordinator_agent,
+    "cognition": cognition_agent,
+    "memory": memory_agent,
+    "verification": verification_agent,
+    "phone": phone_agent,
+    "renderer": renderer_agent,
+    "system": system_agent,
+}
 
-CARDS = {agent_id: build_card(agent_id) for agent_id in AGENT_SPECS}
+async def health(_request):
+    return JSONResponse({"ok": True, "service": "VexA2A", "protocol": "1.0", "host": socket.gethostname(), "agents": [p.strip("/") for p, _, _ in AGENTS]})
 
+async def agents_endpoint(_request):
+    return JSONResponse({"ok": True, "agents": [{"id": p.strip("/"), "name": c.name, "card": f"{PUBLIC_URL}{p}{AGENT_CARD_WELL_KNOWN_PATH}", "endpoint": f"{PUBLIC_URL}{p}"} for p, c, _ in AGENTS]})
 
-async def health(_: Request) -> JSONResponse:
-    return JSONResponse(
-        {
-            "ok": True,
-            "service": "VexA2A",
-            "protocol": "1.0",
-            "host": BIND_HOST,
-            "port": PORT,
-            "agents": sorted(CARDS),
-            "time": time.time(),
-        }
-    )
-
-
-async def list_agents(_: Request) -> JSONResponse:
-    return JSONResponse(
-        {
-            "ok": True,
-            "agents": [
-                {
-                    "id": agent_id,
-                    "name": card.name,
-                    "description": card.description,
-                    "card": f"{PUBLIC_URL}/{agent_id}{AGENT_CARD_WELL_KNOWN_PATH}",
-                    "endpoint": f"{PUBLIC_URL}/{agent_id}",
-                }
-                for agent_id, card in CARDS.items()
-            ],
-        }
-    )
-
-
-async def local_send(request: Request) -> JSONResponse:
+async def local_send(request):
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
-    agent = str(body.get("agent") or "coordinator").lower()
+    agent = str(body.get("agent") or "coordinator").strip().lower()
     if agent not in HANDLERS:
         return JSONResponse({"ok": False, "error": f"unknown agent: {agent}"}, status_code=404)
     message = body.get("message", "")
     text = message if isinstance(message, str) else json.dumps(message, ensure_ascii=False)
     try:
         result = await HANDLERS[agent](text)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except Exception:
+                pass
         return JSONResponse({"ok": True, "agent": agent, "result": result})
     except Exception as exc:
-        return JSONResponse(
-            {"ok": False, "agent": agent, "error": f"{type(exc).__name__}: {exc}"},
-            status_code=500,
-        )
-
+        return JSONResponse({"ok": False, "agent": agent, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 def build_app() -> Starlette:
     routes = [
-        Route("/health", health, methods=["GET"]),
-        Route("/vex/agents", list_agents, methods=["GET"]),
+        Route("/health", health),
+        Route("/agents", agents_endpoint),
+        Route("/vex/agents", agents_endpoint),
         Route("/vex/send", local_send, methods=["POST"]),
     ]
-    for agent_id, card in CARDS.items():
-        path = f"/{agent_id}"
-        handler = DefaultRequestHandler(
-            agent_executor=VexAgentExecutor(agent_id, HANDLERS[agent_id]),
-            task_store=InMemoryTaskStore(),
-            agent_card=card,
-        )
-        routes.extend(
-            create_agent_card_routes(
-                card,
-                card_url=f"{path}{AGENT_CARD_WELL_KNOWN_PATH}",
-            )
-        )
+    for path, agent_card, executor in AGENTS:
+        handler = DefaultRequestHandler(agent_executor=executor, task_store=InMemoryTaskStore(), agent_card=agent_card)
+        routes.extend(create_agent_card_routes(agent_card, card_url=f"{path}{AGENT_CARD_WELL_KNOWN_PATH}"))
         routes.extend(create_jsonrpc_routes(handler, rpc_url=path))
     return Starlette(routes=routes)
 
-
 if __name__ == "__main__":
-    print(f"VexA2A serving {len(CARDS)} A2A 1.0 agents on {BIND_HOST}:{PORT}")
-    uvicorn.run(build_app(), host=BIND_HOST, port=PORT, log_level="info")
+    uvicorn.run(build_app(), host=HOST, port=PORT, log_level="info")
