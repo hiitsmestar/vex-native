@@ -35,10 +35,14 @@ def save_json(path: Path, data: Any)->None:
     tmp.write_text(json.dumps(data,indent=2),encoding="utf-8")
     tmp.replace(path)
 def gh_path()->Path:
-    candidates=[
+    explicit=os.environ.get("VEXBRIDGE_GH_PATH","").strip()
+    candidates=[]
+    if explicit:
+        candidates.append(Path(explicit))
+    candidates.extend([
         Path(os.environ.get("ProgramFiles",r"C:\Program Files"))/"GitHub CLI"/"gh.exe",
         Path(os.environ.get("LOCALAPPDATA",str(Path.home())))/"Programs"/"GitHub CLI"/"gh.exe",
-    ]
+    ])
     for p in candidates:
         if p.exists(): return p
     raise RuntimeError("GitHub CLI not found")
