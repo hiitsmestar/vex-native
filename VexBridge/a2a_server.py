@@ -350,7 +350,7 @@ def skill(skill_id: str, name: str, description: str, examples: list[str]) -> Ag
 
 
 def card(name: str, description: str, path: str, skills: list[AgentSkill]) -> AgentCard:
-    url = BASE_URL + path
+    url = (BASE_URL + path).rstrip("/") + "/"
     return AgentCard(
         name=name,
         description=description,
