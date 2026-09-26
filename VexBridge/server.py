@@ -41,7 +41,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import uvicorn
 
-from brain_router import chat as brain_chat_impl, status as brain_status_impl
+try:
+    from .brain_router import chat as brain_chat_impl, status as brain_status_impl
+except ImportError:
+    from brain_router import chat as brain_chat_impl, status as brain_status_impl
 
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridgeDC"
 CONFIG_PATH = APP_DIR / "config.json"
