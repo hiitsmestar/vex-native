@@ -27,3 +27,37 @@ jobs:
         run: |
           $env:APPDATA = "$env:RUNNER_TEMP\AppData"
           python -c "import sys,tempfile,pathlib; sys.path.insert(0,'.'); import VexBridge.server as s; p=pathlib.Path(tempfile.gettempdir())/'vexbridge-smoke.txt'; cfg=s.load_config(); cfg['allowedRoots']=[tempfile.gettempdir()]; s.save_config(cfg); s.write_file(str(p),'alpha\nbeta'); assert 'alpha' in s.read_file(str(p)); assert s.get_file_info(str(p))['lineCount']==2; print('filesystem-ok')"
+      - name: Start MCP server and verify listening socket
+        shell: pwsh
+        run: |
+          $env:APPDATA = "$env:RUNNER_TEMP\AppData"
+          $env:VEXBRIDGE_HOST = "127.0.0.1"
+          $env:VEXBRIDGE_PORT = "8765"
+          $p = Start-Process python -ArgumentList "VexBridge/server.py" -PassThru -WindowStyle Hidden
+          $ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $client = [System.Net.Sockets.TcpClient]::new()
+              $client.Connect("127.0.0.1", 8765)
+              $client.Close()
+              $ready = $true
+              break
+            } catch {}
+          }
+          if (-not $ready) {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+            throw "VexBridge MCP server did not listen on port 8765"
+          }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "mcp-listen-ok"
+      - name: Package Windows installer
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force VexBridge\__pycache__ -ErrorAction SilentlyContinue
+          Compress-Archive -Path VexBridge\* -DestinationPath VexBridge-Windows.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VexBridge-Windows
+          path: VexBridge-Windows.zip
+          if-no-files-found: error
