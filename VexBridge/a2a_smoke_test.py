@@ -27,10 +27,14 @@ def artifact_text(value):
     return out
 
 async def send(base_url,payload):
-    async with httpx.AsyncClient(timeout=30.0) as http:
-        card=await A2ACardResolver(httpx_client=http,base_url=base_url).get_agent_card()
-    # Reuse the explicitly bounded client. Some status probes are intentionally\n    # allowed to take > the SDK's short default timeout on cold Windows runners.\n    http=httpx.AsyncClient(timeout=httpx.Timeout(45.0,connect=10.0))\n    client=await create_client(agent=card,client_config=ClientConfig(streaming=False,httpx_client=http))
+    http=httpx.AsyncClient(timeout=httpx.Timeout(45.0,connect=10.0))
+    client=None
     try:
+        card=await A2ACardResolver(httpx_client=http,base_url=base_url).get_agent_card()
+        client=await create_client(
+            agent=card,
+            client_config=ClientConfig(streaming=False,httpx_client=http),
+        )
         req=SendMessageRequest(message=new_text_message(json.dumps(payload),role=Role.ROLE_USER))
         chunks=[]
         async for chunk in client.send_message(req):
@@ -38,7 +42,9 @@ async def send(base_url,payload):
         texts=artifact_text(chunks)
         return "\n".join(texts) if texts else json.dumps(chunks)
     finally:
-        await client.close()
+        if client is not None:
+            await client.close()
+        await http.aclose()
 
 async def main():
     async with httpx.AsyncClient(timeout=10.0) as http:
