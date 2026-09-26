@@ -65,6 +65,20 @@ jobs:
           Copy-Item VexBridge\install-windows.ps1 package\install-windows.ps1
           Copy-Item VexBridge\README.md package\README.md
           Compress-Archive -Path package\* -DestinationPath VexBridgeMCP-Windows.zip -Force
+      - name: Test packaged installer
+        shell: pwsh
+        run: |
+          & .\package\install-windows.ps1 -SkipRelay -Port 8799
+          $ready = Get-NetTCPConnection -LocalPort 8799 -State Listen -ErrorAction SilentlyContinue
+          if(-not $ready){ throw "Installer test did not leave MCP listening on 8799" }
+          $startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'VexBridgeMCP.cmd'
+          if(-not (Test-Path $startup)){ throw "Installer test did not create startup entry" }
+          $installed = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\MCP\VexBridgeMCP.exe'
+          if(-not (Test-Path $installed)){ throw "Installer test did not install VexBridgeMCP.exe" }
+          Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq 'VexBridgeMCP.exe' -and $_.ExecutablePath -like "$env:LOCALAPPDATA\VexBridgeMCP*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Write-Host "VEXBRIDGE_INSTALLER_TEST=PASS"
       - uses: actions/upload-artifact@v4
         with:
           name: VexBridgeMCP-Windows
