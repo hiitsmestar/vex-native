@@ -1,0 +1,29 @@
+name: VexBridge Windows Smoke Test
+
+on:
+  push:
+    branches: [main, vexbridge-dc-replacement]
+    paths:
+      - "VexBridge/**"
+      - ".github/workflows/vexbridge-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r VexBridge/requirements.txt
+      - name: Compile server
+        run: python -m py_compile VexBridge/server.py
+      - name: Import server
+        run: python -c "import sys; sys.path.insert(0,'.'); import VexBridge.server as s; print('import-ok', s.mcp.name)"
+      - name: Basic filesystem helper test
+        shell: pwsh
+        run: |
+          $env:APPDATA = "$env:RUNNER_TEMP\AppData"
+          python -c "import sys,tempfile,pathlib; sys.path.insert(0,'.'); import VexBridge.server as s; p=pathlib.Path(tempfile.gettempdir())/'vexbridge-smoke.txt'; cfg=s.load_config(); cfg['allowedRoots']=[tempfile.gettempdir()]; s.save_config(cfg); s.write_file(str(p),'alpha\nbeta'); assert 'alpha' in s.read_file(str(p)); assert s.get_file_info(str(p))['lineCount']==2; print('filesystem-ok')"
