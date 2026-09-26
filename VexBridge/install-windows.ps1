@@ -8,7 +8,7 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) { throw "Python launche
 $Venv = Join-Path $InstallRoot ".venv"
 if (-not (Test-Path "$Venv\Scripts\python.exe")) { & py -3 -m venv $Venv }
 & "$Venv\Scripts\python.exe" -m pip install -r "$InstallRoot\requirements.txt"
-$ConfigDir = Join-Path $env:APPDATA "VexBridge"
+$ConfigDir = Join-Path $env:APPDATA "VexBridgeDC"
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 $Roots = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Root } | Where-Object { $_ })
 @{ allowedRoots=$Roots; fileReadLineLimit=1000; searchResultLimit=500 } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $ConfigDir "config.json") -Encoding UTF8
