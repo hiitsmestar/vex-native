@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import subprocess
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -313,20 +314,125 @@ async def node_agent(text: str) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
 
+async def renderer_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "status").lower()
+    wrapper = Path.home() / "Pictures" / "VexRenders" / "Render-Vex.ps1"
+    if action in {"status", "health"}:
+        return json.dumps(
+            {
+                "ok": wrapper.exists(),
+                "wrapper": str(wrapper),
+                "comfyListening": _port_open("127.0.0.1", 8188),
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+    orientation = str(payload.get("orientation") or "landscape")
+    seed = int(payload.get("seed") or 0)
+    command = [
+        "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", str(wrapper), "-Prompt", prompt,
+        "-Orientation", orientation, "-Seed", str(seed),
+    ]
+    proc = await asyncio.to_thread(
+        subprocess.run, command, text=True, capture_output=True, timeout=900,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = ((proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")).strip()
+    if proc.returncode != 0:
+        raise RuntimeError(output[-4000:] or f"renderer rc={proc.returncode}")
+    return json.dumps({"ok": True, "output": output}, ensure_ascii=False)
+
+
+async def phone_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "status").lower()
+    helper = Path.home() / "Documents" / "VexNativeTools" / "PhoneRelay" / "VexPhoneCommand.py"
+    if action in {"status", "health"}:
+        return json.dumps(
+            {
+                "ok": helper.exists(),
+                "helper": str(helper),
+                "productionConfig": str(Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridge" / "config.json"),
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    command_text = str(payload.get("command") or payload.get("text") or "").strip()
+    if not command_text:
+        raise ValueError("command is required")
+    python = shutil.which("python")
+    if not python:
+        raise FileNotFoundError("system python was not found")
+    wait = max(1, min(int(payload.get("wait") or 120), 600))
+    proc = await asyncio.to_thread(
+        subprocess.run,
+        [python, str(helper), command_text, "--source", "vex-a2a", "--wait", str(wait)],
+        text=True, capture_output=True, timeout=wait + 30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = ((proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")).strip()
+    if proc.returncode != 0:
+        raise RuntimeError(output[-4000:] or f"phone helper rc={proc.returncode}")
+    return json.dumps({"ok": True, "output": output}, ensure_ascii=False)
+
+
+async def coding_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "status").lower()
+    agy = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "agy" / "bin" / "agy.exe"
+    if action in {"status", "health"}:
+        return json.dumps(
+            {"ok": agy.exists(), "antigravity": str(agy), "fallback": "Vex Cognition deep brain"},
+            indent=2,
+            ensure_ascii=False,
+        )
+    prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+    if agy.exists():
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run, [str(agy), "--print", prompt, "--sandbox"],
+                text=True, capture_output=True, timeout=120,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            output = ((proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")).strip()
+            if proc.returncode == 0 and output:
+                return json.dumps({"ok": True, "backend": "antigravity", "text": output}, ensure_ascii=False)
+        except Exception:
+            pass
+    result = await asyncio.to_thread(brain_chat, prompt, "deep")
+    result["backend"] = "vex-deep-fallback"
+    return json.dumps(result, indent=2, ensure_ascii=False, default=str)
+
+
+def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 async def coordinator_agent(text: str) -> str:
     payload = parse_payload(text)
     target = str(payload.get("agent") or "").lower()
     body = payload.get("payload")
     if body is None:
         body = {k: v for k, v in payload.items() if k != "agent"}
-    if target in {"cognition", "memory", "verification", "system", "node"}:
+    if target in {"cognition", "memory", "verification", "system", "node", "renderer", "phone", "coding"}:
         return await send_a2a(f"{BASE_URL}/{target}", body)
     if target in {"status", "health"}:
         result = {
             "node": load_config().get("nodeName"),
             "mcp": await call_mcp("ping", {}),
             "integrations": await call_mcp("integration_status", {}),
-            "agents": ["coordinator", "cognition", "memory", "verification", "system", "node"],
+            "agents": ["coordinator", "cognition", "memory", "verification", "system", "node", "renderer", "phone", "coding"],
             "peers": sorted((load_config().get("peers") or {}).keys()),
         }
         return json.dumps(result, indent=2, ensure_ascii=False, default=str)
@@ -342,7 +448,7 @@ async def coordinator_agent(text: str) -> str:
         {
             "ok": True,
             "message": "Vex A2A coordinator is online.",
-            "agents": ["cognition", "memory", "verification", "system", "node", "status"],
+            "agents": ["cognition", "memory", "verification", "system", "node", "renderer", "phone", "coding", "status"],
         },
         ensure_ascii=False,
     )
@@ -448,6 +554,25 @@ node_card = card(
     "/node",
     [skill("node", "Mesh Peer", "Call a VexBridge tool on a configured encrypted-relay peer.", ['{"peer":"ashley","tool":"ping","arguments":{}}'])],
 )
+renderer_card = card(
+    "Vex Renderer Agent",
+    "VexNative renderer agent reusing the established Vex/ComfyUI wrapper.",
+    "/renderer",
+    [skill("renderer", "Renderer", "Inspect or run the established Vex renderer.", ['{"action":"status"}'])],
+)
+phone_card = card(
+    "Vex Phone Agent",
+    "VexNative phone-control agent reusing the established PhoneRelay command path.",
+    "/phone",
+    [skill("phone", "Phone", "Inspect or dispatch a VexNative phone command.", ['{"action":"status"}'])],
+)
+coding_card = card(
+    "Vex Coding Agent",
+    "Coding agent using Antigravity with Vex deep-brain fallback.",
+    "/coding",
+    [skill("coding", "Coding", "Inspect or delegate coding work.", ['{"action":"status"}'])],
+)
+
 coordinator_card = card(
     "Vex Coordinator",
     "A2A coordinator for VexNative memory, verification, Windows control, and encrypted peer delegation.",
@@ -463,6 +588,9 @@ memory_app = agent_app(memory_card, memory_agent)
 verification_app = agent_app(verification_card, verification_agent)
 system_app = agent_app(system_card, system_agent)
 node_app = agent_app(node_card, node_agent)
+renderer_app = agent_app(renderer_card, renderer_agent)
+phone_app = agent_app(phone_card, phone_agent)
+coding_app = agent_app(coding_card, coding_agent)
 
 coordinator_handler = DefaultRequestHandler(
     agent_executor=FunctionExecutor(coordinator_agent),
@@ -479,6 +607,9 @@ routes.extend(
         Mount("/verification", app=verification_app),
         Mount("/system", app=system_app),
         Mount("/node", app=node_app),
+        Mount("/renderer", app=renderer_app),
+        Mount("/phone", app=phone_app),
+        Mount("/coding", app=coding_app),
         Route(
             "/health",
             endpoint=lambda request: JSONResponse(
@@ -503,6 +634,9 @@ routes.extend(
                         "verification": BASE_URL + "/verification",
                         "system": BASE_URL + "/system",
                         "node": BASE_URL + "/node",
+                        "renderer": BASE_URL + "/renderer",
+                        "phone": BASE_URL + "/phone",
+                        "coding": BASE_URL + "/coding",
                     },
                     "peers": load_config().get("peers") or {},
                 }
