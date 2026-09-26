@@ -38,6 +38,8 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
+from brain_router import chat as brain_chat, status as brain_status
+
 HOST = os.environ.get("VEX_A2A_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VEX_A2A_PORT", "8800"))
 BASE_URL = os.environ.get("VEX_A2A_BASE_URL", f"http://{HOST}:{PORT}").rstrip("/")
@@ -198,6 +200,26 @@ async def send_a2a(base_url: str, payload: dict[str, Any] | str) -> str:
         await a2a_client.close()
 
 
+async def cognition_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    if action in {"status", "ping", "health"}:
+        return json.dumps(brain_status(), indent=2, ensure_ascii=False, default=str)
+    prompt = str(payload.get("prompt") or payload.get("text") or text or "").strip()
+    mode = str(payload.get("mode") or "auto").lower()
+    if mode not in {"auto", "fast", "deep"}:
+        raise ValueError("mode must be auto, fast, or deep")
+    result = await asyncio.to_thread(
+        brain_chat,
+        prompt,
+        mode,
+        payload.get("system"),
+        float(payload.get("temperature", 0.7)),
+        int(payload.get("max_tokens", 4096)),
+    )
+    return json.dumps(result, indent=2, ensure_ascii=False, default=str)
+
+
 async def memory_agent(text: str) -> str:
     payload = parse_payload(text)
     action = str(payload.get("action") or "recall").lower()
@@ -281,14 +303,14 @@ async def coordinator_agent(text: str) -> str:
     body = payload.get("payload")
     if body is None:
         body = {k: v for k, v in payload.items() if k != "agent"}
-    if target in {"memory", "verification", "system", "node"}:
+    if target in {"cognition", "memory", "verification", "system", "node"}:
         return await send_a2a(f"{BASE_URL}/{target}", body)
     if target in {"status", "health"}:
         result = {
             "node": load_config().get("nodeName"),
             "mcp": await call_mcp("ping", {}),
             "integrations": await call_mcp("integration_status", {}),
-            "agents": ["coordinator", "memory", "verification", "system", "node"],
+            "agents": ["coordinator", "cognition", "memory", "verification", "system", "node"],
             "peers": sorted((load_config().get("peers") or {}).keys()),
         }
         return json.dumps(result, indent=2, ensure_ascii=False, default=str)
@@ -298,11 +320,13 @@ async def coordinator_agent(text: str) -> str:
         return await send_a2a(f"{BASE_URL}/memory", {"action": "recall", "query": raw[7:]})
     if raw.lower() in {"ping", "status"}:
         return await coordinator_agent(json.dumps({"agent": "status"}))
+    if raw:
+        return await send_a2a(f"{BASE_URL}/cognition", {"mode": "auto", "prompt": raw})
     return json.dumps(
         {
             "ok": True,
-            "message": "Vex A2A coordinator is online. Send JSON with agent=memory|verification|system|node|status.",
-            "agents": ["memory", "verification", "system", "node", "status"],
+            "message": "Vex A2A coordinator is online.",
+            "agents": ["cognition", "memory", "verification", "system", "node", "status"],
         },
         ensure_ascii=False,
     )
@@ -378,6 +402,12 @@ def agent_app(agent_card: AgentCard, handler: Handler) -> Starlette:
     return Starlette(routes=routes)
 
 
+cognition_card = card(
+    "Vex Cognition Agent",
+    "Dual-brain VexNative cognition agent using fast Qwen and deep Bonsai routing.",
+    "/cognition",
+    [skill("cognition", "Cognition", "Route chat/reasoning work to fast Qwen or deep Bonsai.", ['{"mode":"auto","prompt":"Analyze this architecture"}'])],
+)
 memory_card = card(
     "Vex Memory Agent",
     "ICM-backed VexNative memory and retrieval agent.",
@@ -407,11 +437,12 @@ coordinator_card = card(
     "A2A coordinator for VexNative memory, verification, Windows control, and encrypted peer delegation.",
     "",
     [
-        skill("delegate", "Delegate", "Route work to Vex specialist agents.", ['{"agent":"system","payload":{"tool":"ping","arguments":{}}}']),
+        skill("delegate", "Delegate", "Route work to Vex specialist agents.", ['{"agent":"cognition","payload":{"mode":"auto","prompt":"Plan this task"}}']),
         skill("status", "Status", "Report Vex A2A and integration status.", ['{"agent":"status"}']),
     ],
 )
 
+cognition_app = agent_app(cognition_card, cognition_agent)
 memory_app = agent_app(memory_card, memory_agent)
 verification_app = agent_app(verification_card, verification_agent)
 system_app = agent_app(system_card, system_agent)
@@ -427,6 +458,7 @@ routes.extend(create_agent_card_routes(coordinator_card))
 routes.extend(create_jsonrpc_routes(coordinator_handler, "/"))
 routes.extend(
     [
+        Mount("/cognition", app=cognition_app),
         Mount("/memory", app=memory_app),
         Mount("/verification", app=verification_app),
         Mount("/system", app=system_app),
@@ -450,6 +482,7 @@ routes.extend(
                 {
                     "local": {
                         "coordinator": BASE_URL,
+                        "cognition": BASE_URL + "/cognition",
                         "memory": BASE_URL + "/memory",
                         "verification": BASE_URL + "/verification",
                         "system": BASE_URL + "/system",
