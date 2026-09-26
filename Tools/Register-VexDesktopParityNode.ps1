@@ -30,5 +30,6 @@ $list += [pscustomobject]@{
     token = $Token
     enabled = $true
 }
-[pscustomobject]@{ version = "0.15.6"; nodes = $list } | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $NodesPath
+$json = [pscustomobject]@{ version = "0.15.6"; nodes = $list } | ConvertTo-Json -Depth 8
+[IO.File]::WriteAllText($NodesPath, $json, (New-Object Text.UTF8Encoding($false)))
 Write-Host ("Registered parity node {0} at {1}." -f $Name, $endpoint)
