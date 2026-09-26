@@ -50,8 +50,8 @@ async def main():
         registry=(await http.get(BASE+"/registry")).json()
         assert health["ok"] is True
         assert health["protocol"]=="A2A 1.0"
-        assert {"coordinator","cognition","memory","verification","system","node"} <= set(registry["local"])
-        for suffix in ["","/cognition","/memory","/verification","/system","/node"]:
+        assert {"coordinator","cognition","memory","verification","system","node","phone","renderer","coding"} <= set(registry["local"])
+        for suffix in ["","/cognition","/memory","/verification","/system","/node","/phone","/renderer","/coding"]:
             card=await A2ACardResolver(httpx_client=http,base_url=BASE+suffix).get_agent_card()
             assert card.name.startswith("Vex ")
 
@@ -63,6 +63,12 @@ async def main():
     assert "pong" in delegated.lower(),delegated
     status=await send(BASE,{"agent":"status"})
     assert "integrations" in status.lower(),status
+    phone=await send(BASE+"/phone",{"action":"status"})
+    renderer=await send(BASE+"/renderer",{"action":"status"})
+    coding=await send(BASE+"/coding",{"action":"status"})
+    assert "phone" in phone.lower(),phone
+    assert "renderer" in renderer.lower(),renderer
+    assert "coding" in coding.lower(),coding
     print("VEX_A2A_SMOKE=PASS")
 
 asyncio.run(main())
