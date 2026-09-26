@@ -41,6 +41,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import uvicorn
 
+from brain_router import chat as brain_chat_impl, status as brain_status_impl
+
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridgeDC"
 CONFIG_PATH = APP_DIR / "config.json"
 AUDIT_PATH = APP_DIR / "audit.jsonl"
@@ -194,8 +196,30 @@ def integration_status(deviceId: str | None = None) -> dict[str, Any]:
             "dir": str(UNLAZY_DIR),
             "pin": unlazy_pin,
         },
+        "brain": brain_status_impl(),
         "continuityAuthority": "VexContinuityVault",
     }
+
+@tracked_tool()
+def brain_status(deviceId: str | None = None) -> dict[str, Any]:
+    return brain_status_impl()
+
+@tracked_tool()
+def brain_chat(
+    prompt: str,
+    mode: Literal["auto", "fast", "deep"] = "auto",
+    system: str | None = None,
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    deviceId: str | None = None,
+) -> dict[str, Any]:
+    return brain_chat_impl(
+        prompt=prompt,
+        mode=mode,
+        system=system,
+        temperature=float(temperature),
+        max_tokens=int(max_tokens),
+    )
 
 @tracked_tool()
 def icm_store(
@@ -364,7 +388,7 @@ def a2a_registry(deviceId: str | None = None) -> dict[str, Any]:
 
 @tracked_tool()
 def a2a_send(
-    agent: Literal["coordinator", "memory", "verification", "system", "node"],
+    agent: Literal["coordinator", "cognition", "memory", "verification", "system", "node"],
     message: str,
     deviceId: str | None = None,
 ) -> dict[str, Any]:
