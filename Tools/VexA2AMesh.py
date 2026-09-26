@@ -239,7 +239,7 @@ async def renderer(text: str) -> str:
 async def call_a2a(agent: str, message: str) -> str:
     if agent not in AGENT_NAMES or agent == "coordinator":
         raise ValueError(f"unsupported specialist: {agent}")
-    url = f"{BASE}/{agent}"
+    url = f"{BASE}/{agent}/"
     async with httpx.AsyncClient(timeout=10) as http_client:
         card = await A2ACardResolver(httpx_client=http_client, base_url=url).get_agent_card()
     client = await create_client(agent=card, client_config=ClientConfig(streaming=False))
@@ -357,7 +357,7 @@ def build_agent(name: str) -> Starlette:
         default_output_modes=["text/plain", "application/json"],
         capabilities=AgentCapabilities(streaming=False),
         supported_interfaces=[
-            AgentInterface(protocol_binding="JSONRPC", url=f"{BASE}/{name}", protocol_version="1.0")
+            AgentInterface(protocol_binding="JSONRPC", url=f"{BASE}/{name}/", protocol_version="1.0")
         ],
         skills=[skill],
     )
