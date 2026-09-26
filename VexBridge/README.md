@@ -32,4 +32,4 @@ MCP endpoint: `http://127.0.0.1:8795/mcp`
 
 ## Security boundary
 
-Allowed filesystem roots come from `%APPDATA%\VexBridge\config.json`. The installer initializes them explicitly. Secrets belong in Windows environment/credential storage, never this repo.
+Allowed filesystem roots come from `%APPDATA%\VexBridgeDC\config.json`. The installer initializes them explicitly. Secrets belong in Windows environment/credential storage, never this repo.
