@@ -19,7 +19,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install -r VexBridge/requirements.txt
-          python -m pip install pyinstaller
+          python -m pip install pyinstaller typer
       - name: Compile source
         run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/strict_parity_test.py
       - name: Build Windows onedir executables
