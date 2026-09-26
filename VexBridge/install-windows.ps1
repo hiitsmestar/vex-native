@@ -74,6 +74,7 @@ $RelayStarted = $false
 if(-not $SkipRelay){
   $GhCandidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\GitHubCLI\bin\gh.exe'),
+    (Join-Path $env:LOCALAPPDATA 'VexBridgeBootstrap\gh\bin\gh.exe'),
     'C:\Program Files\GitHub CLI\gh.exe'
   )
   $Gh = $GhCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -84,7 +85,23 @@ if(-not $SkipRelay){
       $RelayStartup = Join-Path $Startup 'VexBridgeRelay.cmd'
       Set-Content -Path $RelayStartup -Value @('@echo off',('start "" /min "'+$RelayExe+'"')) -Encoding ASCII
       Start-Process -FilePath $RelayExe -WindowStyle Hidden
-      $RelayStarted = $true
+      $RelayStatus = Join-Path $ConfigDir 'relay-status.json'
+      $RelayDeadline = (Get-Date).AddSeconds(30)
+      while((Get-Date) -lt $RelayDeadline){
+        Start-Sleep -Milliseconds 500
+        if(Test-Path $RelayStatus){
+          try {
+            $Status = Get-Content $RelayStatus -Raw | ConvertFrom-Json
+            if($Status.running -eq $true -and $Status.ok -eq $true -and $Status.node){
+              $RelayStarted = $true
+              break
+            }
+          } catch {}
+        }
+      }
+      if(-not $RelayStarted){
+        throw 'Encrypted relay launched but did not report healthy status within 30 seconds.'
+      }
     }
   }
 }
