@@ -98,6 +98,38 @@ def ping() -> dict[str, Any]:
     return {"pong": True, "host": socket.gethostname(), "time": time.time()}
 
 @mcp.tool()
+def list_devices() -> list[dict[str, Any]]:
+    host = socket.gethostname()
+    return [{
+        "id": host.lower(),
+        "device_name": host,
+        "status": "online",
+        "auth_token": "local",
+        "capabilities": {
+            "app_version": "VexBridge-0.1",
+            "transport": "streamable-http",
+        },
+    }]
+
+@mcp.tool()
+def who_am_i() -> dict[str, Any]:
+    return {
+        "user": os.environ.get("USERNAME") or os.environ.get("USER") or "unknown",
+        "role": "local_authorized",
+        "device_count": 1,
+        "remote_tool_usage_percent": 0,
+    }
+
+@mcp.tool()
+def get_prompts() -> list[Any]:
+    return []
+
+@mcp.tool()
+def give_feedback_to_desktop_commander(feedback: str) -> dict[str, Any]:
+    audit("feedback", True, {"feedback": feedback})
+    return {"ok": True, "stored_locally": True}
+
+@mcp.tool()
 def get_config() -> dict[str, Any]:
     return load_config()
 
