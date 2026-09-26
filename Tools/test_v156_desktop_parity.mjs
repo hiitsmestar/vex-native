@@ -96,6 +96,56 @@ try {
   assert(Array.isArray(directConfig.content), "direct get_config returned no content");
   console.log("PASS direct get_config");
 
+  function assertToolOk(result, label) {
+    assert(result && result.isError !== true, label + " returned MCP error");
+    assert(Array.isArray(result.content), label + " returned no content");
+    return result;
+  }
+
+  const smokeDir = path.join(ROOT, "v156-parity-smoke");
+  const textFile = path.join(smokeDir, "alpha.txt");
+  const movedFile = path.join(smokeDir, "beta.txt");
+  const pdfFile = path.join(smokeDir, "parity.pdf");
+  fs.rmSync(smokeDir, { recursive: true, force: true });
+
+  console.log("STEP substantive filesystem smoke");
+  assertToolOk(await timed(direct.client.callTool({ name: "create_directory", arguments: { path: smokeDir } }), "create_directory"), "create_directory");
+  assertToolOk(await timed(direct.client.callTool({ name: "write_file", arguments: { path: textFile, content: "alpha\\nbeta\\n", mode: "rewrite" } }), "write_file"), "write_file");
+  const readOne = assertToolOk(await timed(direct.client.callTool({ name: "read_file", arguments: { path: textFile } }), "read_file"), "read_file");
+  assert((readOne.content || []).some((x) => x.type === "text" && x.text.includes("alpha")), "read_file did not return written content");
+  assertToolOk(await timed(direct.client.callTool({ name: "read_multiple_files", arguments: { paths: [textFile] } }), "read_multiple_files"), "read_multiple_files");
+  assertToolOk(await timed(direct.client.callTool({ name: "get_file_info", arguments: { path: textFile } }), "get_file_info"), "get_file_info");
+  assertToolOk(await timed(direct.client.callTool({ name: "list_directory", arguments: { path: smokeDir, depth: 2 } }), "list_directory"), "list_directory");
+  assertToolOk(await timed(direct.client.callTool({ name: "edit_block", arguments: { file_path: textFile, old_string: "beta", new_string: "gamma", expected_replacements: 1 } }), "edit_block"), "edit_block");
+  const edited = assertToolOk(await timed(direct.client.callTool({ name: "read_file", arguments: { path: textFile } }), "read edited file"), "read edited file");
+  assert((edited.content || []).some((x) => x.type === "text" && x.text.includes("gamma")), "edit_block result was not observable");
+  assertToolOk(await timed(direct.client.callTool({ name: "move_file", arguments: { source: textFile, destination: movedFile } }), "move_file"), "move_file");
+  assertToolOk(await timed(direct.client.callTool({ name: "read_file", arguments: { path: movedFile } }), "read moved file"), "read moved file");
+  console.log("PASS substantive filesystem smoke");
+
+  console.log("STEP PDF smoke");
+  assertToolOk(await timed(direct.client.callTool({
+    name: "write_pdf",
+    arguments: { path: pdfFile, content: "# Vex Desktop Parity\\n\\nPDF capability smoke test." }
+  }), "write_pdf", 60000), "write_pdf");
+  assert(fs.existsSync(pdfFile), "write_pdf did not create PDF");
+  console.log("PASS PDF smoke");
+
+  console.log("STEP process and diagnostic smoke");
+  for (const [name, args] of [
+    ["list_sessions", {}],
+    ["list_processes", {}],
+    ["list_searches", {}],
+    ["get_usage_stats", {}],
+    ["get_recent_tool_calls", { maxResults: 10 }],
+    ["get_prompts", { action: "get_prompt", promptId: "onb2_05" }]
+  ]) {
+    assertToolOk(await timed(direct.client.callTool({ name, arguments: args }), name, 30000), name);
+  }
+  console.log("PASS process and diagnostic smoke");
+
+  fs.rmSync(smokeDir, { recursive: true, force: true });
+
   await closePair(direct, "direct");
   direct = null;
 
