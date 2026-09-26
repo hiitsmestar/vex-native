@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import uvicorn
 from a2a.client import A2ACardResolver, ClientConfig, create_client
-from a2a.helpers import get_message_text, new_text_message
+from a2a.helpers import get_message_text, get_stream_response_text, new_text_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -248,9 +248,12 @@ async def call_a2a(agent: str, message: str) -> str:
         answers: list[str] = []
         async for event in client.send_message(request):
             try:
-                value = get_message_text(event)
+                value = get_stream_response_text(event)
             except Exception:
-                value = ""
+                try:
+                    value = get_message_text(event)
+                except Exception:
+                    value = ""
             if value:
                 answers.append(value)
         if not answers:
