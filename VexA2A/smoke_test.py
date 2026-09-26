@@ -14,7 +14,7 @@ async def main() -> None:
         health = (await http.get(BASE + "/health")).json()
         assert health["ok"] is True
         assert health["protocol"] == "1.0"
-        expected = {"coordinator", "memory", "verification", "renderer", "phone", "coding"}
+        expected = {"coordinator", "cognition", "memory", "verification", "renderer", "phone", "system"}
         assert set(health["agents"]) == expected
 
         for agent in expected:
