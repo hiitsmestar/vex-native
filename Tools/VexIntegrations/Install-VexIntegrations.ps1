@@ -66,24 +66,25 @@ Set-Content (Join-Path $ToolsRoot 'VexUnlazyLint.cmd') -Encoding ASCII -Value @(
 
 # Persistent warm ICM HTTP service, localhost only.
 $start=Join-Path $ToolsRoot 'Start-VexICM.ps1'
-$startBody=@"
-\$ErrorActionPreference='Stop'
-\$icm='$icmExe'
-\$db='$db'
-\$port=11435
-\$existing=Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort \$port -State Listen -ErrorAction SilentlyContinue
-if(\$existing){ exit 0 }
-Start-Process -FilePath \$icm -ArgumentList @('--db',\$db,'--no-embeddings','serve','--http','127.0.0.1:11435') -WindowStyle Hidden
-\$deadline=(Get-Date).AddSeconds(30)
-while((Get-Date)-lt \$deadline){
+$startBody=@'
+$ErrorActionPreference='Stop'
+$toolsRoot=Join-Path $env:USERPROFILE 'Documents\VexNativeTools'
+$icm=Join-Path $toolsRoot 'ThirdParty\icm\icm.exe'
+$db=Join-Path $env:APPDATA 'VexICM\vexnative-memory.db'
+$port=11435
+$existing=Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+if($existing){ exit 0 }
+Start-Process -FilePath $icm -ArgumentList @('--db',$db,'--no-embeddings','serve','--http','127.0.0.1:11435') -WindowStyle Hidden
+$deadline=(Get-Date).AddSeconds(30)
+while((Get-Date)-lt $deadline){
   Start-Sleep -Milliseconds 500
   try {
-    \$r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:11435/health' -TimeoutSec 2
-    if(\$r.StatusCode -eq 200){ exit 0 }
+    $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:11435/health' -TimeoutSec 2
+    if($r.StatusCode -eq 200){ exit 0 }
   } catch {}
 }
 throw 'VexICM HTTP service did not become healthy'
-"@
+'@
 Set-Content $start -Value $startBody -Encoding UTF8
 $startup=Join-Path ([Environment]::GetFolderPath('Startup')) 'VexICM.cmd'
 Set-Content $startup -Encoding ASCII -Value @(
