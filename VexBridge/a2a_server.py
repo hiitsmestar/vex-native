@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import subprocess
 import tempfile
 from pathlib import Path
@@ -47,7 +48,7 @@ APP_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "schema": "vex-a2a-v1",
-    "nodeName": os.environ.get("COMPUTERNAME", "vex-node"),
+    "nodeName": os.environ.get("COMPUTERNAME") or socket.gethostname(),
     "peers": {},
 }
 
