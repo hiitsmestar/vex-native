@@ -207,6 +207,26 @@ async def send_a2a(base_url: str, payload: dict[str, Any] | str) -> str:
         finally:
             await a2a_client.close()
 
+
+async def cognition_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    if action in {"status", "ping", "health"}:
+        return json.dumps(brain_status(), indent=2, ensure_ascii=False, default=str)
+    prompt = str(payload.get("prompt") or payload.get("text") or text or "").strip()
+    mode = str(payload.get("mode") or "auto").lower()
+    if mode not in {"auto", "fast", "deep"}:
+        raise ValueError("mode must be auto, fast, or deep")
+    result = await asyncio.to_thread(
+        brain_chat,
+        prompt,
+        mode,
+        payload.get("system"),
+        float(payload.get("temperature", 0.7)),
+        int(payload.get("max_tokens", 4096)),
+    )
+    return json.dumps(result, indent=2, ensure_ascii=False, default=str)
+
 async def memory_agent(text: str) -> str:
     payload = parse_payload(text)
     action = str(payload.get("action") or "recall").lower()
