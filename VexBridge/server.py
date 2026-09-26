@@ -61,8 +61,43 @@ mcp = FastMCP("VexBridge", host=MCP_HOST, port=MCP_PORT, stateless_http=True, js
 RECENT_TOOL_CALLS = deque(maxlen=1000)
 _NO_TRACK = {"get_recent_tool_calls", "get_usage_stats", "get_prompts", "give_feedback_to_desktop_commander"}
 
+def _record_tool_call(fn, args, kwargs, result, ok: bool, started: float) -> None:
+    if fn.__name__ in _NO_TRACK:
+        return
+    try:
+        arguments = dict(inspect.signature(fn).bind_partial(*args, **kwargs).arguments)
+    except Exception:
+        arguments = dict(kwargs)
+    try:
+        encoded = json.dumps(result, ensure_ascii=False, default=str)
+        output = result if len(encoded) <= 20000 else encoded[:20000] + "...[truncated]"
+    except Exception:
+        output = repr(result)[:20000]
+    RECENT_TOOL_CALLS.append({
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)),
+        "tool": fn.__name__, "arguments": arguments, "output": output, "ok": ok,
+        "duration_ms": round((time.time() - started) * 1000, 2),
+    })
+
 def tracked_tool():
     def decorate(fn):
+        if inspect.iscoroutinefunction(fn):
+            @wraps(fn)
+            async def async_wrapped(*args, **kwargs):
+                started = time.time()
+                ok = True
+                result = None
+                try:
+                    result = await fn(*args, **kwargs)
+                    return result
+                except Exception as exc:
+                    ok = False
+                    result = {"error": f"{type(exc).__name__}: {exc}"}
+                    raise
+                finally:
+                    _record_tool_call(fn, args, kwargs, result, ok, started)
+            return mcp.tool()(async_wrapped)
+
         @wraps(fn)
         def wrapped(*args, **kwargs):
             started = time.time()
@@ -76,21 +111,7 @@ def tracked_tool():
                 result = {"error": f"{type(exc).__name__}: {exc}"}
                 raise
             finally:
-                if fn.__name__ not in _NO_TRACK:
-                    try:
-                        arguments = dict(inspect.signature(fn).bind_partial(*args, **kwargs).arguments)
-                    except Exception:
-                        arguments = dict(kwargs)
-                    try:
-                        encoded = json.dumps(result, ensure_ascii=False, default=str)
-                        output = result if len(encoded) <= 20000 else encoded[:20000] + "...[truncated]"
-                    except Exception:
-                        output = repr(result)[:20000]
-                    RECENT_TOOL_CALLS.append({
-                        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)),
-                        "tool": fn.__name__, "arguments": arguments, "output": output, "ok": ok,
-                        "duration_ms": round((time.time() - started) * 1000, 2),
-                    })
+                _record_tool_call(fn, args, kwargs, result, ok, started)
         return mcp.tool()(wrapped)
     return decorate
 
