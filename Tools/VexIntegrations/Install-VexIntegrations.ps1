@@ -104,11 +104,18 @@ New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
     gateLint=(Join-Path $unlazy 'scripts\gate-lint.mjs')
     executionApprovalRequired=$true
   }
+  a2a=@{
+    protocol='A2A 1.0'
+    coordinator='http://127.0.0.1:8800'
+    agentCard='http://127.0.0.1:8800/.well-known/agent-card.json'
+    registry='http://127.0.0.1:8800/registry'
+    provider='VexBridgeMCP package'
+  }
   authority=@{
     continuity=(Join-Path $env:USERPROFILE 'Documents\VexContinuityVault')
     rule='ICM is auxiliary retrieval only; newest Star-authored corrections and verified live state override ICM.'
   }
-} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $manifestDir 'integrations.json') -Encoding UTF8
+} | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $manifestDir 'integrations.json') -Encoding UTF8
 
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $start
 & $icmExe --version
