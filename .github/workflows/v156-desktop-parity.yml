@@ -17,7 +17,22 @@ jobs:
           python-version: "3.12"
       - name: Install parity runtime
         shell: powershell
-        run: .\Tools\Install-VexDesktopParity.ps1 -Mode Both -NoLan
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "v156-install.out.log"
+          $err = Join-Path $env:RUNNER_TEMP "v156-install.err.log"
+          $script = (Resolve-Path ".\Tools\Install-VexDesktopParity.ps1").Path
+          $proc = Start-Process powershell.exe -ArgumentList @(
+            "-NoProfile","-ExecutionPolicy","Bypass","-File",$script,"-Mode","Both","-NoLan"
+          ) -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (!$proc.WaitForExit(180000)) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $out) { Get-Content $out }
+            if (Test-Path $err) { Get-Content $err }
+            throw "Install-VexDesktopParity exceeded 180 seconds."
+          }
+          if (Test-Path $out) { Get-Content $out }
+          if (Test-Path $err) { Get-Content $err }
+          if ($proc.ExitCode -ne 0) { throw "Install-VexDesktopParity failed with exit code $($proc.ExitCode)." }
       - name: Install Dropbox bridge
         shell: powershell
         run: .\Tools\Install-VexDropboxParityBridge.ps1 -DropboxRoot "$env:RUNNER_TEMP\VexRemoteBridge"
