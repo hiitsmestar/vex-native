@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 import time
 import zlib
 from pathlib import Path
@@ -17,6 +18,11 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 DEFAULT_REPO = "hiitsmestar/vex-native"
 DEFAULT_OWNER = "hiitsmestar"
