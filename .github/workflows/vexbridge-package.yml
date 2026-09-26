@@ -19,7 +19,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install -r VexBridge/requirements.txt
-          python -m pip install pyinstaller
+          python -m pip install pyinstaller typer
       - name: Build onedir agent
         shell: pwsh
         run: |
