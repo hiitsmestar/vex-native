@@ -30,9 +30,17 @@ jobs:
             if (Test-Path $err) { Get-Content $err }
             throw "Install-VexDesktopParity exceeded 600 seconds."
           }
+          $proc.WaitForExit()
+          $proc.Refresh()
           if (Test-Path $out) { Get-Content $out }
           if (Test-Path $err) { Get-Content $err }
-          if ($proc.ExitCode -ne 0) { throw "Install-VexDesktopParity failed with exit code $($proc.ExitCode)." }
+          $successMarker = $false
+          if (Test-Path $out) {
+            $successMarker = [bool](Select-String -Path $out -SimpleMatch "Vex Desktop Parity v0.15.6 installed and verified." -Quiet)
+          }
+          if (($null -ne $proc.ExitCode -and $proc.ExitCode -ne 0) -or !$successMarker) {
+            throw "Install-VexDesktopParity did not complete successfully."
+          }
       - name: Install Dropbox bridge
         shell: powershell
         run: .\Tools\Install-VexDropboxParityBridge.ps1 -DropboxRoot "$env:RUNNER_TEMP\VexRemoteBridge"
