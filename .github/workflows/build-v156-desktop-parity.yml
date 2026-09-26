@@ -45,7 +45,8 @@ jobs:
             "Tools/Start-VexDesktopParity.ps1",
             "Tools/Register-VexDesktopParityNode.ps1",
             "Tools/Enable-VexDesktopParityNode.ps1",
-            "Tools/Install-VexDropboxParityBridge.ps1"
+            "Tools/Install-VexDropboxParityBridge.ps1",
+            "Tools/Bootstrap-VexDesktopParity.ps1"
           )
           foreach ($file in $files) {
             [void][scriptblock]::Create((Get-Content -Raw $file))
@@ -70,6 +71,7 @@ jobs:
           Copy-Item Tools/VexDropboxParityCall.mjs parity-bundle/
           Copy-Item Tools/Install-VexDropboxParityBridge.ps1 parity-bundle/
           Copy-Item Tools/Test-VexDesktopParity.ps1 parity-bundle/
+          Copy-Item Tools/Bootstrap-VexDesktopParity.ps1 parity-bundle/
           Copy-Item docs/VEX_DESKTOP_PARITY.md parity-bundle/
           Compress-Archive -Path parity-bundle/* -DestinationPath VexDesktopParity-v0.15.6.zip -Force
 
