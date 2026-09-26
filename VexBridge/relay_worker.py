@@ -14,7 +14,7 @@ REPO="hiitsmestar/vex-native"
 OWNER="hiitsmestar"
 ISSUE=84
 MCP_URL="http://127.0.0.1:8795/mcp"
-POLL_SECONDS=10
+POLL_SECONDS=8
 APP=Path(os.environ.get("APPDATA", str(Path.home())))/"VexBridgeDC"
 KEY_FILE=APP/"relay-private.key"
 STATE_FILE=APP/"relay-state.json"
@@ -58,7 +58,10 @@ def gh_api(args: list[str], input_json: Any|None=None, timeout: int=30)->Any:
     text=r.stdout.strip()
     return json.loads(text) if text else {}
 def fetch_comments()->list[dict]:
-    data=gh_api([f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100"])
+    issue=gh_api([f"repos/{REPO}/issues/{ISSUE}"])
+    count=max(0,int(issue.get("comments",0)))
+    page=max(1,(count+99)//100)
+    data=gh_api([f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100&page={page}"])
     return data if isinstance(data,list) else []
 def post_comment(body: str)->dict:
     return gh_api(["-X","POST",f"repos/{REPO}/issues/{ISSUE}/comments"],{"body":body})
@@ -144,10 +147,10 @@ def announce_key(comments: list[dict], priv: X25519PrivateKey, node: str)->None:
             except Exception: pass
     body="VEXBRIDGE_PUBLIC_KEY\n```json\n"+json.dumps({"v":1,"node":node,"public_key":pub},separators=(",",":"))+"\n```"
     post_comment(body)
-def handle_comment(comment: dict, priv: X25519PrivateKey, node: str)->None:
-    if str((comment.get("user") or {}).get("login") or "").lower()!=OWNER.lower(): return
+def handle_comment(comment: dict, priv: X25519PrivateKey, node: str)->str|None:
+    if str((comment.get("user") or {}).get("login") or "").lower()!=OWNER.lower(): return None
     env=parse_envelope(str(comment.get("body") or ""))
-    if not env or str(env.get("node"))!=node: return
+    if not env or str(env.get("node"))!=node: return None
     cmd_id=str(env.get("id") or "")
     try:
         payload,shared=decrypt_command(priv,env,node)
@@ -162,8 +165,10 @@ def handle_comment(comment: dict, priv: X25519PrivateKey, node: str)->None:
             result={"ok":False,"error":f"{type(exc).__name__}: {exc}"[:2000]}
         except Exception:
             log(f"unreplyable command {cmd_id}: {type(exc).__name__}: {exc}")
-            return
-    for body in encrypted_result(shared,node,cmd_id,result): post_comment(body)
+            return cmd_id
+    for body in encrypted_result(shared,node,cmd_id,result):
+        post_comment(body)
+    return cmd_id
 def write_status(node: str, state: dict, ok: bool=True, error: str|None=None)->None:
     save_json(STATUS_FILE,{"running":True,"node":node,"ok":ok,"last_poll":time.time(),
                            "last_comment_id":state.get("last_comment_id",0),"error":error})
@@ -171,10 +176,16 @@ def main()->int:
     state=load_json(STATE_FILE,{})
     node=node_id(state); priv=load_private()
     comments=fetch_comments()
-    announce_key(comments,priv,node)
+    pub=public_b64(priv)
+    if state.get("announced_public_key")!=pub:
+        announce_key(comments,priv,node)
+        state["announced_public_key"]=pub
+        save_json(STATE_FILE,state)
     if not state.get("initialized"):
         state["last_comment_id"]=max([int(c.get("id",0)) for c in comments] or [0])
-        state["initialized"]=True; save_json(STATE_FILE,state)
+        state["initialized"]=True
+        save_json(STATE_FILE,state)
+    processed=list(dict.fromkeys(str(x) for x in state.get("processed_command_ids",[]) if x))[-200:]
     log(f"relay started node={node}")
     while True:
         try:
@@ -182,7 +193,16 @@ def main()->int:
             last=int(state.get("last_comment_id",0))
             fresh=[c for c in comments if int(c.get("id",0))>last]
             for c in sorted(fresh,key=lambda x:int(x.get("id",0))):
-                handle_comment(c,priv,node)
+                env=parse_envelope(str(c.get("body") or ""))
+                cmd_id=str(env.get("id") or "") if env and str(env.get("node"))==node else ""
+                if cmd_id and cmd_id in processed:
+                    log(f"duplicate command ignored id={cmd_id}")
+                else:
+                    handled=handle_comment(c,priv,node)
+                    if handled:
+                        processed.append(handled)
+                        processed=list(dict.fromkeys(processed))[-200:]
+                        state["processed_command_ids"]=processed
                 state["last_comment_id"]=max(int(state.get("last_comment_id",0)),int(c.get("id",0)))
                 save_json(STATE_FILE,state)
             write_status(node,state,True,None)
