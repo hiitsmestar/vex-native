@@ -1,10 +1,11 @@
-param([int]$Port = 8795, [switch]$SkipRelay)
+param([int]$Port = 8795, [int]$A2APort = 8800, [switch]$SkipRelay, [switch]$SkipA2A)
 $ErrorActionPreference = 'Stop'
 $SourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP'
 $McpSource = Join-Path $SourceRoot 'VexBridgeMCP'
 $RelaySource = Join-Path $SourceRoot 'VexBridgeRelay'
 $ClientSource = Join-Path $SourceRoot 'VexBridgeRelayClient'
+$A2ASource = Join-Path $SourceRoot 'VexA2A'
 
 if(-not (Test-Path (Join-Path $McpSource 'VexBridgeMCP.exe'))){
   throw 'VexBridgeMCP packaged folder is missing.'
@@ -15,10 +16,18 @@ if(-not $SkipRelay -and -not (Test-Path (Join-Path $RelaySource 'VexBridgeRelay.
 if(-not (Test-Path (Join-Path $ClientSource 'VexBridgeRelayClient.exe'))){
   throw 'VexBridgeRelayClient packaged folder is missing.'
 }
+if(-not $SkipA2A -and -not (Test-Path (Join-Path $A2ASource 'VexA2A.exe'))){
+  throw 'VexA2A packaged folder is missing.'
+}
 
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
   Where-Object { $_.Name -eq 'VexBridgeMCP.exe' -and $_.ExecutablePath -like "$InstallRoot*" } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+if(-not $SkipA2A){
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -eq 'VexA2A.exe' -and $_.ExecutablePath -like "$InstallRoot*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
 if(-not $SkipRelay){
   Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -eq 'VexBridgeRelay.exe' -or $_.CommandLine -like '*relay_worker.py*' } |
@@ -30,6 +39,7 @@ Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item $McpSource (Join-Path $Stage 'MCP') -Recurse -Force
 Copy-Item $ClientSource (Join-Path $Stage 'Client') -Recurse -Force
+if(-not $SkipA2A){ Copy-Item $A2ASource (Join-Path $Stage 'A2A') -Recurse -Force }
 if(-not $SkipRelay){ Copy-Item $RelaySource (Join-Path $Stage 'Relay') -Recurse -Force }
 
 Remove-Item $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -74,6 +84,35 @@ for($i=0;$i -lt 30;$i++){
   } catch {}
 }
 if(-not $Ready){ throw "VexBridgeMCP did not listen on port $Port" }
+
+$A2AStarted = $false
+if(-not $SkipA2A){
+  $A2AExe = Join-Path $InstallRoot 'A2A\VexA2A.exe'
+  $A2AStartup = Join-Path $Startup 'VexA2A.cmd'
+  $A2ALines = @(
+    '@echo off',
+    'set VEX_A2A_HOST=127.0.0.1',
+    ('set VEX_A2A_PORT=' + $A2APort),
+    ('set VEX_A2A_BASE_URL=http://127.0.0.1:' + $A2APort),
+    ('set VEXBRIDGE_MCP_URL=http://127.0.0.1:' + $Port + '/mcp'),
+    ('start "" /min "' + $A2AExe + '"')
+  )
+  Set-Content -Path $A2AStartup -Value $A2ALines -Encoding ASCII
+  $env:VEX_A2A_HOST='127.0.0.1'
+  $env:VEX_A2A_PORT=[string]$A2APort
+  $env:VEX_A2A_BASE_URL="http://127.0.0.1:$A2APort"
+  $env:VEXBRIDGE_MCP_URL="http://127.0.0.1:$Port/mcp"
+  Start-Process -FilePath $A2AExe -WindowStyle Hidden
+  $deadline=(Get-Date).AddSeconds(30)
+  while((Get-Date)-lt $deadline){
+    Start-Sleep -Milliseconds 500
+    try {
+      $r=Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$A2APort/health" -TimeoutSec 2
+      if($r.StatusCode -eq 200){ $A2AStarted=$true; break }
+    } catch {}
+  }
+  if(-not $A2AStarted){ throw "VexA2A did not become healthy on port $A2APort" }
+}
 
 $RelayStarted = $false
 if(-not $SkipRelay){
