@@ -27,18 +27,22 @@ def artifact_text(value):
     return out
 
 async def send(base_url,payload):
-    async with httpx.AsyncClient(timeout=30.0) as http:
+    timeout=httpx.Timeout(120.0,connect=15.0)
+    async with httpx.AsyncClient(timeout=timeout) as http:
         card=await A2ACardResolver(httpx_client=http,base_url=base_url).get_agent_card()
-    client=await create_client(agent=card,client_config=ClientConfig(streaming=False))
-    try:
-        req=SendMessageRequest(message=new_text_message(json.dumps(payload),role=Role.ROLE_USER))
-        chunks=[]
-        async for chunk in client.send_message(req):
-            chunks.append(chunk.model_dump(mode="json") if hasattr(chunk,"model_dump") else {"value":str(chunk)})
-        texts=artifact_text(chunks)
-        return "\n".join(texts) if texts else json.dumps(chunks)
-    finally:
-        await client.close()
+        client=await create_client(
+            agent=card,
+            client_config=ClientConfig(streaming=False,httpx_client=http),
+        )
+        try:
+            req=SendMessageRequest(message=new_text_message(json.dumps(payload),role=Role.ROLE_USER))
+            chunks=[]
+            async for chunk in client.send_message(req):
+                chunks.append(chunk.model_dump(mode="json") if hasattr(chunk,"model_dump") else {"value":str(chunk)})
+            texts=artifact_text(chunks)
+            return "\n".join(texts) if texts else json.dumps(chunks)
+        finally:
+            await client.close()
 
 async def main():
     async with httpx.AsyncClient(timeout=10.0) as http:
