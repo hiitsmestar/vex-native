@@ -398,7 +398,7 @@ def a2a_registry(deviceId: str | None = None) -> dict[str, Any]:
 
 @tracked_tool()
 def a2a_send(
-    agent: Literal["coordinator", "cognition", "memory", "verification", "system", "node"],
+    agent: Literal["coordinator", "cognition", "memory", "verification", "system", "node", "phone", "renderer", "coding"],
     message: str,
     deviceId: str | None = None,
 ) -> dict[str, Any]:
