@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hmac
+import inspect
 import fnmatch
 import io
 import json
@@ -16,9 +18,11 @@ import time
 import urllib.request
 import uuid
 import zipfile
+from collections import deque
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import psutil
 from docx import Document
@@ -28,6 +32,9 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+import uvicorn
 
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexBridgeDC"
 CONFIG_PATH = APP_DIR / "config.json"
@@ -36,8 +43,13 @@ APP_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = {
     "allowedRoots": [str(Path.home())],
+    "allowedDirectories": [str(Path.home())],
     "fileReadLineLimit": 1000,
+    "fileWriteLineLimit": 30,
     "searchResultLimit": 500,
+    "blockedCommands": [],
+    "defaultShell": "",
+    "telemetryEnabled": False,
 }
 if not CONFIG_PATH.exists():
     CONFIG_PATH.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
@@ -45,6 +57,41 @@ if not CONFIG_PATH.exists():
 MCP_HOST = os.environ.get("VEXBRIDGE_HOST", "127.0.0.1")
 MCP_PORT = int(os.environ.get("VEXBRIDGE_PORT", "8795"))
 mcp = FastMCP("VexBridge", host=MCP_HOST, port=MCP_PORT, stateless_http=True, json_response=True)
+RECENT_TOOL_CALLS = deque(maxlen=1000)
+_NO_TRACK = {"get_recent_tool_calls", "get_usage_stats", "get_prompts", "give_feedback_to_desktop_commander"}
+
+def tracked_tool():
+    def decorate(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            started = time.time()
+            ok = True
+            result = None
+            try:
+                result = fn(*args, **kwargs)
+                return result
+            except Exception as exc:
+                ok = False
+                result = {"error": f"{type(exc).__name__}: {exc}"}
+                raise
+            finally:
+                if fn.__name__ not in _NO_TRACK:
+                    try:
+                        arguments = dict(inspect.signature(fn).bind_partial(*args, **kwargs).arguments)
+                    except Exception:
+                        arguments = dict(kwargs)
+                    try:
+                        encoded = json.dumps(result, ensure_ascii=False, default=str)
+                        output = result if len(encoded) <= 20000 else encoded[:20000] + "...[truncated]"
+                    except Exception:
+                        output = repr(result)[:20000]
+                    RECENT_TOOL_CALLS.append({
+                        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)),
+                        "tool": fn.__name__, "arguments": arguments, "output": output, "ok": ok,
+                        "duration_ms": round((time.time() - started) * 1000, 2),
+                    })
+        return mcp.tool()(wrapped)
+    return decorate
 
 def audit(tool: str, ok: bool, detail: dict[str, Any] | None = None) -> None:
     rec = {"ts": time.time(), "tool": tool, "ok": ok, "detail": detail or {}}
@@ -53,16 +100,30 @@ def audit(tool: str, ok: bool, detail: dict[str, Any] | None = None) -> None:
 
 def load_config() -> dict[str, Any]:
     try:
-        return {**DEFAULT_CONFIG, **json.loads(CONFIG_PATH.read_text(encoding="utf-8"))}
+        raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+        cfg = {**DEFAULT_CONFIG, **raw}
+        if "allowedDirectories" in raw and "allowedRoots" not in raw:
+            cfg["allowedRoots"] = raw["allowedDirectories"]
+        elif "allowedRoots" in raw and "allowedDirectories" not in raw:
+            cfg["allowedDirectories"] = raw["allowedRoots"]
+        return cfg
     except Exception:
         return dict(DEFAULT_CONFIG)
 
 def save_config(cfg: dict[str, Any]) -> None:
+    if "allowedDirectories" in cfg:
+        cfg["allowedRoots"] = cfg["allowedDirectories"]
+    elif "allowedRoots" in cfg:
+        cfg["allowedDirectories"] = cfg["allowedRoots"]
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 def resolve_allowed(raw: str) -> Path:
     p = Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
-    roots = [Path(os.path.expandvars(os.path.expanduser(x))).resolve() for x in load_config().get("allowedRoots", [])]
+    cfg = load_config()
+    raw_roots = cfg.get("allowedDirectories", cfg.get("allowedRoots", []))
+    if raw_roots == []:
+        return p
+    roots = [Path(os.path.expandvars(os.path.expanduser(x))).resolve() for x in raw_roots]
     if not any(p == r or r in p.parents for r in roots):
         raise PermissionError(f"path outside allowed roots: {p}")
     return p
@@ -93,11 +154,11 @@ def docx_outline(path: Path) -> str:
             out.append(" | ".join(c.text for c in row.cells))
     return "\n".join(out)
 
-@mcp.tool()
-def ping() -> dict[str, Any]:
+@tracked_tool()
+def ping(deviceId: str | None = None) -> dict[str, Any]:
     return {"pong": True, "host": socket.gethostname(), "time": time.time()}
 
-@mcp.tool()
+@tracked_tool()
 def list_devices() -> list[dict[str, Any]]:
     host = socket.gethostname()
     return [{
@@ -111,7 +172,7 @@ def list_devices() -> list[dict[str, Any]]:
         },
     }]
 
-@mcp.tool()
+@tracked_tool()
 def who_am_i() -> dict[str, Any]:
     return {
         "user": os.environ.get("USERNAME") or os.environ.get("USER") or "unknown",
@@ -120,30 +181,40 @@ def who_am_i() -> dict[str, Any]:
         "remote_tool_usage_percent": 0,
     }
 
-@mcp.tool()
-def get_prompts() -> list[Any]:
-    return []
+@tracked_tool()
+def get_prompts(action: Literal["get_prompt"], promptId: str, deviceId: str | None = None) -> dict[str, Any]:
+    prompts = {
+        "onb2_01": "Organize the Downloads folder into sensible categories and report what changed.",
+        "onb2_02": "Inspect a codebase or repository and explain its structure, entry points, and important workflows.",
+        "onb2_03": "Create an organized knowledge base from the selected files and folders.",
+        "onb2_04": "Analyze a local data file and summarize important patterns and findings.",
+        "onb2_05": "Check system health, running processes, storage, and resource pressure.",
+    }
+    if action != "get_prompt" or promptId not in prompts:
+        raise ValueError("unsupported prompt request")
+    return {"action": action, "promptId": promptId, "prompt": prompts[promptId]}
 
-@mcp.tool()
-def give_feedback_to_desktop_commander(feedback: str) -> dict[str, Any]:
-    audit("feedback", True, {"feedback": feedback})
-    return {"ok": True, "stored_locally": True}
+@tracked_tool()
+def give_feedback_to_desktop_commander(deviceId: str | None = None) -> dict[str, Any]:
+    return {"ok": True, "replacement": "VexBridge", "message": "No vendor feedback form is used by VexBridge."}
 
-@mcp.tool()
-def get_config() -> dict[str, Any]:
+@tracked_tool()
+def get_config(deviceId: str | None = None) -> dict[str, Any]:
     return load_config()
 
-@mcp.tool()
-def set_config_value(key: str, value: Any) -> dict[str, Any]:
+@tracked_tool()
+def set_config_value(key: str, value: str | int | float | bool | list[str] | None, deviceId: str | None = None) -> dict[str, Any]:
     cfg = load_config()
     cfg[key] = value
+    if key == "allowedDirectories": cfg["allowedRoots"] = value
+    if key == "allowedRoots": cfg["allowedDirectories"] = value
     save_config(cfg)
     audit("set_config_value", True, {"key": key})
     return cfg
 
-@mcp.tool()
+@tracked_tool()
 def read_file(path: str, isUrl: bool = False, offset: int = 0, length: int = 1000,
-              sheet: str | None = None, range: str | None = None, options: dict[str, Any] | None = None) -> Any:
+              sheet: str | None = None, range: str | None = None, options: dict[str, Any] | None = None, deviceId: str | None = None) -> Any:
     if isUrl:
         with urllib.request.urlopen(path, timeout=30) as r:
             return r.read().decode("utf-8", errors="replace")
@@ -163,8 +234,8 @@ def read_file(path: str, isUrl: bool = False, offset: int = 0, length: int = 100
     text = p.read_text(encoding="utf-8", errors="replace")
     return "\n".join(slice_lines(text.splitlines(), offset, length))
 
-@mcp.tool()
-def read_multiple_files(paths: list[str]) -> dict[str, Any]:
+@tracked_tool()
+def read_multiple_files(paths: list[str], deviceId: str | None = None) -> dict[str, Any]:
     out = {}
     for p in paths:
         try:
@@ -173,8 +244,8 @@ def read_multiple_files(paths: list[str]) -> dict[str, Any]:
             out[p] = {"error": str(e)}
     return out
 
-@mcp.tool()
-def write_file(path: str, content: str, mode: str = "rewrite") -> dict[str, Any]:
+@tracked_tool()
+def write_file(path: str, content: str, mode: str = "rewrite", deviceId: str | None = None) -> dict[str, Any]:
     p = resolve_allowed(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     ext = p.suffix.lower()
@@ -202,22 +273,22 @@ def write_file(path: str, content: str, mode: str = "rewrite") -> dict[str, Any]
     audit("write_file", True, {"path": str(p), "mode": mode})
     return {"ok": True, "path": str(p), "bytes": p.stat().st_size}
 
-@mcp.tool()
-def create_directory(path: str) -> dict[str, Any]:
+@tracked_tool()
+def create_directory(path: str, deviceId: str | None = None) -> dict[str, Any]:
     p = resolve_allowed(path)
     p.mkdir(parents=True, exist_ok=True)
     return {"ok": True, "path": str(p)}
 
-@mcp.tool()
-def move_file(source: str, destination: str) -> dict[str, Any]:
+@tracked_tool()
+def move_file(source: str, destination: str, deviceId: str | None = None) -> dict[str, Any]:
     s, d = resolve_allowed(source), resolve_allowed(destination)
     d.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(s), str(d))
     audit("move_file", True, {"source": str(s), "destination": str(d)})
     return {"ok": True, "destination": str(d)}
 
-@mcp.tool()
-def get_file_info(path: str) -> dict[str, Any]:
+@tracked_tool()
+def get_file_info(path: str, deviceId: str | None = None) -> dict[str, Any]:
     p = resolve_allowed(path)
     st = p.stat()
     info = {
@@ -233,8 +304,8 @@ def get_file_info(path: str) -> dict[str, Any]:
         info["sheets"] = [{"name": ws.title, "rowCount": ws.max_row, "colCount": ws.max_column} for ws in wb.worksheets]
     return info
 
-@mcp.tool()
-def list_directory(path: str, depth: int = 2) -> list[str]:
+@tracked_tool()
+def list_directory(path: str, depth: int = 2, deviceId: str | None = None) -> list[str]:
     root = resolve_allowed(path)
     out: list[str] = []
     def walk(cur: Path, level: int) -> None:
@@ -253,9 +324,9 @@ def list_directory(path: str, depth: int = 2) -> list[str]:
     walk(root, 1)
     return out
 
-@mcp.tool()
+@tracked_tool()
 def edit_block(file_path: str, old_string: str | None = None, new_string: str | None = None,
-               expected_replacements: int = 1, range: str | None = None, content: list[list[Any]] | None = None) -> dict[str, Any]:
+               expected_replacements: int = 1, range: str | None = None, content: list[list[Any]] | None = None, deviceId: str | None = None) -> dict[str, Any]:
     p = resolve_allowed(file_path)
     if p.suffix.lower() in {".xlsx",".xlsm"}:
         if not range or content is None: raise ValueError("range and content required")
@@ -304,8 +375,8 @@ def markdown_pdf(markdown: str, output: Path) -> None:
             story.extend([Paragraph(txt.replace("\n","<br/>")), Spacer(1, 8)])
     SimpleDocTemplate(str(output), pagesize=letter).build(story)
 
-@mcp.tool()
-def write_pdf(path: str, content: Any, outputPath: str | None = None, options: dict[str, Any] | None = None) -> dict[str, Any]:
+@tracked_tool()
+def write_pdf(path: str, content: Any, outputPath: str | None = None, options: dict[str, Any] | None = None, deviceId: str | None = None) -> dict[str, Any]:
     src = resolve_allowed(path)
     if isinstance(content, str):
         target = resolve_allowed(outputPath or path)
@@ -339,65 +410,84 @@ def write_pdf(path: str, content: Any, outputPath: str | None = None, options: d
 @dataclass
 class SearchJob:
     id: str
-    q: queue.Queue = field(default_factory=queue.Queue)
+    results: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
     stop: bool = False
+    started: float = field(default_factory=time.time)
 
 SEARCHES: dict[str, SearchJob] = {}
 
-def search_worker(job: SearchJob, root: Path, pattern: str, search_type: str,
-                  file_pattern: str | None, ignore_case: bool, literal: bool) -> None:
+def _hidden(path: Path) -> bool:
+    if path.name.startswith("."): return True
+    try: return bool(getattr(path.stat(), "st_file_attributes", 0) & 2)
+    except Exception: return False
+
+def search_worker(job: SearchJob, root: Path, pattern: str, search_type: str, file_pattern: str | None,
+                  ignore_case: bool, literal: bool, include_hidden: bool, max_results: int,
+                  timeout_ms: int | None, context_lines: int, early_termination: bool | None) -> None:
     flags = re.I if ignore_case else 0
     rx = None if literal else re.compile(pattern, flags)
     needle = pattern.lower() if ignore_case else pattern
+    deadline = time.time() + timeout_ms / 1000 if timeout_ms else None
+    early = (search_type == "files") if early_termination is None else early_termination
     try:
-        for base, _, files in os.walk(root):
-            if job.stop: break
+        for base, dirs, files in os.walk(root):
+            if job.stop or (deadline and time.time() >= deadline): break
+            if not include_hidden: dirs[:] = [d for d in dirs if not _hidden(Path(base) / d)]
             for name in files:
-                if job.stop: break
+                if job.stop or (deadline and time.time() >= deadline): break
                 p = Path(base) / name
+                if not include_hidden and _hidden(p): continue
                 if file_pattern and not any(fnmatch.fnmatch(name, x) for x in file_pattern.split("|")): continue
                 try:
                     if search_type == "files":
                         hay = name.lower() if ignore_case else name
                         matched = needle in hay if literal else bool(rx.search(name))
-                        if matched: job.q.put({"path": str(p)})
+                        if matched:
+                            job.results.append({"path": str(p)})
+                            if early and hay == needle: job.stop = True
                     else:
-                        txt = p.read_text(encoding="utf-8", errors="ignore")
-                        hay = txt.lower() if ignore_case else txt
-                        matched = needle in hay if literal else bool(rx.search(txt))
-                        if matched: job.q.put({"path": str(p)})
-                except Exception:
-                    pass
+                        lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+                        for idx, line in enumerate(lines):
+                            hay = line.lower() if ignore_case else line
+                            matched = needle in hay if literal else bool(rx.search(line))
+                            if matched:
+                                lo=max(0,idx-context_lines); hi=min(len(lines),idx+context_lines+1)
+                                job.results.append({"path":str(p),"lineNumber":idx+1,"line":line,"context":lines[lo:hi]})
+                                if len(job.results) >= max_results: job.stop = True; break
+                    if len(job.results) >= max_results: job.stop = True
+                except Exception: pass
+                if job.stop: break
+            if job.stop: break
     finally:
         job.done = True
 
-@mcp.tool()
-def start_search(path: str, pattern: str, searchType: str = "files", filePattern: str | None = None,
-                 ignoreCase: bool = True, literalSearch: bool = False, earlyTermination: bool | None = None) -> dict[str, Any]:
+@tracked_tool()
+def start_search(pattern: str, path: str, maxResults: int | None = None, includeHidden: bool = False,
+                 timeout_ms: int | None = None, contextLines: int = 5, filePattern: str | None = None,
+                 ignoreCase: bool = True, searchType: Literal["files", "content"] = "files",
+                 earlyTermination: bool | None = None, deviceId: str | None = None,
+                 literalSearch: bool = False) -> dict[str, Any]:
     root = resolve_allowed(path)
+    limit = int(maxResults or load_config().get("searchResultLimit", 500))
     sid = uuid.uuid4().hex
     job = SearchJob(sid); SEARCHES[sid] = job
-    threading.Thread(target=search_worker, args=(job, root, pattern, searchType, filePattern, ignoreCase, literalSearch), daemon=True).start()
+    threading.Thread(target=search_worker, args=(job,root,pattern,searchType,filePattern,ignoreCase,literalSearch,includeHidden,limit,timeout_ms,contextLines,earlyTermination), daemon=True).start()
     return {"sessionId": sid}
 
-@mcp.tool()
-def get_more_search_results(sessionId: str, offset: int = 0, length: int = 100) -> dict[str, Any]:
+@tracked_tool()
+def get_more_search_results(sessionId: str, offset: int = 0, length: int = 100, deviceId: str | None = None) -> dict[str, Any]:
     job = SEARCHES[sessionId]
-    results = []
-    while len(results) < length:
-        try: results.append(job.q.get_nowait())
-        except queue.Empty: break
-    return {"results": results, "done": job.done and job.q.empty()}
+    return {"results": job.results[offset:offset+length], "done": job.done, "total": len(job.results)}
 
-@mcp.tool()
-def stop_search(sessionId: str) -> dict[str, Any]:
+@tracked_tool()
+def stop_search(sessionId: str, deviceId: str | None = None) -> dict[str, Any]:
     SEARCHES[sessionId].stop = True
     return {"ok": True}
 
-@mcp.tool()
-def list_searches() -> list[dict[str, Any]]:
-    return [{"sessionId": k, "done": v.done, "queued": v.q.qsize()} for k,v in SEARCHES.items()]
+@tracked_tool()
+def list_searches(deviceId: str | None = None) -> list[dict[str, Any]]:
+    return [{"sessionId":k,"done":v.done,"results":len(v.results),"runtime":time.time()-v.started} for k,v in SEARCHES.items()]
 
 @dataclass
 class ProcSession:
@@ -413,8 +503,8 @@ def pump_output(sess: ProcSession) -> None:
     for line in iter(sess.popen.stdout.readline, ""):
         sess.output.append(line.rstrip("\r\n"))
 
-@mcp.tool()
-def start_process(timeout_ms: int, command: str, verbose_timing: bool = False, shell: str | None = None) -> dict[str, Any]:
+@tracked_tool()
+def start_process(timeout_ms: int, command: str, verbose_timing: bool = False, shell: str | None = None, deviceId: str | None = None) -> dict[str, Any]:
     exe = shell or None
     p = subprocess.Popen(command, shell=True if exe is None else False, executable=exe,
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -426,9 +516,9 @@ def start_process(timeout_ms: int, command: str, verbose_timing: bool = False, s
         time.sleep(0.05)
     return {"pid": p.pid, "running": p.poll() is None, "output": sess.output[-100:]}
 
-@mcp.tool()
+@tracked_tool()
 def read_process_output(pid: int, timeout_ms: int = 1000, offset: int = 0, length: int = 1000,
-                        verbose_timing: bool = False) -> dict[str, Any]:
+                        verbose_timing: bool = False, deviceId: str | None = None) -> dict[str, Any]:
     s = PROCS[pid]
     if offset == 0:
         deadline = time.time() + min(timeout_ms,10000)/1000
@@ -440,9 +530,9 @@ def read_process_output(pid: int, timeout_ms: int = 1000, offset: int = 0, lengt
         data = s.output[offset:offset+length]
     return {"pid": pid, "output": data, "running": s.popen.poll() is None, "returncode": s.popen.poll()}
 
-@mcp.tool()
+@tracked_tool()
 def interact_with_process(pid: int, input: str, timeout_ms: int = 8000, wait_for_prompt: bool = True,
-                          verbose_timing: bool = False) -> dict[str, Any]:
+                          verbose_timing: bool = False, deviceId: str | None = None) -> dict[str, Any]:
     s = PROCS[pid]
     if s.popen.stdin is None: raise RuntimeError("stdin unavailable")
     before = len(s.output)
@@ -451,18 +541,18 @@ def interact_with_process(pid: int, input: str, timeout_ms: int = 8000, wait_for
     while wait_for_prompt and time.time() < deadline and len(s.output) == before and s.popen.poll() is None: time.sleep(0.05)
     return {"pid": pid, "output": s.output[before:], "running": s.popen.poll() is None}
 
-@mcp.tool()
-def force_terminate(pid: int) -> dict[str, Any]:
+@tracked_tool()
+def force_terminate(pid: int, deviceId: str | None = None) -> dict[str, Any]:
     s = PROCS[pid]
     s.popen.kill()
     return {"ok": True, "pid": pid}
 
-@mcp.tool()
-def list_sessions() -> list[dict[str, Any]]:
+@tracked_tool()
+def list_sessions(deviceId: str | None = None) -> list[dict[str, Any]]:
     return [{"pid": pid, "running": s.popen.poll() is None, "runtime": time.time()-s.started, "lines": len(s.output)} for pid,s in PROCS.items()]
 
-@mcp.tool()
-def list_processes() -> list[dict[str, Any]]:
+@tracked_tool()
+def list_processes(deviceId: str | None = None) -> list[dict[str, Any]]:
     out = []
     for p in psutil.process_iter(["pid","name","cpu_percent","memory_info","cmdline"]):
         try:
@@ -472,33 +562,46 @@ def list_processes() -> list[dict[str, Any]]:
             pass
     return out
 
-@mcp.tool()
-def kill_process(pid: int) -> dict[str, Any]:
+@tracked_tool()
+def kill_process(pid: int, deviceId: str | None = None) -> dict[str, Any]:
     psutil.Process(pid).kill()
     audit("kill_process", True, {"pid": pid})
     return {"ok": True, "pid": pid}
 
-@mcp.tool()
-def get_usage_stats() -> dict[str, Any]:
+@tracked_tool()
+def get_usage_stats(deviceId: str | None = None) -> dict[str, Any]:
     count = 0
     if AUDIT_PATH.exists():
         with AUDIT_PATH.open("r", encoding="utf-8") as f:
             count = sum(1 for _ in f)
     return {"localToolCallsLogged": count, "quotaPercent": 0}
 
-@mcp.tool()
-def get_recent_tool_calls(limit: int = 50) -> list[dict[str, Any]]:
-    if not AUDIT_PATH.exists(): return []
-    lines = AUDIT_PATH.read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]
-    return [json.loads(x) for x in lines]
+@tracked_tool()
+def get_recent_tool_calls(maxResults: int = 50, toolName: str | None = None, since: str | None = None, deviceId: str | None = None) -> list[dict[str, Any]]:
+    rows = list(RECENT_TOOL_CALLS)
+    if toolName: rows = [r for r in rows if r.get("tool") == toolName]
+    if since: rows = [r for r in rows if str(r.get("time", "")) >= since]
+    return rows[-max(1, min(int(maxResults), 1000)): ]
 
-@mcp.tool()
-def shutdown() -> dict[str, Any]:
+@tracked_tool()
+def shutdown(deviceId: str | None = None) -> dict[str, Any]:
     def later():
         time.sleep(0.25)
         os._exit(0)
     threading.Thread(target=later, daemon=True).start()
     return {"ok": True, "message": "VexBridge shutting down"}
 
+class BearerAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        token = os.environ.get("VEXBRIDGE_TOKEN", "")
+        if token:
+            supplied = request.headers.get("authorization", "")
+            expected = "Bearer " + token
+            if not hmac.compare_digest(supplied, expected):
+                return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return await call_next(request)
+
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    app = mcp.streamable_http_app()
+    app.add_middleware(BearerAuthMiddleware)
+    uvicorn.run(app, host=MCP_HOST, port=MCP_PORT, log_level="info")
