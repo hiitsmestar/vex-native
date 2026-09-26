@@ -82,6 +82,10 @@ jobs:
           if(-not (Test-Path $startup)){ throw "Installer test did not create startup entry" }
           $installed = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\MCP\VexBridgeMCP.exe'
           if(-not (Test-Path $installed)){ throw "Installer test did not install VexBridgeMCP.exe" }
+          $client = Join-Path $env:LOCALAPPDATA 'VexBridgeMCP\Client\VexBridgeRelayClient.exe'
+          if(-not (Test-Path $client)){ throw "Installer test did not install VexBridgeRelayClient.exe" }
+          & $client --help | Out-Null
+          if($LASTEXITCODE -ne 0){ throw "Installed relay client help smoke failed" }
           Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -eq 'VexBridgeMCP.exe' -and $_.ExecutablePath -like "$env:LOCALAPPDATA\VexBridgeMCP*" } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
