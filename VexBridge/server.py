@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hmac
 import inspect
@@ -24,7 +25,11 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import psutil
+from a2a.client import A2ACardResolver, ClientConfig, create_client
+from a2a.helpers import new_text_message
+from a2a.types import Role, SendMessageRequest
 from docx import Document
 from mcp.server.fastmcp import FastMCP
 from openpyxl import Workbook, load_workbook
@@ -132,6 +137,7 @@ VEX_TOOLS_ROOT = Path(os.environ.get("VEX_TOOLS_ROOT", str(Path.home() / "Docume
 ICM_BIN = Path(os.environ.get("VEX_ICM_BIN", str(VEX_TOOLS_ROOT / "ThirdParty" / "icm" / "icm.exe")))
 ICM_DB = Path(os.environ.get("VEX_ICM_DB", str(Path(os.environ.get("APPDATA", str(Path.home()))) / "VexICM" / "vexnative-memory.db")))
 UNLAZY_DIR = Path(os.environ.get("VEX_UNLAZY_DIR", str(VEX_TOOLS_ROOT / "ThirdParty" / "unlazy")))
+A2A_BASE_URL = os.environ.get("VEX_A2A_URL", "http://127.0.0.1:8800").rstrip("/")
 
 def _run_external(argv: list[str], timeout: int = 30, allowed_codes: set[int] | None = None) -> dict[str, Any]:
     codes = allowed_codes or {0}
@@ -286,6 +292,84 @@ def unlazy_lint(
     argv.append(str(gate))
     result = _run_external(argv, timeout=30, allowed_codes={0, 1})
     return {"ok": result["returncode"] == 0, **result}
+
+
+def _a2a_artifact_text(value: Any) -> list[str]:
+    out: list[str] = []
+    if isinstance(value, dict):
+        for artifact in value.get("artifacts") or []:
+            if not isinstance(artifact, dict):
+                continue
+            for part in artifact.get("parts") or []:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    out.append(part["text"])
+        if not out:
+            for item in value.values():
+                out.extend(_a2a_artifact_text(item))
+    elif isinstance(value, list):
+        for item in value:
+            out.extend(_a2a_artifact_text(item))
+    return out
+
+async def _a2a_send_async(base_url: str, message: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60.0) as http:
+        card = await A2ACardResolver(httpx_client=http, base_url=base_url).get_agent_card()
+    client = await create_client(agent=card, client_config=ClientConfig(streaming=False))
+    try:
+        request = SendMessageRequest(message=new_text_message(message, role=Role.ROLE_USER))
+        chunks: list[dict[str, Any]] = []
+        async for chunk in client.send_message(request):
+            chunks.append(chunk.model_dump(mode="json") if hasattr(chunk, "model_dump") else {"value": str(chunk)})
+        texts = _a2a_artifact_text(chunks)
+        return {
+            "agent": card.name,
+            "url": base_url,
+            "text": "\n".join(texts),
+            "events": chunks,
+        }
+    finally:
+        await client.close()
+
+def _run_async(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    box: dict[str, Any] = {}
+    error: list[BaseException] = []
+    def runner() -> None:
+        try:
+            box["value"] = asyncio.run(coro)
+        except BaseException as exc:
+            error.append(exc)
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
+    return box.get("value")
+
+@tracked_tool()
+def a2a_status(deviceId: str | None = None) -> dict[str, Any]:
+    with urllib.request.urlopen(A2A_BASE_URL + "/health", timeout=5) as response:
+        health = json.loads(response.read().decode("utf-8"))
+    with urllib.request.urlopen(A2A_BASE_URL + "/registry", timeout=5) as response:
+        registry = json.loads(response.read().decode("utf-8"))
+    return {"ok": bool(health.get("ok")), "url": A2A_BASE_URL, "health": health, "registry": registry}
+
+@tracked_tool()
+def a2a_registry(deviceId: str | None = None) -> dict[str, Any]:
+    with urllib.request.urlopen(A2A_BASE_URL + "/registry", timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+@tracked_tool()
+def a2a_send(
+    agent: Literal["coordinator", "memory", "verification", "system", "node"],
+    message: str,
+    deviceId: str | None = None,
+) -> dict[str, Any]:
+    suffix = "" if agent == "coordinator" else "/" + agent
+    return _run_async(_a2a_send_async(A2A_BASE_URL + suffix, message))
 
 def slice_lines(lines: list[str], offset: int = 0, length: int | None = None) -> list[str]:
     if offset < 0:
