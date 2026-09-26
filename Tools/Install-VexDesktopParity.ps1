@@ -50,7 +50,7 @@ $package = @{
     name = "vex-desktop-parity-runtime"
     version = "0.15.6"
     dependencies = @{
-        "@modelcontextprotocol/sdk" = "1.9.0"
+        "@modelcontextprotocol/sdk" = "1.30.1"\n        "zod" = "3.25.76"
         "@wonderwhy-er/desktop-commander" = "0.2.51"
     }
 }

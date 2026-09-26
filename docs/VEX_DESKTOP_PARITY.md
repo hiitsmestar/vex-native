@@ -28,7 +28,7 @@ The upstream engine may expose additional tools. They are mirrored automatically
 Run `Install-VexDesktopParity.ps1` on the hub PC with the default `Both` mode. On additional computers, run it in `Node` mode using the same cluster token, then register that hostname on the hub with `Register-VexDesktopParityNode.ps1`.
 
 The installer:
-1. pins Desktop Commander 0.2.51 and the MCP TypeScript SDK 1.9.0;
+1. pins Desktop Commander 0.2.51 and the MCP TypeScript SDK 1.30.1 and zod 3.25.76;
 2. pins mcp-stdio 0.43.6;
 3. imports the existing Desktop Commander device ID when available;
 4. creates private random bearer tokens without printing them;
