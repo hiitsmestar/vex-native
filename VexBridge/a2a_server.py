@@ -453,10 +453,20 @@ async def coordinator_agent(text: str) -> str:
     if target in {"cognition", "memory", "verification", "system", "node", "renderer", "phone", "coding"}:
         return await send_a2a(f"{BASE_URL}/{target}", body)
     if target in {"status", "health"}:
+        async def bounded(tool: str, timeout: float) -> Any:
+            try:
+                return await asyncio.wait_for(call_mcp(tool, {}), timeout=timeout)
+            except Exception as exc:
+                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        mcp_result, integration_result = await asyncio.gather(
+            bounded("ping", 4.0),
+            bounded("integration_status", 12.0),
+        )
         result = {
             "node": load_config().get("nodeName"),
-            "mcp": await call_mcp("ping", {}),
-            "integrations": await call_mcp("integration_status", {}),
+            "mcp": mcp_result,
+            "integrations": integration_result,
+            "brain": brain_status(),
             "agents": ["coordinator", "cognition", "memory", "verification", "system", "node", "renderer", "phone", "coding"],
             "peers": sorted((load_config().get("peers") or {}).keys()),
         }
