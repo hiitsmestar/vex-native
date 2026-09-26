@@ -6,6 +6,8 @@ on:
     paths:
       - "Tools/VexDesktopParity*.mjs"
       - "Tools/*VexDesktopParity*.ps1"
+      - "Tools/VexDropboxParity*"
+      - "Tools/Install-VexDropboxParityBridge.ps1"
       - "Tools/test_v156_desktop_parity.mjs"
       - ".github/workflows/build-v156-desktop-parity.yml"
       - "docs/VEX_DESKTOP_PARITY.md"
@@ -42,7 +44,8 @@ jobs:
             "Tools/Install-VexDesktopParity.ps1",
             "Tools/Start-VexDesktopParity.ps1",
             "Tools/Register-VexDesktopParityNode.ps1",
-            "Tools/Enable-VexDesktopParityNode.ps1"
+            "Tools/Enable-VexDesktopParityNode.ps1",
+            "Tools/Install-VexDropboxParityBridge.ps1"
           )
           foreach ($file in $files) {
             [void][scriptblock]::Create((Get-Content -Raw $file))
@@ -63,6 +66,10 @@ jobs:
           Copy-Item Tools/Start-VexDesktopParity.ps1 parity-bundle/
           Copy-Item Tools/Register-VexDesktopParityNode.ps1 parity-bundle/
           Copy-Item Tools/Enable-VexDesktopParityNode.ps1 parity-bundle/
+          Copy-Item Tools/VexDropboxParityAgent.py parity-bundle/
+          Copy-Item Tools/VexDropboxParityCall.mjs parity-bundle/
+          Copy-Item Tools/Install-VexDropboxParityBridge.ps1 parity-bundle/
+          Copy-Item Tools/Test-VexDesktopParity.ps1 parity-bundle/
           Copy-Item docs/VEX_DESKTOP_PARITY.md parity-bundle/
           Compress-Archive -Path parity-bundle/* -DestinationPath VexDesktopParity-v0.15.6.zip -Force
 
