@@ -2,7 +2,7 @@ name: VexBridgeMCP Parity Build
 
 on:
   push:
-    branches: [vexbridge-dc-replacement]
+    branches: [vexbridge-dc-replacement, feature/a2a-bonsai-vexnative]
     paths:
       - "VexBridge/**"
       - ".github/workflows/vexbridge-parity-build.yml"
