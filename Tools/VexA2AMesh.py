@@ -242,7 +242,11 @@ async def call_a2a(agent: str, message: str) -> str:
     url = f"{BASE}/{agent}/"
     async with httpx.AsyncClient(timeout=10) as http_client:
         card = await A2ACardResolver(httpx_client=http_client, base_url=url).get_agent_card()
-    client = await create_client(agent=card, client_config=ClientConfig(streaming=False))
+    transport_http = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
+    client = await create_client(
+        agent=card,
+        client_config=ClientConfig(streaming=False, httpx_client=transport_http),
+    )
     try:
         request = SendMessageRequest(message=new_text_message(message, role=Role.ROLE_USER))
         answers: list[str] = []
@@ -261,6 +265,7 @@ async def call_a2a(agent: str, message: str) -> str:
         return answers[-1]
     finally:
         await client.close()
+        await transport_http.aclose()
 
 
 def route_for(message: str) -> str:
