@@ -132,6 +132,8 @@ VEX_TOOLS_ROOT = Path(os.environ.get("VEX_TOOLS_ROOT", str(Path.home() / "Docume
 ICM_BIN = Path(os.environ.get("VEX_ICM_BIN", str(VEX_TOOLS_ROOT / "ThirdParty" / "icm" / "icm.exe")))
 ICM_DB = Path(os.environ.get("VEX_ICM_DB", str(Path(os.environ.get("APPDATA", str(Path.home()))) / "VexICM" / "vexnative-memory.db")))
 UNLAZY_DIR = Path(os.environ.get("VEX_UNLAZY_DIR", str(VEX_TOOLS_ROOT / "ThirdParty" / "unlazy")))
+A2A_URL = os.environ.get("VEX_A2A_URL", "http://127.0.0.1:8796").rstrip("/")
+
 
 def _run_external(argv: list[str], timeout: int = 30, allowed_codes: set[int] | None = None) -> dict[str, Any]:
     codes = allowed_codes or {0}
@@ -153,6 +155,13 @@ def _icm_base() -> list[str]:
         raise FileNotFoundError(f"ICM not installed: {ICM_BIN}")
     ICM_DB.parent.mkdir(parents=True, exist_ok=True)
     return [str(ICM_BIN), "--db", str(ICM_DB), "--no-embeddings"]
+
+def _a2a_health_probe() -> bool:
+    try:
+        data = _a2a_json("/health", timeout=2)
+        return isinstance(data, dict) and bool(data.get("ok"))
+    except Exception:
+        return False
 
 @tracked_tool()
 def integration_status(deviceId: str | None = None) -> dict[str, Any]:
@@ -187,6 +196,10 @@ def integration_status(deviceId: str | None = None) -> dict[str, Any]:
             "available": (UNLAZY_DIR / "scripts" / "gate-check.mjs").exists(),
             "dir": str(UNLAZY_DIR),
             "pin": unlazy_pin,
+        },
+        "a2a": {
+            "endpoint": A2A_URL,
+            "healthy": (lambda: _a2a_health_probe())(),
         },
         "continuityAuthority": "VexContinuityVault",
     }
@@ -286,6 +299,71 @@ def unlazy_lint(
     argv.append(str(gate))
     result = _run_external(argv, timeout=30, allowed_codes={0, 1})
     return {"ok": result["returncode"] == 0, **result}
+
+def _a2a_json(path: str, payload: dict[str, Any] | None = None, timeout: int = 30) -> Any:
+    url = A2A_URL + (path if path.startswith("/") else "/" + path)
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"} if data is not None else {},
+        method="POST" if data is not None else "GET",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        raw = response.read().decode("utf-8", errors="replace")
+    return json.loads(raw) if raw else None
+
+@tracked_tool()
+def a2a_status(deviceId: str | None = None) -> dict[str, Any]:
+    data = _a2a_json("/health", timeout=5)
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid VexA2A health response")
+    return data
+
+@tracked_tool()
+def a2a_agents(deviceId: str | None = None) -> dict[str, Any]:
+    data = _a2a_json("/vex/agents", timeout=5)
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid VexA2A agents response")
+    return data
+
+@tracked_tool()
+def a2a_card(agent: str, deviceId: str | None = None) -> dict[str, Any]:
+    safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
+    if not safe:
+        raise ValueError("agent is required")
+    data = _a2a_json(f"/{safe}/.well-known/agent-card.json", timeout=5)
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid A2A Agent Card response")
+    return data
+
+@tracked_tool()
+def a2a_send(agent: str, message: Any, timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
+    safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
+    if not safe:
+        raise ValueError("agent is required")
+    data = _a2a_json(
+        "/vex/send",
+        {"agent": safe, "message": message},
+        timeout=max(5, min(int(timeout_s), 600)),
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid VexA2A send response")
+    return data
+
+@tracked_tool()
+def a2a_rpc(agent: str, payload: dict[str, Any], timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
+    safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
+    if not safe:
+        raise ValueError("agent is required")
+    data = _a2a_json(
+        f"/{safe}",
+        payload,
+        timeout=max(5, min(int(timeout_s), 600)),
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("invalid A2A JSON-RPC response")
+    return data
 
 def slice_lines(lines: list[str], offset: int = 0, length: int | None = None) -> list[str]:
     if offset < 0:
