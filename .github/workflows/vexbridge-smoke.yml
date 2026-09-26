@@ -2,7 +2,7 @@ name: VexBridge Windows Smoke Test
 
 on:
   push:
-    branches: [main, vexbridge-dc-replacement]
+    branches: [main, vexbridge-dc-replacement, vexbridge-a2a]
     paths:
       - "VexBridge/**"
       - ".github/workflows/vexbridge-smoke.yml"
