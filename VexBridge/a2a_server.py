@@ -38,7 +38,10 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from brain_router import chat as brain_chat, status as brain_status
+try:
+    from .brain_router import chat as brain_chat, status as brain_status
+except ImportError:
+    from brain_router import chat as brain_chat, status as brain_status
 
 HOST = os.environ.get("VEX_A2A_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VEX_A2A_PORT", "8800"))
