@@ -128,6 +128,165 @@ def resolve_allowed(raw: str) -> Path:
         raise PermissionError(f"path outside allowed roots: {p}")
     return p
 
+VEX_TOOLS_ROOT = Path(os.environ.get("VEX_TOOLS_ROOT", str(Path.home() / "Documents" / "VexNativeTools")))
+ICM_BIN = Path(os.environ.get("VEX_ICM_BIN", str(VEX_TOOLS_ROOT / "ThirdParty" / "icm" / "icm.exe")))
+ICM_DB = Path(os.environ.get("VEX_ICM_DB", str(Path(os.environ.get("APPDATA", str(Path.home()))) / "VexICM" / "vexnative-memory.db")))
+UNLAZY_DIR = Path(os.environ.get("VEX_UNLAZY_DIR", str(VEX_TOOLS_ROOT / "ThirdParty" / "unlazy")))
+
+def _run_external(argv: list[str], timeout: int = 30, allowed_codes: set[int] | None = None) -> dict[str, Any]:
+    codes = allowed_codes or {0}
+    r = subprocess.run(
+        argv,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = (r.stdout or "") + (("\n" + r.stderr) if r.stderr else "")
+    output = output.strip()
+    if r.returncode not in codes:
+        raise RuntimeError(f"command failed rc={r.returncode}: {output[-4000:]}")
+    return {"returncode": r.returncode, "output": output}
+
+def _icm_base() -> list[str]:
+    if not ICM_BIN.exists():
+        raise FileNotFoundError(f"ICM not installed: {ICM_BIN}")
+    ICM_DB.parent.mkdir(parents=True, exist_ok=True)
+    return [str(ICM_BIN), "--db", str(ICM_DB), "--no-embeddings"]
+
+@tracked_tool()
+def integration_status(deviceId: str | None = None) -> dict[str, Any]:
+    icm_version = None
+    if ICM_BIN.exists():
+        try:
+            icm_version = _run_external([str(ICM_BIN), "--version"], timeout=5)["output"]
+        except Exception as exc:
+            icm_version = f"error: {type(exc).__name__}: {exc}"
+    unlazy_pin = None
+    pin_path = UNLAZY_DIR / "VEX_PIN.json"
+    if pin_path.exists():
+        try:
+            unlazy_pin = json.loads(pin_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            unlazy_pin = {"error": "unreadable pin file"}
+    icm_http = False
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11435/health", timeout=2) as r:
+            icm_http = int(getattr(r, "status", 0)) == 200
+    except Exception:
+        pass
+    return {
+        "icm": {
+            "available": ICM_BIN.exists(),
+            "version": icm_version,
+            "db": str(ICM_DB),
+            "httpHealthy": icm_http,
+            "mode": "fts-keyword",
+        },
+        "unlazy": {
+            "available": (UNLAZY_DIR / "scripts" / "gate-check.mjs").exists(),
+            "dir": str(UNLAZY_DIR),
+            "pin": unlazy_pin,
+        },
+        "continuityAuthority": "VexContinuityVault",
+    }
+
+@tracked_tool()
+def icm_store(
+    topic: str,
+    content: str,
+    importance: Literal["critical", "high", "medium", "low"] = "medium",
+    keywords: str | None = None,
+    raw: str | None = None,
+    deviceId: str | None = None,
+) -> dict[str, Any]:
+    argv = _icm_base() + ["store", "-t", topic, "-c", content, "-i", importance]
+    if keywords:
+        argv += ["-k", keywords]
+    if raw:
+        argv += ["-r", raw]
+    result = _run_external(argv, timeout=30)
+    match = re.search(r"Stored:\s*(\S+)", result["output"])
+    audit("icm_store", True, {"topic": topic, "importance": importance})
+    return {"ok": True, "id": match.group(1) if match else None, "output": result["output"]}
+
+@tracked_tool()
+def icm_recall(
+    query: str,
+    topic: str | None = None,
+    limit: int = 5,
+    keyword: str | None = None,
+    project: str | None = None,
+    deviceId: str | None = None,
+) -> list[dict[str, Any]]:
+    argv = _icm_base() + [
+        "recall",
+        query,
+        "--limit",
+        str(max(1, min(int(limit), 50))),
+        "--format",
+        "json",
+    ]
+    if topic:
+        argv += ["--topic", topic]
+    if keyword:
+        argv += ["--keyword", keyword]
+    if project is not None:
+        argv += ["--project", project]
+    result = _run_external(argv, timeout=30)
+    if not result["output"]:
+        return []
+    data = json.loads(result["output"])
+    return data if isinstance(data, list) else []
+
+@tracked_tool()
+def icm_stats(deviceId: str | None = None) -> dict[str, Any]:
+    result = _run_external(_icm_base() + ["stats"], timeout=30)
+    return {"db": str(ICM_DB), "mode": "fts-keyword", "output": result["output"]}
+
+@tracked_tool()
+def unlazy_status(
+    gate_file: str,
+    root: str | None = None,
+    scope: str | None = None,
+    deviceId: str | None = None,
+) -> dict[str, Any]:
+    gate = resolve_allowed(gate_file)
+    checker = UNLAZY_DIR / "scripts" / "gate-check.mjs"
+    node = shutil.which("node")
+    if not checker.exists():
+        raise FileNotFoundError(f"Unlazy not installed: {checker}")
+    if not node:
+        raise FileNotFoundError("node executable not found")
+    argv = [node, str(checker), "--status"]
+    if root:
+        argv += ["--root", str(resolve_allowed(root))]
+    if scope:
+        argv += ["--scope", scope]
+    argv.append(str(gate))
+    result = _run_external(argv, timeout=30, allowed_codes={0, 1})
+    return {"ok": result["returncode"] == 0, **result}
+
+@tracked_tool()
+def unlazy_lint(
+    gate_file: str,
+    strict: bool = False,
+    deviceId: str | None = None,
+) -> dict[str, Any]:
+    gate = resolve_allowed(gate_file)
+    lint = UNLAZY_DIR / "scripts" / "gate-lint.mjs"
+    node = shutil.which("node")
+    if not lint.exists():
+        raise FileNotFoundError(f"Unlazy not installed: {lint}")
+    if not node:
+        raise FileNotFoundError("node executable not found")
+    argv = [node, str(lint)]
+    if strict:
+        argv.append("--strict")
+    argv.append(str(gate))
+    result = _run_external(argv, timeout=30, allowed_codes={0, 1})
+    return {"ok": result["returncode"] == 0, **result}
+
 def slice_lines(lines: list[str], offset: int = 0, length: int | None = None) -> list[str]:
     if offset < 0:
         return lines[offset:]
