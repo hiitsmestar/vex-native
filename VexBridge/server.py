@@ -330,24 +330,24 @@ async def _a2a_send_async(base_url: str, message: str) -> dict[str, Any]:
     finally:
         await client.close()
 
-def _run_async(coro):
+A2A_JOBS: dict[str, dict[str, Any]] = {}
+A2A_JOBS_LOCK = threading.Lock()
+
+def _a2a_job_runner(job_id: str, base_url: str, message: str) -> None:
+    time.sleep(0.25)
+    with A2A_JOBS_LOCK:
+        A2A_JOBS[job_id].update({"status": "running", "started": time.time()})
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    box: dict[str, Any] = {}
-    error: list[BaseException] = []
-    def runner() -> None:
-        try:
-            box["value"] = asyncio.run(coro)
-        except BaseException as exc:
-            error.append(exc)
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    thread.join()
-    if error:
-        raise error[0]
-    return box.get("value")
+        result = asyncio.run(_a2a_send_async(base_url, message))
+        with A2A_JOBS_LOCK:
+            A2A_JOBS[job_id].update({"status": "completed", "result": result, "finished": time.time()})
+    except Exception as exc:
+        with A2A_JOBS_LOCK:
+            A2A_JOBS[job_id].update({
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+                "finished": time.time(),
+            })
 
 @tracked_tool()
 def a2a_status(deviceId: str | None = None) -> dict[str, Any]:
@@ -369,7 +369,28 @@ def a2a_send(
     deviceId: str | None = None,
 ) -> dict[str, Any]:
     suffix = "" if agent == "coordinator" else "/" + agent
-    return _run_async(_a2a_send_async(A2A_BASE_URL + suffix, message))
+    job_id = uuid.uuid4().hex
+    with A2A_JOBS_LOCK:
+        A2A_JOBS[job_id] = {
+            "jobId": job_id,
+            "agent": agent,
+            "status": "submitted",
+            "created": time.time(),
+        }
+    threading.Thread(
+        target=_a2a_job_runner,
+        args=(job_id, A2A_BASE_URL + suffix, message),
+        daemon=True,
+    ).start()
+    return {"jobId": job_id, "agent": agent, "status": "submitted"}
+
+@tracked_tool()
+def a2a_result(jobId: str, deviceId: str | None = None) -> dict[str, Any]:
+    with A2A_JOBS_LOCK:
+        job = A2A_JOBS.get(jobId)
+        if not job:
+            raise KeyError(f"unknown A2A job: {jobId}")
+        return dict(job)
 
 def slice_lines(lines: list[str], offset: int = 0, length: int | None = None) -> list[str]:
     if offset < 0:
