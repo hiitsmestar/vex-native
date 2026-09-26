@@ -17,6 +17,12 @@ $RepoStart = Join-Path $PSScriptRoot "Start-VexDesktopParity.ps1"
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
+function Write-JsonNoBom {
+    param([object]$Value, [string]$Path, [int]$Depth = 8)
+    $json = $Value | ConvertTo-Json -Depth $Depth
+    [IO.File]::WriteAllText($Path, $json, (New-Object Text.UTF8Encoding($false)))
+}
+
 function New-Token {
     $bytes = New-Object byte[] 32
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
@@ -55,7 +61,7 @@ $package = @{
         "@wonderwhy-er/desktop-commander" = "0.2.51"
     }
 }
-$package | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $Root "package.json")
+Write-JsonNoBom -Value $package -Path (Join-Path $Root "package.json") -Depth 8
 Push-Location $Root
 try {
     & $npm install --no-audit --no-fund
@@ -75,24 +81,24 @@ if (Test-Path $oldDevice) {
 }
 if (!$deviceId) { $deviceId = [Guid]::NewGuid().ToString() }
 
-@{
+Write-JsonNoBom -Value @{
     version = "0.15.6"
     deviceId = $deviceId
     name = $NodeName
-} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $Root "node-config.json")
+} -Path (Join-Path $Root "node-config.json") -Depth 4
 
-@{
+Write-JsonNoBom -Value @{
     clusterToken = $ClusterToken
     hubToken = $HubToken
-} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $Root "secrets.json")
+} -Path (Join-Path $Root "secrets.json") -Depth 4
 
-@{
+Write-JsonNoBom -Value @{
     version = "0.15.6"
     mode = $Mode
     nodePort = $NodePort
     hubPort = $HubPort
     allowLan = (-not $NoLan.IsPresent)
-} | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $Root "install-config.json")
+} -Path (Join-Path $Root "install-config.json") -Depth 4
 
 $nodesPath = Join-Path $Root "nodes.json"
 if (!(Test-Path $nodesPath)) {
@@ -105,7 +111,7 @@ if (!(Test-Path $nodesPath)) {
             enabled = $true
         }
     }
-    @{ version = "0.15.6"; nodes = $nodes } | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $nodesPath
+    Write-JsonNoBom -Value @{ version = "0.15.6"; nodes = $nodes } -Path $nodesPath -Depth 8
 }
 
 try {
