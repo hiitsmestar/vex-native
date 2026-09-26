@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hmac
 import inspect
 import fnmatch
@@ -314,52 +315,54 @@ def _a2a_json(path: str, payload: dict[str, Any] | None = None, timeout: int = 3
     return json.loads(raw) if raw else None
 
 @tracked_tool()
-def a2a_status(deviceId: str | None = None) -> dict[str, Any]:
-    data = _a2a_json("/health", timeout=5)
+async def a2a_status(deviceId: str | None = None) -> dict[str, Any]:
+    data = await asyncio.to_thread(_a2a_json, "/health", None, 5)
     if not isinstance(data, dict):
         raise RuntimeError("invalid VexA2A health response")
     return data
 
 @tracked_tool()
-def a2a_agents(deviceId: str | None = None) -> dict[str, Any]:
-    data = _a2a_json("/vex/agents", timeout=5)
+async def a2a_agents(deviceId: str | None = None) -> dict[str, Any]:
+    data = await asyncio.to_thread(_a2a_json, "/vex/agents", None, 5)
     if not isinstance(data, dict):
         raise RuntimeError("invalid VexA2A agents response")
     return data
 
 @tracked_tool()
-def a2a_card(agent: str, deviceId: str | None = None) -> dict[str, Any]:
+async def a2a_card(agent: str, deviceId: str | None = None) -> dict[str, Any]:
     safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
     if not safe:
         raise ValueError("agent is required")
-    data = _a2a_json(f"/{safe}/.well-known/agent-card.json", timeout=5)
+    data = await asyncio.to_thread(_a2a_json, f"/{safe}/.well-known/agent-card.json", None, 5)
     if not isinstance(data, dict):
         raise RuntimeError("invalid A2A Agent Card response")
     return data
 
 @tracked_tool()
-def a2a_send(agent: str, message: Any, timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
+async def a2a_send(agent: str, message: Any, timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
     safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
     if not safe:
         raise ValueError("agent is required")
-    data = _a2a_json(
+    data = await asyncio.to_thread(
+        _a2a_json,
         "/vex/send",
         {"agent": safe, "message": message},
-        timeout=max(5, min(int(timeout_s), 600)),
+        max(5, min(int(timeout_s), 600)),
     )
     if not isinstance(data, dict):
         raise RuntimeError("invalid VexA2A send response")
     return data
 
 @tracked_tool()
-def a2a_rpc(agent: str, payload: dict[str, Any], timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
+async def a2a_rpc(agent: str, payload: dict[str, Any], timeout_s: int = 60, deviceId: str | None = None) -> dict[str, Any]:
     safe = re.sub(r"[^a-z0-9_-]", "", agent.lower())
     if not safe:
         raise ValueError("agent is required")
-    data = _a2a_json(
+    data = await asyncio.to_thread(
+        _a2a_json,
         f"/{safe}",
         payload,
-        timeout=max(5, min(int(timeout_s), 600)),
+        max(5, min(int(timeout_s), 600)),
     )
     if not isinstance(data, dict):
         raise RuntimeError("invalid A2A JSON-RPC response")
