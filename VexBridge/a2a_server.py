@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -51,6 +52,10 @@ MCP_URL = os.environ.get("VEXBRIDGE_MCP_URL", "http://127.0.0.1:8795/mcp")
 APP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "VexA2A"
 CONFIG_PATH = APP_DIR / "config.json"
 APP_DIR.mkdir(parents=True, exist_ok=True)
+TOOLS_ROOT = Path(os.environ.get("VEX_TOOLS_ROOT", str(Path.home() / "Documents" / "VexNativeTools")))
+PHONE_COMMAND = Path(os.environ.get("VEX_PHONE_COMMAND", str(TOOLS_ROOT / "PhoneRelay" / "VexPhoneCommand.py")))
+RENDERER = Path(os.environ.get("VEX_RENDERER", str(Path.home() / "Documents" / "VexAutoRender.py")))
+COPILOT = Path(os.environ.get("VEX_COPILOT", str(TOOLS_ROOT / "VexCopilot.py")))
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "schema": "vex-a2a-v1",
@@ -291,6 +296,137 @@ async def system_agent(text: str) -> str:
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
 
+def _python_command() -> list[str] | None:
+    exe = shutil.which("python") or shutil.which("python3")
+    if exe:
+        return [exe]
+    py = shutil.which("py")
+    if py:
+        return [py, "-3"]
+    return None
+
+
+async def phone_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    py = _python_command()
+    if action in {"status", "health", "ping"}:
+        return json.dumps({
+            "agent": "phone",
+            "ok": PHONE_COMMAND.exists() and py is not None,
+            "helper": str(PHONE_COMMAND),
+        }, indent=2, ensure_ascii=False)
+    command = str(payload.get("command") or payload.get("message") or payload.get("text") or text).strip()
+    if not command:
+        raise ValueError("phone command is required")
+    if not PHONE_COMMAND.exists() or not py:
+        raise RuntimeError("VexPhoneCommand helper is unavailable on this node")
+    wait = max(1, min(int(payload.get("wait") or 120), 600))
+    argv = py + [str(PHONE_COMMAND), command, "--source", "vex-a2a", "--wait", str(wait)]
+    proc = await asyncio.to_thread(
+        subprocess.run,
+        argv,
+        text=True,
+        capture_output=True,
+        timeout=wait + 30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")).strip()
+    return json.dumps({
+        "agent": "phone",
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "output": output[-12000:],
+    }, indent=2, ensure_ascii=False)
+
+
+async def renderer_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    prompt = str(payload.get("prompt") or "").strip()
+    if action in {"status", "health", "ping"} or not prompt:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http:
+                response = await http.get("http://127.0.0.1:8188/system_stats")
+                response.raise_for_status()
+                detail = response.json()
+            return json.dumps({"agent": "renderer", "ok": True, "status": detail}, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            return json.dumps({
+                "agent": "renderer",
+                "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }, indent=2, ensure_ascii=False)
+    py = _python_command()
+    if not RENDERER.exists() or not py:
+        raise RuntimeError("VexAutoRender helper is unavailable on this node")
+    mode = str(payload.get("mode") or "normal")
+    orientation = str(payload.get("orientation") or "portrait")
+    argv = py + [str(RENDERER), prompt, "--mode", mode, "--orientation", orientation]
+    if payload.get("seed") is not None:
+        argv += ["--seed", str(int(payload["seed"]))]
+    timeout = max(60, min(int(payload.get("timeout") or 3600), 7200))
+    proc = await asyncio.to_thread(
+        subprocess.run,
+        argv,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")).strip()
+    return json.dumps({
+        "agent": "renderer",
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "output": output[-12000:],
+    }, indent=2, ensure_ascii=False)
+
+
+async def coding_agent(text: str) -> str:
+    payload = parse_payload(text)
+    action = str(payload.get("action") or "").lower()
+    py = _python_command()
+    agy = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "agy" / "bin" / "agy.exe"
+    codex = shutil.which("codex")
+    if action in {"status", "health", "ping"}:
+        return json.dumps({
+            "agent": "coding",
+            "ok": COPILOT.exists() and py is not None,
+            "copilot": str(COPILOT),
+            "antigravity": str(agy) if agy.exists() else None,
+            "codex": codex,
+        }, indent=2, ensure_ascii=False)
+    task = str(payload.get("task") or payload.get("prompt") or payload.get("message") or payload.get("text") or text).strip()
+    if not task:
+        raise ValueError("coding task is required")
+    if not COPILOT.exists() or not py:
+        raise RuntimeError("VexCopilot helper is unavailable on this node")
+    tier = str(payload.get("tier") or "auto").lower()
+    if tier not in {"auto", "fast", "smart", "deep"}:
+        tier = "auto"
+    timeout = max(30, min(int(payload.get("timeout") or 900), 3600))
+    argv = py + [str(COPILOT), "ask", task, "--tier", tier, "--timeout", str(timeout)]
+    context = str(payload.get("context") or "").strip()
+    if context:
+        argv += ["--context", context]
+    proc = await asyncio.to_thread(
+        subprocess.run,
+        argv,
+        text=True,
+        capture_output=True,
+        timeout=timeout + 30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    output = ((proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")).strip()
+    return json.dumps({
+        "agent": "coding",
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "output": output[-20000:],
+    }, indent=2, ensure_ascii=False)
+
+
 async def node_agent(text: str) -> str:
     payload = parse_payload(text)
     peer = str(payload.get("peer") or "")
@@ -310,30 +446,37 @@ async def coordinator_agent(text: str) -> str:
     body = payload.get("payload")
     if body is None:
         body = {k: v for k, v in payload.items() if k != "agent"}
-    if target in {"cognition", "memory", "verification", "system", "node"}:
+    if target in {"cognition", "memory", "verification", "system", "node", "phone", "renderer", "coding"}:
         return await send_a2a(f"{BASE_URL}/{target}", body)
     if target in {"status", "health"}:
         result = {
             "node": load_config().get("nodeName"),
             "mcp": await call_mcp("ping", {}),
             "integrations": await call_mcp("integration_status", {}),
-            "agents": ["coordinator", "cognition", "memory", "verification", "system", "node"],
+            "agents": ["coordinator", "cognition", "memory", "verification", "system", "node", "phone", "renderer", "coding"],
             "peers": sorted((load_config().get("peers") or {}).keys()),
         }
         return json.dumps(result, indent=2, ensure_ascii=False, default=str)
 
     raw = str(payload.get("text") or text or "").strip()
-    if raw.lower().startswith("recall "):
+    low = raw.lower()
+    if low.startswith("recall "):
         return await send_a2a(f"{BASE_URL}/memory", {"action": "recall", "query": raw[7:]})
-    if raw.lower() in {"ping", "status"}:
+    if low in {"ping", "status"}:
         return await coordinator_agent(json.dumps({"agent": "status"}))
+    if any(token in low for token in ("iphone", "phone command", "devicekit", "open youtube on my phone")):
+        return await send_a2a(f"{BASE_URL}/phone", {"command": raw})
+    if any(token in low for token in ("render ", "comfyui", "generate an image", "generate image")):
+        return await send_a2a(f"{BASE_URL}/renderer", {"prompt": raw})
+    if any(token in low for token in ("patch ", "repo ", "code ", "coding", "refactor", "fix the build")):
+        return await send_a2a(f"{BASE_URL}/coding", {"task": raw})
     if raw:
         return await send_a2a(f"{BASE_URL}/cognition", {"mode": "auto", "prompt": raw})
     return json.dumps(
         {
             "ok": True,
             "message": "Vex A2A coordinator is online.",
-            "agents": ["cognition", "memory", "verification", "system", "node", "status"],
+            "agents": ["cognition", "memory", "verification", "system", "node", "phone", "renderer", "coding", "status"],
         },
         ensure_ascii=False,
     )
@@ -439,6 +582,24 @@ node_card = card(
     "/node",
     [skill("node", "Mesh Peer", "Call a VexBridge tool on a configured encrypted-relay peer.", ['{"peer":"ashley","tool":"ping","arguments":{}}'])],
 )
+phone_card = card(
+    "Vex Phone Agent",
+    "VexNative iPhone command specialist using the established phone relay.",
+    "/phone",
+    [skill("phone", "Phone", "Inspect or send a VexNative phone command.", ['{"action":"status"}'])],
+)
+renderer_card = card(
+    "Vex Renderer Agent",
+    "ComfyUI and VexAutoRender specialist for renderer health and render execution.",
+    "/renderer",
+    [skill("renderer", "Renderer", "Inspect renderer health or execute a VexAutoRender prompt.", ['{"action":"status"}'])],
+)
+coding_card = card(
+    "Vex Coding Agent",
+    "VexCopilot coding specialist with local Antigravity/Codex availability reporting.",
+    "/coding",
+    [skill("coding", "Coding", "Inspect coding-tool availability or delegate a coding task to VexCopilot.", ['{"action":"status"}'])],
+)
 coordinator_card = card(
     "Vex Coordinator",
     "A2A coordinator for VexNative memory, verification, Windows control, and encrypted peer delegation.",
@@ -454,6 +615,9 @@ memory_app = agent_app(memory_card, memory_agent)
 verification_app = agent_app(verification_card, verification_agent)
 system_app = agent_app(system_card, system_agent)
 node_app = agent_app(node_card, node_agent)
+phone_app = agent_app(phone_card, phone_agent)
+renderer_app = agent_app(renderer_card, renderer_agent)
+coding_app = agent_app(coding_card, coding_agent)
 
 coordinator_handler = DefaultRequestHandler(
     agent_executor=FunctionExecutor(coordinator_agent),
@@ -470,6 +634,9 @@ routes.extend(
         Mount("/verification", app=verification_app),
         Mount("/system", app=system_app),
         Mount("/node", app=node_app),
+        Mount("/phone", app=phone_app),
+        Mount("/renderer", app=renderer_app),
+        Mount("/coding", app=coding_app),
         Route(
             "/health",
             endpoint=lambda request: JSONResponse(
@@ -494,6 +661,9 @@ routes.extend(
                         "verification": BASE_URL + "/verification",
                         "system": BASE_URL + "/system",
                         "node": BASE_URL + "/node",
+                        "phone": BASE_URL + "/phone",
+                        "renderer": BASE_URL + "/renderer",
+                        "coding": BASE_URL + "/coding",
                     },
                     "peers": load_config().get("peers") or {},
                 }
