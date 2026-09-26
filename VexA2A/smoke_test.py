@@ -52,7 +52,7 @@ async def main() -> None:
         await client.close()
 
     print("VEXA2A_SMOKE=PASS")
-    print("AGENT_COUNT=6")
+    print("AGENT_COUNT=7")
 
 
 if __name__ == "__main__":
