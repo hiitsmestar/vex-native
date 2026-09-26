@@ -24,11 +24,11 @@ The MCP server uses Streamable HTTP on localhost by default. Remote exposure is 
 py -m venv .venv
 .\.venv\Scripts\python -m pip install -r VexBridge\requirements.txt
 $env:VEXBRIDGE_HOST="127.0.0.1"
-$env:VEXBRIDGE_PORT="8765"
+$env:VEXBRIDGE_PORT="8795"
 .\.venv\Scripts\python VexBridge\server.py
 ```
 
-MCP endpoint: `http://127.0.0.1:8765/mcp`
+MCP endpoint: `http://127.0.0.1:8795/mcp`
 
 ## Security boundary
 
