@@ -131,13 +131,36 @@ New-ItemProperty -Path $runKey -Name "VexDesktopParity" -Value $runValue -Proper
 & powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File (Join-Path $Root "Start-VexDesktopParity.ps1")
 Start-Sleep -Seconds 4
 
+function Test-McpEndpoint {
+    param([string]$Token, [string]$Url, [string]$Label)
+    $job = Start-Job -ScriptBlock {
+        param($PythonExe, $Bearer, $Endpoint)
+        & $PythonExe -m mcp_stdio --bearer-token $Bearer --check $Endpoint
+        if ($null -eq $LASTEXITCODE) { return 1 }
+        return [int]$LASTEXITCODE
+    } -ArgumentList $python, $Token, $Url
+    try {
+        $done = Wait-Job -Job $job -Timeout 20
+        if (!$done) { throw "$Label MCP verification timed out." }
+        $output = @(Receive-Job -Job $job)
+        $code = 1
+        if ($output.Count -gt 0) {
+            $last = $output[$output.Count - 1]
+            if ($last -is [int]) { $code = [int]$last }
+        }
+        if ($code -ne 0) { throw "$Label MCP verification failed." }
+    }
+    finally {
+        Stop-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if ($Mode -eq "Node" -or $Mode -eq "Both") {
-    & $python -m mcp_stdio --bearer-token $ClusterToken --check "http://127.0.0.1:$NodePort/mcp"
-    if ($LASTEXITCODE -ne 0) { throw "Node MCP verification failed." }
+    Test-McpEndpoint -Token $ClusterToken -Url "http://127.0.0.1:$NodePort/mcp" -Label "Node"
 }
 if ($Mode -eq "Hub" -or $Mode -eq "Both") {
-    & $python -m mcp_stdio --bearer-token $HubToken --check "http://127.0.0.1:$HubPort/mcp"
-    if ($LASTEXITCODE -ne 0) { throw "Hub MCP verification failed." }
+    Test-McpEndpoint -Token $HubToken -Url "http://127.0.0.1:$HubPort/mcp" -Label "Hub"
 }
 
 Write-Host "Vex Desktop Parity v0.15.6 installed and verified."
