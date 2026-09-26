@@ -44,6 +44,47 @@ jobs:
       - name: Install Dropbox bridge
         shell: powershell
         run: .\Tools\Install-VexDropboxParityBridge.ps1 -DropboxRoot "$env:RUNNER_TEMP\VexRemoteBridge"
+      - name: Run Dropbox bridge end-to-end
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "VexRemoteBridge"
+          $commands = Join-Path $root "commands"
+          $results = Join-Path $root "results"
+          function Send-VexCommand {
+            param([string]$Id, [string]$Tool, [hashtable]$Arguments)
+            $payload = @{ request_id = $Id; tool = $Tool; arguments = $Arguments } | ConvertTo-Json -Depth 10
+            $path = Join-Path $commands ($Id + ".json")
+            [IO.File]::WriteAllText($path, $payload, (New-Object Text.UTF8Encoding($false)))
+            $resultPath = Join-Path $results ($Id + ".json")
+            $deadline = (Get-Date).AddSeconds(30)
+            while (!(Test-Path $resultPath) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+            if (!(Test-Path $resultPath)) { throw "Timed out waiting for Dropbox bridge result: $Id" }
+            $result = Get-Content -Raw $resultPath | ConvertFrom-Json
+            if (!$result.ok) { throw "Dropbox bridge command failed: $Id :: $($result.error)" }
+            if ($result.result.isError -eq $true) { throw "MCP tool returned an error: $Id" }
+            return $result
+          }
+
+          $devices = Send-VexCommand -Id "ci-list-devices" -Tool "list_devices" -Arguments @{}
+          $textPart = @($devices.result.content | Where-Object { $_.type -eq "text" })[0].text
+          $deviceList = ($textPart | ConvertFrom-Json).devices
+          if (!$deviceList -or $deviceList.Count -lt 1) { throw "Dropbox bridge hub returned no devices." }
+          $deviceId = [string]$deviceList[0].deviceId
+
+          $cfg = Send-VexCommand -Id "ci-get-config" -Tool "get_config" -Arguments @{ deviceId = $deviceId }
+          if (!$cfg.result.content) { throw "Dropbox bridge routed get_config returned no content." }
+
+          $probe = Join-Path $env:RUNNER_TEMP "vex-dropbox-e2e.txt"
+          $write = Send-VexCommand -Id "ci-write-file" -Tool "write_file" -Arguments @{
+            deviceId = $deviceId
+            path = $probe
+            content = "vex-dropbox-parity-ok"
+            mode = "rewrite"
+          }
+          if (!(Test-Path $probe)) { throw "Dropbox bridge write_file did not create the probe file." }
+          if ((Get-Content -Raw $probe) -notmatch "vex-dropbox-parity-ok") { throw "Dropbox bridge probe content mismatch." }
+          Write-Host "PASS Dropbox bridge end-to-end routed command execution."
+
       - name: Run parity checks
         shell: powershell
         run: .\Tools\Test-VexDesktopParity.ps1
