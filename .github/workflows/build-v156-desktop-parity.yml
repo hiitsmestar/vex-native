@@ -1,0 +1,74 @@
+name: Build Vex Desktop Parity v0.15.6
+
+on:
+  push:
+    branches: [ "build/v156-desktop-parity" ]
+    paths:
+      - "Tools/VexDesktopParity*.mjs"
+      - "Tools/*VexDesktopParity*.ps1"
+      - "Tools/test_v156_desktop_parity.mjs"
+      - ".github/workflows/build-v156-desktop-parity.yml"
+      - "docs/VEX_DESKTOP_PARITY.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned parity dependencies
+        shell: pwsh
+        run: |
+          npm install --no-save --no-audit --no-fund "@modelcontextprotocol/sdk@1.9.0" "@wonderwhy-er/desktop-commander@0.2.51"
+          python -m pip install "mcp-stdio==0.43.6"
+
+      - name: Parse PowerShell installers
+        shell: pwsh
+        run: |
+          $files = @(
+            "Tools/Install-VexDesktopParity.ps1",
+            "Tools/Start-VexDesktopParity.ps1",
+            "Tools/Register-VexDesktopParityNode.ps1",
+            "Tools/Enable-VexDesktopParityNode.ps1"
+          )
+          foreach ($file in $files) {
+            [void][scriptblock]::Create((Get-Content -Raw $file))
+            Write-Host "PASS parse $file"
+          }
+
+      - name: Run live MCP parity test
+        shell: pwsh
+        run: node Tools/test_v156_desktop_parity.mjs
+
+      - name: Package Windows parity bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force parity-bundle | Out-Null
+          Copy-Item Tools/VexDesktopParityNode.mjs parity-bundle/
+          Copy-Item Tools/VexDesktopParityHub.mjs parity-bundle/
+          Copy-Item Tools/Install-VexDesktopParity.ps1 parity-bundle/
+          Copy-Item Tools/Start-VexDesktopParity.ps1 parity-bundle/
+          Copy-Item Tools/Register-VexDesktopParityNode.ps1 parity-bundle/
+          Copy-Item Tools/Enable-VexDesktopParityNode.ps1 parity-bundle/
+          Copy-Item docs/VEX_DESKTOP_PARITY.md parity-bundle/
+          Compress-Archive -Path parity-bundle/* -DestinationPath VexDesktopParity-v0.15.6.zip -Force
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexDesktopParity-v0.15.6-Windows
+          path: VexDesktopParity-v0.15.6.zip
+          if-no-files-found: error
+          retention-days: 14
