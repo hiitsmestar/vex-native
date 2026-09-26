@@ -21,9 +21,11 @@ jobs:
           python -m pip install -r VexBridge/requirements.txt
           python -m pip install pyinstaller typer
       - name: Compile source
-        run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/relay_client.py VexBridge/relay_interop_test.py VexBridge/strict_parity_test.py VexBridge/a2a_server.py VexBridge/a2a_smoke_test.py
+        run: python -m py_compile VexBridge/server.py VexBridge/brain_router.py VexBridge/relay_worker.py VexBridge/relay_client.py VexBridge/relay_interop_test.py VexBridge/strict_parity_test.py VexBridge/a2a_server.py VexBridge/a2a_smoke_test.py
       - name: Verify relay client/worker crypto interoperability
         run: python VexBridge/relay_interop_test.py
+      - name: Brain routing policy smoke
+        run: python -c "from VexBridge.brain_router import choose_mode; assert choose_mode('hello','auto')=='fast'; assert choose_mode('analyze architecture and debug this code','auto')=='deep'; print('BRAIN_ROUTER_POLICY=PASS')"
       - name: Build Windows onedir executables
         shell: pwsh
         run: |
