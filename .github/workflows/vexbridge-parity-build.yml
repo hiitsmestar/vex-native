@@ -21,7 +21,9 @@ jobs:
           python -m pip install -r VexBridge/requirements.txt
           python -m pip install pyinstaller typer
       - name: Compile source
-        run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/strict_parity_test.py
+        run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/relay_client.py VexBridge/relay_interop_test.py VexBridge/strict_parity_test.py
+      - name: Verify relay client/worker crypto interoperability
+        run: python VexBridge/relay_interop_test.py
       - name: Build Windows onedir executables
         shell: pwsh
         run: |
