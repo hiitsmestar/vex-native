@@ -56,8 +56,14 @@ $package = @{
     }
 }
 $package | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $Root "package.json")
-& $npm install --prefix $Root --no-audit --no-fund
-if ($LASTEXITCODE -ne 0) { throw "npm dependency install failed." }
+Push-Location $Root
+try {
+    & $npm install --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "npm dependency install failed." }
+}
+finally {
+    Pop-Location
+}
 
 & $python -m pip install --user "mcp-stdio==0.43.6"
 if ($LASTEXITCODE -ne 0) { throw "mcp-stdio install failed." }
