@@ -22,10 +22,11 @@ jobs:
           python -m pip install pyinstaller
       - name: Compile source
         run: python -m py_compile VexBridge/server.py VexBridge/relay_worker.py VexBridge/strict_parity_test.py
-      - name: Build exact Windows onedir package
+      - name: Build Windows onedir executables
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeMCP --collect-all mcp --collect-all starlette --collect-all uvicorn --collect-all pydantic --collect-all pydantic_settings --collect-all jsonschema --collect-all reportlab --collect-all docx --collect-all openpyxl --collect-all pypdf --collect-all PIL --collect-all psutil VexBridge/server.py
+          pyinstaller --noconfirm --clean --onedir --noupx --console --name VexBridgeRelay --collect-all mcp --collect-all cryptography VexBridge/relay_worker.py
       - name: Start packaged MCP and run strict parity
         shell: pwsh
         run: |
@@ -51,13 +52,19 @@ jobs:
           $env:VEXBRIDGE_TEST_DEVICE = "runner"
           python VexBridge/strict_parity_test.py
           if(-not $p.HasExited){Stop-Process $p.Id -Force}
+      - name: Smoke packaged relay
+        shell: pwsh
+        run: |
+          if(-not (Test-Path ".\dist\VexBridgeRelay\VexBridgeRelay.exe")){ throw "VexBridgeRelay.exe missing" }
       - name: Assemble artifact
         shell: pwsh
         run: |
-          Copy-Item VexBridge\relay_worker.py dist\VexBridgeMCP\relay_worker.py
-          Copy-Item VexBridge\requirements.txt dist\VexBridgeMCP\requirements.txt
-          Copy-Item VexBridge\install-windows.ps1 dist\VexBridgeMCP\install-windows.ps1
-          Compress-Archive -Path dist\VexBridgeMCP\* -DestinationPath VexBridgeMCP-Windows.zip -Force
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist\VexBridgeMCP package\VexBridgeMCP -Recurse
+          Copy-Item dist\VexBridgeRelay package\VexBridgeRelay -Recurse
+          Copy-Item VexBridge\install-windows.ps1 package\install-windows.ps1
+          Copy-Item VexBridge\README.md package\README.md
+          Compress-Archive -Path package\* -DestinationPath VexBridgeMCP-Windows.zip -Force
       - uses: actions/upload-artifact@v4
         with:
           name: VexBridgeMCP-Windows
