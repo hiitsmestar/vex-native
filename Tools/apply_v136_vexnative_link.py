@@ -4,13 +4,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTENT = ROOT / "VexNative" / "ContentView.swift"
 BRIDGE = ROOT / "Bridge" / "vex_bridge.py"
-MARKER = 'V136_VEXNATIVE_LINK = "v0.13.6-vexnative-link-v1"'
+MARKER = 'V136_VEXNATIVE_LINK = "v0.13.6.1.1-vexnative-relay-link-v2"'
 
 content = CONTENT.read_text(encoding="utf-8")
 if MARKER not in content:
     anchor = "@MainActor\nprivate final class VexControlSurfaceModel: ObservableObject {"
     if anchor not in content:
-        raise SystemExit("v0.13.6 control model anchor missing")
+        raise SystemExit("v0.13.6.1 control model anchor missing")
     content = content.replace(anchor, 'private let ' + MARKER + '\n\n' + anchor, 1)
 
     props = '    @Published var error = ""'
@@ -23,7 +23,7 @@ if MARKER not in content:
     @Published var autonomyWorkSummary = "—"
     @Published var autonomyActionStatus = ""'''
     if props not in content:
-        raise SystemExit("v0.13.6 property anchor missing")
+        raise SystemExit("v0.13.6.1 property anchor missing")
     content = content.replace(props, replacement, 1)
 
     reset = '''        runtimeOnline = false
@@ -32,19 +32,19 @@ if MARKER not in content:
         vexNativeOnline = false
         wants = []'''
     if reset not in content:
-        raise SystemExit("v0.13.6 refresh reset anchor missing")
+        raise SystemExit("v0.13.6.1 refresh reset anchor missing")
     content = content.replace(reset, reset_new, 1)
 
     before_refresh = '''            lastRefresh = Date()
             return'''
     native_refresh = '''            if let native = await json(endpoint: endpoint, path: "/vexnative/status"),
-               (native["ok"] as? Bool) == true {
+               (native["ok"] as? Bool) == true,
+               let a2a = native["a2a"] as? [String: Any] {
                 vexNativeOnline = true
-                if let health = native["health"] as? [String: Any] {
+                if let health = a2a["health"] as? [String: Any] {
                     vexNativeAgentCount = number(health["agent_count"])
                 }
-                if let autonomy = native["autonomy"] as? [String: Any],
-                   let runtime = autonomy["runtime"] as? [String: Any] {
+                if let runtime = a2a["runtime"] as? [String: Any] {
                     autonomyRunning = (runtime["running"] as? Bool) ?? false
                     if let store = runtime["store"] as? [String: Any] {
                         autonomyEnabled = (store["enabled"] as? Bool) ?? false
@@ -61,7 +61,7 @@ if MARKER not in content:
             lastRefresh = Date()
             return'''
     if before_refresh not in content:
-        raise SystemExit("v0.13.6 refresh insertion anchor missing")
+        raise SystemExit("v0.13.6.1 refresh insertion anchor missing")
     content = content.replace(before_refresh, native_refresh, 1)
 
     host_anchor = '''    private func hostLabel(_ endpoint: String) -> String {
@@ -97,6 +97,8 @@ if MARKER not in content:
         guard let root = URL(string: endpoint),
               var parts = URLComponents(url: root, resolvingAgainstBaseURL: false)
         else { return nil }
+        if path.hasPrefix("/vexnative/") { parts.port = 8771 }
+        if path.hasPrefix("/vexnative/") { parts.port = 8771 }
         parts.path = path
         guard let url = parts.url else { return nil }
         var request = URLRequest(url: url)
@@ -128,7 +130,7 @@ if MARKER not in content:
     }
 }'''
     if host_anchor not in content:
-        raise SystemExit("v0.13.6 model-method anchor missing")
+        raise SystemExit("v0.13.6.1 model-method anchor missing")
     content = content.replace(host_anchor, host_new, 1)
 
     system_state = '''private struct VexSystemView: View {
@@ -139,7 +141,7 @@ if MARKER not in content:
     @StateObject private var system = VexControlSurfaceModel()
     @State private var goalDraft = ""'''
     if system_state not in content:
-        raise SystemExit("v0.13.6 system view state anchor missing")
+        raise SystemExit("v0.13.6.1 system view state anchor missing")
     content = content.replace(system_state, system_state_new, 1)
 
     adaptive_anchor = '''                        VexMetricCard(
@@ -152,7 +154,7 @@ if MARKER not in content:
                         )
 ''' + adaptive_anchor
     if adaptive_anchor not in content:
-        raise SystemExit("v0.13.6 metric anchor missing")
+        raise SystemExit("v0.13.6.1 metric anchor missing")
     content = content.replace(adaptive_anchor, native_card, 1)
 
     wants_anchor = '''                    VStack(alignment: .leading, spacing: 10) {
@@ -198,7 +200,7 @@ if MARKER not in content:
 
 ''' + wants_anchor
     if wants_anchor not in content:
-        raise SystemExit("v0.13.6 controls anchor missing")
+        raise SystemExit("v0.13.6.1 controls anchor missing")
     content = content.replace(wants_anchor, controls, 1)
 
 CONTENT.write_text(content, encoding="utf-8")
@@ -210,7 +212,7 @@ if "V136_VEXNATIVE_PROXY" not in bridge:
 
     handler_anchor = "class Handler(BaseHTTPRequestHandler):"
     helper = r'''
-V136_VEXNATIVE_PROXY = "v0.13.6-vexnative-proxy-v1"
+V136_VEXNATIVE_PROXY = "v0.13.6.1-vexnative-proxy-v1"
 VEXNATIVE_LOCAL = "http://127.0.0.1:8796"
 
 def _vexnative_local(path: str, method: str = "GET", payload: dict | None = None) -> dict:
@@ -226,7 +228,7 @@ def _vexnative_local(path: str, method: str = "GET", payload: dict | None = None
 
 '''
     if handler_anchor not in bridge:
-        raise SystemExit("v0.13.6 Bridge handler anchor missing")
+        raise SystemExit("v0.13.6.1 Bridge handler anchor missing")
     bridge = bridge.replace(handler_anchor, helper + handler_anchor, 1)
 
     get_anchor = '''        if parsed.path == "/reindex":'''
@@ -241,7 +243,7 @@ def _vexnative_local(path: str, method: str = "GET", payload: dict | None = None
 
 ''' + get_anchor
     if get_anchor not in bridge:
-        raise SystemExit("v0.13.6 Bridge GET anchor missing")
+        raise SystemExit("v0.13.6.1 Bridge GET anchor missing")
     bridge = bridge.replace(get_anchor, get_route, 1)
 
     post_anchor = '''        if parsed.path == "/skills/compile":'''
@@ -267,7 +269,7 @@ def _vexnative_local(path: str, method: str = "GET", payload: dict | None = None
 
 ''' + post_anchor
     if post_anchor not in bridge:
-        raise SystemExit("v0.13.6 Bridge POST anchor missing")
+        raise SystemExit("v0.13.6.1 Bridge POST anchor missing")
     bridge = bridge.replace(post_anchor, post_route, 1)
 
 BRIDGE.write_text(bridge, encoding="utf-8")
@@ -279,15 +281,15 @@ for marker in [
     "Send goal to VexNative", "autonomyGoalSummary", "setAutonomy(enabled:"
 ]:
     if marker not in final_content:
-        raise SystemExit(f"v0.13.6 app marker missing: {marker}")
+        raise SystemExit(f"v0.13.6.1 app marker missing: {marker}")
 for marker in [
-    'V136_VEXNATIVE_PROXY = "v0.13.6-vexnative-proxy-v1"',
+    'V136_VEXNATIVE_PROXY = "v0.13.6.1-vexnative-proxy-v1"',
     'VEXNATIVE_LOCAL = "http://127.0.0.1:8796"',
     'parsed.path == "/vexnative/status"',
     'parsed.path == "/vexnative/autonomy"',
     '{"enable", "pause", "create_goal", "goal_status"}',
 ]:
     if marker not in final_bridge:
-        raise SystemExit(f"v0.13.6 Bridge marker missing: {marker}")
+        raise SystemExit(f"v0.13.6.1 Bridge marker missing: {marker}")
 
-print("PASS v0.13.6 VexNative phone link patch")
+print("PASS v0.13.6.1 VexNative phone link patch")
