@@ -1,4 +1,4 @@
-name: Build VexNative v0.13.6 VexNative Link
+name: Build VexNative v0.13.6.1 VexNative Link
 
 on:
   push:
@@ -19,16 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Assemble v0.13.6
+      - name: Assemble v0.13.6.1
         run: python3 Tools/build_v136_vexnative_link.py
 
       - name: Verify VexNative link wiring
         run: |
-          grep -q 'V136_VEXNATIVE_LINK = "v0.13.6-vexnative-link-v1"' VexNative/ContentView.swift
+          grep -q 'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-link-v1"' VexNative/ContentView.swift
           grep -q '/vexnative/status' VexNative/ContentView.swift
           grep -q '/vexnative/autonomy' VexNative/ContentView.swift
           grep -q 'Send goal to VexNative' VexNative/ContentView.swift
-          grep -q 'V136_VEXNATIVE_PROXY = "v0.13.6-vexnative-proxy-v1"' Bridge/vex_bridge.py
+          grep -q 'V136_VEXNATIVE_PROXY = "v0.13.6.1-vexnative-proxy-v1"' Bridge/vex_bridge.py
           grep -q 'VEXNATIVE_LOCAL = "http://127.0.0.1:8796"' Bridge/vex_bridge.py
           grep -q 'V134_SIRI_HARDWARE_ROUTING' VexNative/VexVoiceIntents.swift
           grep -q 'PhoneRemoteCommandRelay.shared.run(app: app)' VexNative/ContentView.swift
@@ -52,8 +52,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            CURRENT_PROJECT_VERSION=136 \
-            MARKETING_VERSION=0.13.6 \
+            CURRENT_PROJECT_VERSION=1361 \
+            MARKETING_VERSION=0.13.6.1 \
             build | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Add permissions and verify build identity
@@ -69,8 +69,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string VexNative uses the microphone while voice mode is enabled." "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Delete :NSSpeechRecognitionUsageDescription" "$INFO_PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string VexNative uses speech recognition while voice mode is enabled so spoken words can become chat text." "$INFO_PLIST"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.13.6"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "136"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" = "0.13.6.1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")" = "1361"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$INFO_PLIST")" = "Vex"
 
       - name: Package unsigned IPA
@@ -79,13 +79,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.13.6-vexnative-link.ipa" Payload
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.13.6-vexnative-link.ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.13.6.1-vexnative-link.ipa" Payload
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/VexNative-v0.13.6.1-vexnative-link.ipa"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.13.6-VexNative-Link
-          path: VexNative-v0.13.6-vexnative-link.ipa
+          name: VexNative-v0.13.6.1-VexNative-Link
+          path: VexNative-v0.13.6.1-vexnative-link.ipa
           if-no-files-found: error
           retention-days: 14
 
@@ -93,7 +93,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.13.6-build-log
+          name: VexNative-v0.13.6.1-build-log
           path: $RUNNER_TEMP/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
