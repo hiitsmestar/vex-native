@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTENT = ROOT / "VexNative" / "ContentView.swift"
 BRIDGE = ROOT / "Bridge" / "vex_bridge.py"
-MARKER = 'V136_VEXNATIVE_LINK = "v0.13.6.1.1-vexnative-relay-link-v2"'
+MARKER = 'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-relay-link-v2"'
 
 content = CONTENT.read_text(encoding="utf-8")
 if MARKER not in content:
