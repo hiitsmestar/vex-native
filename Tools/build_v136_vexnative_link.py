@@ -20,7 +20,7 @@ content = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
 bridge = (ROOT / "Bridge" / "vex_bridge.py").read_text(encoding="utf-8")
 
 for marker in [
-    'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-link-v1"',
+    'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-relay-link-v2"',
     'path: "/vexnative/status"',
     'path: "/vexnative/autonomy"',
     "Send goal to VexNative",
