@@ -24,7 +24,7 @@ jobs:
 
       - name: Verify VexNative link wiring
         run: |
-          grep -q 'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-link-v1"' VexNative/ContentView.swift
+          grep -q 'V136_VEXNATIVE_LINK = "v0.13.6.1-vexnative-relay-link-v2"' VexNative/ContentView.swift
           grep -q '/vexnative/status' VexNative/ContentView.swift
           grep -q '/vexnative/autonomy' VexNative/ContentView.swift
           grep -q 'Send goal to VexNative' VexNative/ContentView.swift
