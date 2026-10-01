@@ -31,6 +31,26 @@ final class LocalStore {
         return url
     }
 
+    private var attachmentsDirectory: URL {
+        let url = appSupport.appendingPathComponent("Attachments", isDirectory: true)
+        if !fileManager.fileExists(atPath: url.path) {
+            try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        return url
+    }
+
+    func saveAttachment(_ data: Data) throws -> String {
+        let filename = UUID().uuidString + ".image"
+        let url = attachmentsDirectory.appendingPathComponent(filename)
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return filename
+    }
+
+    func attachmentData(named filename: String) -> Data? {
+        guard !filename.contains("/"), !filename.contains("\\") else { return nil }
+        return try? Data(contentsOf: attachmentsDirectory.appendingPathComponent(filename))
+    }
+
     private var brainURL: URL {
         appSupport.appendingPathComponent("VexBrain.json")
     }
