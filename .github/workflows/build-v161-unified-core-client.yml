@@ -7,6 +7,14 @@ on:
       - "Tools/apply_v161_unified_core_client.py"
       - "Tools/build_v161_unified_core_client.py"
       - ".github/workflows/build-v161-unified-core-client.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "VexNative/**"
+      - "VexNative.xcodeproj/**"
+      - "Tools/apply_v161_unified_core_client.py"
+      - "Tools/build_v161_unified_core_client.py"
+      - ".github/workflows/build-v161-unified-core-client.yml"
   workflow_dispatch:
 
 permissions:
