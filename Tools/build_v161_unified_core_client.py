@@ -52,6 +52,7 @@ for marker in [
     if marker not in project:
         raise SystemExit(f"missing v0.16.1 build lineage marker: {marker}")
 
+# coherent source snapshot v2: UI, app model, storage, memory and views are synced together.
 print("PASS v0.16.1 cumulative unified-core source verification")
 
 support_checks = {
