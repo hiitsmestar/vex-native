@@ -5292,11 +5292,13 @@ private final class VexNativeA2AClient: ObservableObject {
         sending = true
         defer { sending = false }
 
-        if await streamAnswer(clean) != nil {
+        let streamed = await streamAnswer(clean)
+        if streamed != nil {
             await refresh()
             return
         }
-        if await answer(clean, quiet: false) != nil {
+        let fallback = await answer(clean, quiet: false)
+        if fallback != nil {
             await refresh()
         }
     }
@@ -5751,3 +5753,4 @@ private struct VexNativeA2APanel: View {
         .task { await client.refresh() }
     }
 }
+
