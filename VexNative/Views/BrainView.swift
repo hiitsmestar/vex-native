@@ -11,6 +11,7 @@ struct BrainView: View {
     @AppStorage(WebBrain.autoFreshKey) private var autoFreshWeb = true
     @AppStorage(WebBrain.wikipediaKey) private var wikipediaEnabled = true
     @AppStorage(WebBrain.searxEndpointKey) private var searxEndpoint = ""
+    @AppStorage(WebBrain.secondaryBridgeEndpointKey) private var secondaryBridgeEndpoint = ""
 
     var body: some View {
         NavigationStack {
@@ -150,15 +151,35 @@ struct BrainView: View {
                     Toggle("Wikipedia fallback", isOn: $wikipediaEnabled)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("SearXNG endpoint")
+                        Text("Vex Bridge / SearXNG endpoint")
                             .font(.subheadline.weight(.semibold))
                         TextField("https://search.example.com", text: $searxEndpoint)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
-                        Text("Optional. Add an HTTPS SearXNG server with JSON search enabled for full live web search. Without one, Vex can still read public HTTPS links and use Wikipedia for encyclopedia-style research.")
+                        Text("Paste the full Vex Bridge pairing endpoint here, including its token and certificate pin, or use an HTTPS SearXNG server with JSON search enabled. Without either one, Vex can still read public HTTPS links and use Wikipedia for encyclopedia-style research.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Second / kitchen PC Bridge endpoint")
+                            .font(.subheadline.weight(.semibold))
+                        TextField("https://192.168.x.x:8765?token=…&pin=…", text: $secondaryBridgeEndpoint)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        Text("Optional second paired computer. Vex mirrors brain memory to both PCs, searches both file indexes by default, and targets this node when you say kitchen/downstairs PC. Each PC keeps its own private token and certificate pin.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Expansion brain")
+                        Spacer()
+                        Text(app.pcBrainStatus)
+                            .foregroundStyle(app.pcBrainConnected ? .green : .secondary)
+                            .multilineTextAlignment(.trailing)
                     }
 
                     HStack {
@@ -314,6 +335,8 @@ struct BrainView: View {
                 }
             }
         }
+        .dynamicTypeSize(.small ... .large)
+        // V131_BRAIN_DYNAMIC_TYPE_CAP
         .fileImporter(
             isPresented: $app.showModelImporter,
             allowedContentTypes: [.data],
