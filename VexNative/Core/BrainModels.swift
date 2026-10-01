@@ -9,10 +9,11 @@ struct ChatMessage: Identifiable, Codable, Equatable, Sendable {
     var id: UUID = UUID()
     var role: ChatRole
     var content: String
+    var imageFilename: String? = nil
     var createdAt: Date = Date()
 }
 
-enum MemoryKind: String, Codable, Sendable {
+enum MemoryKind: String, Codable, Sendable, CaseIterable {
     case preference
     case rule
     case fact
