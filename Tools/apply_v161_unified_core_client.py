@@ -36,6 +36,10 @@ new = '''    @Published var sending = false
     @Published var brainMode = "—"
     @Published var memorySummary = "—"
     @Published var rendererSummary = "—"
+    @Published var activeWorkID = ""
+    @Published var activeWorkSummary = "No active work"
+    @Published var failedWorkID = ""
+    @Published var failedWorkSummary = ""
 '''
 if old not in text:
     raise SystemExit("v0.16.1 client status anchor missing")
@@ -62,6 +66,26 @@ refresh_new = '''            goalSummary = statusSummary(store["goals"])
                 memorySummary = "—"
             }
             rendererSummary = ((renderer["available"] as? Bool) ?? false) ? "Ready" : "Offline"
+
+            if let active = work.first(where: {
+                let status = ($0["status"] as? String) ?? ""
+                return status == "running" || status == "queued"
+            }) {
+                activeWorkID = (active["id"] as? String) ?? ""
+                let status = (active["status"] as? String) ?? "unknown"
+                let task = (active["prompt"] as? String) ?? "Untitled work"
+                activeWorkSummary = "\(status.capitalized) • \(String(task.prefix(110)))"
+            } else {
+                activeWorkID = ""
+                activeWorkSummary = "No active work"
+            }
+            if let failed = work.first(where: { (($0["status"] as? String) ?? "") == "failed" }) {
+                failedWorkID = (failed["id"] as? String) ?? ""
+                failedWorkSummary = String(((failed["prompt"] as? String) ?? "Failed work").prefix(110))
+            } else {
+                failedWorkID = ""
+                failedWorkSummary = ""
+            }
 
             if let newest = goals.first {'''
 if refresh_anchor not in text:
@@ -122,6 +146,50 @@ new_send_body = '''        if await answer(clean, quiet: false) != nil {
 if old_send_body not in text:
     raise SystemExit("v0.16.1 send body anchor missing")
 text = text.replace(old_send_body, new_send_body, 1)
+
+control_anchor = '''    private enum ClientError: LocalizedError {
+'''
+control_methods = '''    func cancelActiveWork() async {
+        guard !activeWorkID.isEmpty else { return }
+        do {
+            let object = try await request(
+                path: "/vexnative/autonomy",
+                method: "POST",
+                body: ["action": "cancel_work", "work_id": activeWorkID],
+                timeout: 20
+            )
+            guard (object["ok"] as? Bool) == true else { throw ClientError.badResponse }
+            response = "Active work cancelled."
+            error = ""
+            await refresh()
+        } catch {
+            self.error = "Cancel work: \(error.localizedDescription)"
+        }
+    }
+
+    func retryFailedWork() async {
+        guard !failedWorkID.isEmpty else { return }
+        do {
+            let object = try await request(
+                path: "/vexnative/autonomy",
+                method: "POST",
+                body: ["action": "retry_work", "work_id": failedWorkID],
+                timeout: 20
+            )
+            guard (object["ok"] as? Bool) == true else { throw ClientError.badResponse }
+            response = "Failed work re-queued."
+            error = ""
+            await refresh()
+        } catch {
+            self.error = "Retry work: \(error.localizedDescription)"
+        }
+    }
+
+    private enum ClientError: LocalizedError {
+'''
+if control_anchor not in text:
+    raise SystemExit("v0.16.1 work-control anchor missing")
+text = text.replace(control_anchor, control_methods, 1)
 
 panel_anchor = '''private struct VexNativeA2APanel: View {
     @StateObject private var client = VexNativeA2AClient()
@@ -191,7 +259,7 @@ metric_new = '''            HStack(spacing: 12) {
                 VexMetricCard(
                     title: "Core",
                     value: client.brainMode,
-                    detail: "\(client.activeNode)\n\(client.activeModel)",
+                    detail: "\\(client.activeNode)\\n\\(client.activeModel)",
                     active: client.online
                 )
                 VexMetricCard(
@@ -206,6 +274,53 @@ metric_new = '''            HStack(spacing: 12) {
 if metric_anchor not in text:
     raise SystemExit("v0.16.1 metrics anchor missing")
 text = text.replace(metric_anchor, metric_new, 1)
+
+work_panel_anchor = '''            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Button {
+                        Task { await client.setAutonomy(enabled: true) }
+'''
+work_panel_new = '''            VStack(alignment: .leading, spacing: 6) {
+                Text("Active work")
+                    .font(.caption.bold())
+                    .foregroundStyle(VexTheme.hotPink)
+                Text(client.activeWorkSummary)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.9))
+                HStack {
+                    Button {
+                        Task { await client.cancelActiveWork() }
+                    } label: {
+                        Label("Cancel task", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(client.activeWorkID.isEmpty)
+
+                    if !client.failedWorkID.isEmpty {
+                        Button {
+                            Task { await client.retryFailedWork() }
+                        } label: {
+                            Label("Retry failed", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                if !client.failedWorkSummary.isEmpty {
+                    Text("Failed: \(client.failedWorkSummary)")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Button {
+                        Task { await client.setAutonomy(enabled: true) }
+'''
+if work_panel_anchor not in text:
+    raise SystemExit("v0.16.1 work-panel anchor missing")
+text = text.replace(work_panel_anchor, work_panel_new, 1)
+
 chat_anchor = '''        if await PhoneToolRouter.tryHandle(original, app: self) {
             return
         }
@@ -255,6 +370,11 @@ for marker in [
     "if core.online",
     "rendererSummary",
     "memorySummary",
+    "activeWorkSummary",
+    "func cancelActiveWork() async",
+    "func retryFailedWork() async",
+    'Label("Cancel task", systemImage: "xmark.circle")',
+    'Label("Retry failed", systemImage: "arrow.clockwise")',
     "V160_A2A_ROAMING_FALLBACK",
 ]:
     if marker not in final:
