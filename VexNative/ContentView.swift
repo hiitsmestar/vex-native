@@ -5292,7 +5292,11 @@ private final class VexNativeA2AClient: ObservableObject {
         sending = true
         defer { sending = false }
 
-        if await streamAnswer(clean) != nil || await answer(clean, quiet: false) != nil {
+        if await streamAnswer(clean) != nil {
+            await refresh()
+            return
+        }
+        if await answer(clean, quiet: false) != nil {
             await refresh()
         }
     }
@@ -5582,13 +5586,13 @@ private struct VexNativeA2APanel: View {
                 VexMetricCard(
                     title: "Core",
                     value: client.brainMode,
-                    detail: "\(client.activeNode)\n\(client.activeModel)",
+                    detail: client.activeNode + " / " + client.activeModel,
                     active: client.online
                 )
                 VexMetricCard(
                     title: "State",
                     value: client.rendererSummary,
-                    detail: "Memory \(client.memorySummary)\nPhone \(client.phoneAgentSummary)",
+                    detail: "Memory " + client.memorySummary + " / Phone " + client.phoneAgentSummary,
                     active: client.rendererSummary == "Ready"
                 )
             }
@@ -5747,4 +5751,3 @@ private struct VexNativeA2APanel: View {
         .task { await client.refresh() }
     }
 }
-
