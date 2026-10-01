@@ -5582,8 +5582,7 @@ private struct VexNativeA2APanel: View {
                 VexMetricCard(
                     title: "Core",
                     value: client.brainMode,
-                    detail: "\(client.activeNode)
-\(client.activeModel)",
+                    detail: "\(client.activeNode)\n\(client.activeModel)",
                     active: client.online
                 )
                 VexMetricCard(
@@ -5748,3 +5747,4 @@ private struct VexNativeA2APanel: View {
         .task { await client.refresh() }
     }
 }
+
