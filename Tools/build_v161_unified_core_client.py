@@ -18,6 +18,10 @@ run("Tools/apply_v161_unified_core_client.py")
 content_view = (ROOT / "VexNative" / "ContentView.swift").read_text(encoding="utf-8")
 app_source = (ROOT / "VexNative" / "VexNativeApp.swift").read_text(encoding="utf-8")
 project = (ROOT / "VexNative.xcodeproj" / "project.pbxproj").read_text(encoding="utf-8")
+for required in ["VexVoiceIntents.swift", "VexBackgroundAgent.swift"]:
+    path = ROOT / "VexNative" / required
+    if not path.exists() or path.stat().st_size < 1000:
+        raise SystemExit(f"missing v0.16.1 source file: {required}")
 
 for marker in [
     'V161_UNIFIED_CORE_CLIENT = "v0.16.1-unified-core-client-v1"',
