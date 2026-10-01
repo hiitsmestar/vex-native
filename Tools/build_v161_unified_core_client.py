@@ -53,3 +53,15 @@ for marker in [
         raise SystemExit(f"missing v0.16.1 build lineage marker: {marker}")
 
 print("PASS v0.16.1 cumulative unified-core source verification")
+
+support_checks = {
+    "VexNative/AppModel.swift": ["pcBrainConnected", "pcBrainStatus", "pendingPhotoData", "pendingPhotoContext"],
+    "VexNative/Storage/LocalStore.swift": ["saveAttachment", "attachmentData"],
+    "VexNative/Core/BrainModels.swift": ["imageFilename", "CaseIterable"],
+}
+for rel, markers in support_checks.items():
+    source = (ROOT / rel).read_text(encoding="utf-8")
+    for marker in markers:
+        if marker not in source:
+            raise SystemExit(f"missing v0.16.1 support marker {marker} in {rel}")
+print("PASS v0.16.1 support-source coherence")
