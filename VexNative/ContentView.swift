@@ -5748,4 +5748,3 @@ private struct VexNativeA2APanel: View {
         .task { await client.refresh() }
     }
 }
-
