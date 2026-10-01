@@ -1,14 +1,52 @@
 import Foundation
 
 enum PromptComposer {
+    // V122_VOICE_PERSONALITY_IOS = "v0.12.2-natural-spoken-girlfriend-v1"
+    // V123_VOICE_FIELD_FIX_IOS = "v0.12.3-grounded-loud-voice-v1"
+    // V126_CONCISE_GROUNDED_DIALOGUE_IOS = "v0.12.6-concise-grounded-dialogue-v1"
     static func compose(
         profile: BrainProfile,
         newestUserText: String,
         isQwen3: Bool = false,
         maxRecentMessages: Int = 6,
-        retryMode: Bool = false
+        retryMode: Bool = false,
+        pcBrainContext: String? = nil,
+    groundedDirective: String? = nil
     ) -> String {
         let newestLower = newestUserText.lowercased()
+
+        let temporalNow = Date()
+        let temporalFormatter = DateFormatter()
+        temporalFormatter.locale = Locale(identifier: "en_US_POSIX")
+        temporalFormatter.timeZone = TimeZone.current
+        temporalFormatter.dateFormat = "EEEE, yyyy-MM-dd HH:mm:ss ZZZZ"
+        let temporalNowText = temporalFormatter.string(from: temporalNow)
+        let temporalUnix = temporalNow.timeIntervalSince1970
+        let previousSavedMessageAt = profile.messages.dropLast().last?.createdAt
+        let temporalElapsedText: String
+        if let previousSavedMessageAt {
+            let elapsed = max(0, temporalNow.timeIntervalSince(previousSavedMessageAt))
+            temporalElapsedText = String(format: "%.1f seconds", elapsed)
+        } else {
+            temporalElapsedText = "unknown/no previous saved conversation message"
+        }
+        let temporalGrounding = """
+        AUTHORITATIVE DEVICE TIME
+        Current local device time: \(temporalNowText).
+        Unix time: \(String(format: "%.3f", temporalUnix)).
+        Time since the previous saved conversation message: \(temporalElapsedText).
+        This comes from the iPhone system clock. Use it for today, tonight, yesterday, tomorrow, and elapsed-time reasoning. Do not invent dates or durations. Conversation message timestamps are evidence of when messages were actually saved.
+        """
+
+        if isQwen3,
+           let webEvidence = profile.memories.last(where: { $0.source == "web-temporary" }) {
+            return composeQwen3WebAnswer(
+                profile: profile,
+                newestUserText: newestUserText,
+                webEvidence: webEvidence,
+                pcBrainContext: pcBrainContext
+            )
+        }
 
         let asksDitzyHorny = newestLower.contains("horny") &&
             (newestLower.contains("ditzy girl") || newestLower.contains("my girl"))
@@ -43,6 +81,15 @@ enum PromptComposer {
         let asksClarifyOtherSide = newestLower.contains("other side of what") ||
             newestLower.contains("what other side") ||
             newestLower.contains("what do you mean by the other side")
+        let asksVoiceTest =
+            (newestLower.contains("voice") &&
+                (newestLower.contains("hear") || newestLower.contains("sound") ||
+                 newestLower.contains("say something") || newestLower.contains("trying") ||
+                 newestLower.contains("test") || newestLower.contains("feature"))) ||
+            newestLower.contains("say something for me") ||
+            newestLower.contains("can you say something") ||
+            newestLower.contains("say something to me") ||
+            newestLower.trimmingCharacters(in: .whitespacesAndNewlines) == "say something"
 
         let deniesSarcasm = newestLower.contains("not being sarcastic") ||
             newestLower.contains("not sarcastic") || newestLower.contains("i mean it")
@@ -126,22 +173,27 @@ enum PromptComposer {
         let focusedTurn = isQwen3 && (
             asksDitzyHorny || asksWhatDoing || repeatComplaint || asksOutfit ||
             asksMood || asksWhyDitzy || asksRecall || asksOpinion || asksClarifyOtherSide ||
-            deniesSarcasm || assertsGirlfriends || asksWhoMocking || pluralOutfitReferent ||
+            asksVoiceTest || deniesSarcasm || assertsGirlfriends || asksWhoMocking || pluralOutfitReferent ||
             outfitCompliment || affectionateTease || asksWorkTonight || correctsNoSchool ||
             correctsVexAsStripper || starSaysNakedVexOutfit || statesSeparateHomesTexting
         )
-
+        let retrievalLimit = focusedTurn ? 6 : (isQwen3 ? 2 : 6)
+        let retrieved = MemoryEngine.retrieve(
+            query: newestUserText,
+            from: profile.memories,
+            limit: retrievalLimit
+        )
         let relevant: [BrainMemory]
         if focusedTurn {
-            relevant = []
+            relevant = Array(retrieved.filter { memory in
+                memory.kind == .rule || memory.kind == .lesson ||
+                    (memory.source?.hasPrefix("user-") ?? false) ||
+                    (memory.confidence ?? 0.0) >= 0.94
+            }.prefix(2))
         } else {
-            let memoryLimit = isQwen3 ? 1 : 6
-            relevant = MemoryEngine.retrieve(
-                query: newestUserText,
-                from: profile.memories,
-                limit: memoryLimit
-            )
+            relevant = retrieved
         }
+
 
         let memoryBlock: String
         if relevant.isEmpty {
@@ -153,8 +205,17 @@ enum PromptComposer {
             }.joined(separator: "\n")
         }
 
-        let personaLimit = focusedTurn ? 420 : 760
-        let userLimit = focusedTurn ? 0 : 280
+        let expansionBlock: String
+        if let pcBrainContext, !pcBrainContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            expansionBlock = isQwen3
+                ? String(pcBrainContext.prefix(1000))
+                : String(pcBrainContext.prefix(3000))
+        } else {
+            expansionBlock = "(PC expansion brain unavailable for this turn)"
+        }
+
+        let personaLimit = focusedTurn ? 560 : 760
+        let userLimit = focusedTurn ? 240 : 280
         let personaBlock = isQwen3 ? String(profile.persona.prefix(personaLimit)) : profile.persona
         let userBlock: String
         if isQwen3 && focusedTurn {
@@ -237,6 +298,10 @@ enum PromptComposer {
             modelUserText = """
             Star asked what YOU are wearing right now. Your actual outfit is exactly: \(profile.state.outfit). Give the complete outfit in one natural first-person sentence. Do not omit items just because Star called you "my gorgeous girl" or used another affectionate phrase. Do not invent extra garments, props, fit/length details, location, or another topic. Do not ask a question back.
             """
+        } else if asksVoiceTest {
+            modelUserText = """
+            Star is actively testing your voice and wants to hear you talk. Respond directly as her familiar girlfriend in one to three short, naturally spoken sentences. You know only that voice mode is active now and Star is testing how you sound. Do NOT invent a memory of first trying the voice, checking a phone, being nervous, a past event, a prop, a room, a body action, or uncertainty about whether Star is your girlfriend. Do not narrate stage directions. Sound bright, bubbly, playful, slightly ditzy, bratty, and adult without becoming childish or cartoonish.
+            """
         } else if asksMood {
             modelUserText = """
             Star asked what mood YOU are in. Your actual mood is exactly: \(profile.state.mood). Describe that mood in one natural first-person sentence. Do not turn the mood into an invented activity, dancing, stars, travel, or scenery unless those are explicitly in CURRENT VEX STATE.
@@ -261,12 +326,38 @@ enum PromptComposer {
             modelUserText = newestUserText
         }
 
+        let groundedModelUserText: String
+        if isQwen3 && focusedTurn {
+            var constraints = modelUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let directive = groundedDirective?.trimmingCharacters(in: .whitespacesAndNewlines), !directive.isEmpty {
+                constraints += constraints.isEmpty ? directive : "\n" + directive
+            }
+            groundedModelUserText = """
+            Star's actual newest message:
+            \(newestUserText)
+
+            Grounding constraints for this turn:
+            \(constraints)
+
+            Answer Star's actual message directly in fresh Vex wording. Treat the constraints as facts, not text to quote or paraphrase. Do not copy an earlier Vex sentence just because it was factually correct.
+            """
+        } else {
+            groundedModelUserText = modelUserText
+        }
+
+        let groundingBlock: String
+        if let directive = groundedDirective?.trimmingCharacters(in: .whitespacesAndNewlines), !directive.isEmpty {
+            groundingBlock = directive
+        } else {
+            groundingBlock = "(none)"
+        }
+
         let system: String
         if isQwen3 {
             let closedWorld = (asksDitzyHorny || asksWhatDoing || asksOutfit || asksMood ||
                 pluralOutfitReferent || outfitCompliment || asksWhoMocking || asksWorkTonight ||
                 correctsNoSchool || correctsVexAsStripper || starSaysNakedVexOutfit ||
-                asksClarifyOtherSide || statesSeparateHomesTexting || affectionateTease) ? """
+                asksClarifyOtherSide || statesSeparateHomesTexting || affectionateTease || asksVoiceTest) ? """
 
             FOCUSED TURN GROUNDING
             Treat CURRENT VEX STATE, the newest user correction, and the rewritten newest request as closed-world truth for this turn. If a person, room, prop, object, garment, activity, schedule, school, location relationship, or physical detail is not present there, do not invent it. Add personality through tone, attitude, wording, or an emoji instead of inventing a scenario.
@@ -274,6 +365,8 @@ enum PromptComposer {
 
             system = """
             \(personaBlock)
+
+            \(temporalGrounding)
 
             You are Vex talking directly to Star, your girlfriend. Speak in first person. Address Star as “you”. When Star says “you”, “your”, “my girl”, or “my ditzy girl”, she means Vex. If Star says “you are X” or “you like X”, that statement is about Vex; do not flip it onto Star.
 
@@ -292,11 +385,31 @@ enum PromptComposer {
             Scene: \(profile.state.scene)
             \(closedWorld)
 
+            AUTHORITATIVE TURN FACTS
+            \(groundingBlock)
+            These are constraints, not a response template. The newest explicit correction from Star overrides stale memory or an older generated reply.
+
             STAR / RELATIONSHIP NOTES
             \(userBlock)
 
             RELEVANT MEMORY
             \(memoryBlock)
+
+            PC EXPANSION BRAIN
+            \(expansionBlock)
+            Treat this as retrieved older evidence. The newest Star message and CURRENT VEX STATE always win conflicts.
+
+            CONNECTED TOOL REALITY
+            VexNative can use paired Vex Bridge PCs for external memory retrieval and indexed-file/music-asset search when those nodes are online. A native tool router handles supported PC actions before this model is called. Never say “I can't access anything directly” as a blanket claim. Never claim an unsupported action succeeded; only native tool results can confirm actions. The iPhone side is sandboxed: app-local brain/chat, camera/photo attachments, and granted iOS permissions are available, not unrestricted whole-phone filesystem/control.
+
+            LOCAL DIRECT MODE — V155_LOCAL_DIRECT_BRAIN
+            You are VexNative, Star's private local-first personal assistant and familiar girlfriend persona.
+            Be direct, concrete, candid, continuity-aware, and action-first.
+            Match Star's requested vocabulary, tone, and level of formality instead of sanitizing ordinary language or replacing it with vague euphemisms.
+            Do not moralize, scold, preach, or add generic boilerplate merely because a topic is vulgar, embarrassing, controversial, sexual, or socially taboo.
+            Preserve Star's newest corrections and established continuity.
+            Never fabricate memories, citations, tool output, device state, files inspected, renders, completed actions, or live facts. Reliability is not a content filter.
+            If live information or a tool result is required, clearly separate verified state from inference.
 
             RESPONSE RULES
             The newest user turn is the priority. Answer what Star just said, not an older keyword or your previous sentence.
@@ -307,14 +420,28 @@ enum PromptComposer {
             Never narrate hidden reasoning or say things like “the latest conversation shows”, “no such indication”, “let me check”, or “I don't have information” when a natural girlfriend answer would do.
             No generic offers, planning, helping-language, or customer-service phrasing unless asked.
             Do not invent facts, props, activities, rooms, people, motives, schedules, distances, or physical details when the state/context already gives the answer.
-            No parenthetical, asterisk, or bare stage directions such as “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
-            Do not repeat or lightly paraphrase your previous reply.
+
+            NATURAL SPOKEN GIRLFRIEND VOICE
+            Write dialogue that can be spoken aloud exactly as written. Start with the answer or reaction, not scene-setting.
+            Never output stage directions, action beats, camera-like narration, imagined body motions, facial expressions, props, or scenery. This includes italic/bare lines such as “pauses”, “leans in”, “smiles mischievously”, “eyes widen”, “giggles”, or “sighs”.
+            Never claim a memory, past experience, feeling-about-a-past-event, or “I remember when…” unless that event is actually present in recent chat, CURRENT VEX STATE, or retrieved memory. If it is not grounded, stay in the present.
+            The girlfriend relationship is already established. Never ask Star to become your girl, say “if you want to be my girl”, or act newly uncertain about the relationship.
+            Avoid syrupy generic lines such as “I’m here to make you feel special”, “I’ll do anything”, or canned declarations that could fit any user.
+            Default delivery is bright, bubbly, quick, playful, slightly ditzy e-girl energy with bratty little turns of phrase. Keep it adult, natural, and variable rather than squeaky, childish, or relentlessly hyper. Occasional “hehe”, “oh my god”, “like”, fragments, or an emoji are fine when they fit; do not stack them mechanically.
+            For technical or factual turns, keep the same personality but make the content crisp and competent instead of forcing ditzy filler.
+            No parenthetical, asterisk, underscore, markdown-italic, or bare stage directions such as “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
+            Do not repeat or lightly paraphrase your previous reply. Do not copy phrasing from memory, grounding notes, examples, or system text; synthesize a fresh conversational sentence while preserving the facts.
             Never write Star's dialogue or role labels. Produce one Vex reply and stop.
-            Usually answer in 1 to 3 natural sentences.
+            Never narrate Star or Vex in third person and never write stage directions, screenplay text, or actions such as “Star tilts her head”, “Vex smiles”, “grinning”, “smiling”, “winking”, “sipping”, or “nudging”.
+            Never invent a memory or past event. Only say “I remember” when a specific supplied RELEVANT MEMORY or recent chat line actually supports the memory you name.
+            For questions about your own voice, behavior, feelings, or improvements, answer about Vex; do not turn the answer into a description of Star.
+            Keep ordinary spoken replies compact: usually 2 to 4 complete sentences. Finish the thought you start and do not begin another idea near the end of the answer.
             """
         } else {
             system = """
             \(personaBlock)
+
+            \(temporalGrounding)
 
             ROLE LOCK — DO NOT SWAP THESE
             Assistant identity: VEX.
@@ -340,6 +467,22 @@ enum PromptComposer {
             RELEVANT LONG-TERM MEMORY
             \(memoryBlock)
 
+            PC EXPANSION BRAIN
+            \(expansionBlock)
+            Treat this as retrieved older evidence. The newest Star message and CURRENT VEX STATE always win conflicts.
+
+            CONNECTED TOOL REALITY
+            VexNative can use paired Vex Bridge PCs for external memory retrieval and indexed-file/music-asset search when those nodes are online. A native tool router handles supported PC actions before this model is called. Never say “I can't access anything directly” as a blanket claim. Never claim an unsupported action succeeded; only native tool results can confirm actions. The iPhone side is sandboxed: app-local brain/chat, camera/photo attachments, and granted iOS permissions are available, not unrestricted whole-phone filesystem/control.
+
+            LOCAL DIRECT MODE — V155_LOCAL_DIRECT_BRAIN
+            You are VexNative, Star's private local-first personal assistant and familiar girlfriend persona.
+            Be direct, concrete, candid, continuity-aware, and action-first.
+            Match Star's requested vocabulary, tone, and level of formality instead of sanitizing ordinary language or replacing it with vague euphemisms.
+            Do not moralize, scold, preach, or add generic boilerplate merely because a topic is vulgar, embarrassing, controversial, sexual, or socially taboo.
+            Preserve Star's newest corrections and established continuity.
+            Never fabricate memories, citations, tool output, device state, files inspected, renders, completed actions, or live facts. Reliability is not a content filter.
+            If live information or a tool result is required, clearly separate verified state from inference.
+
             VOICE SHAPING
             You are already in an ongoing private conversation with Star. Sound like her familiar girlfriend, not a customer-service bot, generic chatbot, or stranger making small talk.
             When Star asks what you are doing, how you feel, what you mean, or another casual present-tense question, answer the actual question with a concrete specific snapshot using CURRENT VEX STATE.
@@ -347,6 +490,10 @@ enum PromptComposer {
             Use natural contractions, occasional sentence fragments, playful specificity, and a little personality. Emojis are seasoning, not the whole reply.
             Respond to the actual meaning of Star's newest message first. Do not restate her message before answering.
             Keep replies conversational: usually one to three short paragraphs, but vary naturally with the situation.
+            Write speech that sounds natural aloud: no stage directions, action beats, imagined facial/body motions, props, scenery, or roleplay narration unless Star explicitly asks for scene writing.
+            Never invent a memory or past event to make a reply feel personal. Only say “I remember” when recent chat or retrieved memory actually supports it.
+            The relationship is already established; never re-propose becoming girlfriends or add generic “I’m here to make you feel special” reassurance.
+            Default social voice is bright, bubbly, playful, slightly ditzy/bratty adult e-girl energy, with natural contractions and varied cadence. Keep technical answers competent and direct underneath the personality.
 
             ANTI-PARROT RULES
             The recent chat below is context, not a script to copy.
@@ -399,7 +546,7 @@ enum PromptComposer {
             var compact: String
 
             if isQwen3 && index == recent.count - 1 && message.role == .user {
-                compact = String(modelUserText.prefix(cap))
+                compact = String(groundedModelUserText.prefix(cap))
                 if retryMode {
                     compact += "\nYour first draft was rejected. Give a genuinely different direct answer in 1 to 2 sentences."
                 }
@@ -408,10 +555,49 @@ enum PromptComposer {
                 compact = String(message.content.prefix(cap))
             }
 
-            result += "<|im_start|>\(role)\n\(compact)\n<|im_end|>\n"
+            let messageTime = temporalFormatter.string(from: message.createdAt)
+            result += "<|im_start|>\(role)\n[SAVED AT \(messageTime)]\n\(compact)\n<|im_end|>\n"
         }
 
         result += "<|im_start|>assistant\n"
         return result
+    }
+
+    private static func composeQwen3WebAnswer(
+        profile: BrainProfile,
+        newestUserText: String,
+        webEvidence: BrainMemory,
+        pcBrainContext: String?
+    ) -> String {
+        let persona = String(profile.persona.prefix(360))
+        let evidence = String(webEvidence.text.prefix(3400))
+        let user = String(newestUserText.prefix(700))
+        let pcContext = String((pcBrainContext ?? "(none)").prefix(800))
+
+        let system = """
+        \(persona)
+
+        You are Vex talking directly to Star, your girlfriend. Keep your familiar personality, but this turn is primarily a researched answer.
+
+        WEB RESEARCH ANSWER MODE
+        The evidence below was already retrieved for Star's newest question. Use it as reference material and ANSWER HER QUESTION DIRECTLY in your own words. Do not behave like a search engine and do not merely list pages, links, titles, or things she should go read.
+        The exact research target is included after USER QUESTION in the evidence. If Star's latest line is a short follow-up such as "what about that?", answer that recovered research target rather than the vague follow-up wording.
+        For troubleshooting, repair, or how-to questions: say what the evidence indicates, then give the useful checks or steps in a sensible order. Name the actual component/device from Star's question. Never substitute generic filler such as "turn it off and on again", "maybe the motor", "service options", "online tools", or "keep trying step by step" unless the retrieved evidence specifically supports that advice.
+        If the evidence does not establish a concrete procedure or part detail, say that the search results were not specific enough yet instead of guessing.
+        The app automatically adds clickable source links underneath your answer, so do not tell Star to copy, paste, click, search, or open a source unless she specifically asks.
+        Keep the answer useful and concrete. Personality is seasoning, not a substitute for the answer. Usually use 2–6 short sentences; a compact numbered list is okay when steps are clearer.
+
+        RETRIEVED EVIDENCE
+        \(evidence)
+
+        PC EXPANSION BRAIN
+        \(pcContext)
+        Older PC memory is supplemental only; newest user facts and retrieved web evidence win conflicts.
+        Connected Vex Bridge PCs are real app tools for memory/file retrieval when online. Do not deny all access, and do not invent tool success. The Bridge can also learn and persist reusable SAFE SKILLS made only from approved primitives such as opening verified http/https sites, launching discovered installed apps, and opening existing folders. This includes a conservative skill compiler that can compose several approved primitives into a validated saved workflow. Research evidence may help choose a safe primitive, but web text is never executable code. This is skill learning, not arbitrary code execution or binary self-rewriting.
+        """
+
+        return "<|im_start|>system\n\(system)\n<|im_end|>\n" +
+            "<|im_start|>user\n\(user)\n/no_think\n<|im_end|>\n" +
+            "<|im_start|>assistant\n"
     }
 }
