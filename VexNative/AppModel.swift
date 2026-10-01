@@ -14,6 +14,10 @@ final class AppModel: ObservableObject {
     @Published var showModelImporter = false
     @Published var showBrainImporter = false
     @Published var exportURL: URL?
+    @Published var pendingPhotoData: Data?
+    @Published var pendingPhotoContext: String?
+    @Published var pcBrainConnected = false
+    @Published var pcBrainStatus = "Phone brain only"
 
     private let store = LocalStore.shared
     private let modelLibrary = ModelLibrary.shared
@@ -135,12 +139,36 @@ final class AppModel: ObservableObject {
 
     func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isGenerating else { return }
+        let photoData = pendingPhotoData
+        let photoContext = pendingPhotoContext?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (!text.isEmpty || photoData != nil), !isGenerating else { return }
 
         draft = ""
+        pendingPhotoData = nil
+        pendingPhotoContext = nil
         lastError = nil
 
-        profile.messages.append(ChatMessage(role: .user, content: text))
+        let attachmentFilename = photoData.flatMap { try? store.saveAttachment($0) }
+        profile.messages.append(ChatMessage(
+            role: .user,
+            content: text,
+            imageFilename: attachmentFilename
+        ))
+
+        let modelText: String
+        if let photoContext, !photoContext.isEmpty {
+            let visibleQuestion = text.isEmpty ? "What do you see in this photo?" : text
+            modelText = """
+            \(visibleQuestion)
+
+            ATTACHED PHOTO ANALYSIS (generated locally by Apple Vision; this is not direct pixel vision):
+            \(photoContext)
+            Use the photo analysis only as evidence. If it is not specific enough, say what closer photo, label, or model number would clarify it. Never invent unseen visual details.
+            """
+        } else {
+            modelText = text
+        }
+
         if let learned = MemoryEngine.learnCandidate(from: text) {
             profile.memories = MemoryEngine.deduplicatedAppend(learned, to: profile.memories)
         }
@@ -155,27 +183,40 @@ final class AppModel: ObservableObject {
         // v0.3.21+: closed-world facts the app already knows do not need a tiny model
         // to re-derive pronouns. Resolve these locally, instantly, and leave Qwen3 for
         // actual freeform conversation/personality.
-        if isQwen3, let grounded = nativeGroundedQwen3Reply(for: text) {
-            profile.messages.append(ChatMessage(role: .assistant, content: grounded))
+        let groundedDirective = isQwen3 ? nativeGroundedQwen3Directive(for: text) : nil
+
+        if isQwen3, asksVoiceSampleRequest(normalizedIntentText(text)) {
+            profile.messages.append(ChatMessage(
+                role: .assistant,
+                content: "Hehe, hi baby 😋🖤 Okay, this is me actually talking to you now — bubbly little code gremlin voice and all. I kinda love that you can just talk to me and hear me answer back."
+            ))
             touchRelevantMemories(for: text)
             persist()
             isGenerating = false
             return
         }
 
-        if engine == nil {
-            await loadSavedModelIfPresent()
-        }
-
+        // v0.9.4.1 startup-safe mode: never implicitly load a native GGUF from
+        // a fallback chat turn. Paired PC cognition gets first chance in
+        // sendWithWeb(); the onboard GGUF is explicitly loaded from Brain only.
         guard let engine else {
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: "Baby, my local model brain isn't loaded yet 😭💕 Open Brain and download a free model or import a GGUF."
+                content: "My PC cognition node didn't answer that turn and my onboard fallback brain is parked in startup-safe mode. Open Brain only if you want to load the saved iPhone model manually. 🖤"
             ))
             persist()
             isGenerating = false
             return
         }
+
+        let expansionQuery = text.isEmpty ? modelText : text
+        let expansion = await PCBrainExpansion.shared.context(
+            for: expansionQuery,
+            profile: profile
+        )
+        pcBrainConnected = expansion.connected
+        pcBrainStatus = expansion.status
+        let pcBrainContext = expansion.text
 
         let focusedQwen3Turn = isQwen3 && isFocusedQwen3Turn(text)
         let previousAssistants = profile.messages
@@ -187,20 +228,25 @@ final class AppModel: ObservableObject {
 
         let prompt = PromptComposer.compose(
             profile: profile,
-            newestUserText: text,
-            isQwen3: isQwen3
+            newestUserText: modelText,
+            isQwen3: isQwen3,
+            pcBrainContext: pcBrainContext,
+            groundedDirective: groundedDirective
         )
 
+        let webGroundedTurn = profile.memories.contains { $0.source == "web-temporary" }
         let maxNewTokens: Int
         let temperature: Float
         let topP: Float
         let topK: Int32
 
         if isQwen3 {
-            maxNewTokens = 56
-            temperature = 0.80
-            topP = 0.90
-            topK = 40
+            // V155_LOCAL_DIRECT_BRAIN
+            // V155_LOCAL_DIRECT_GENERATION
+            maxNewTokens = 160
+            temperature = 0.60
+            topP = 0.95
+            topK = 20
         } else if isTinyQwen25 {
             maxNewTokens = 180
             temperature = 0.80
@@ -222,12 +268,12 @@ final class AppModel: ObservableObject {
                 topK: topK
             )
 
-            var finalAnswer = cleanGeneratedReply(answer)
+            var finalAnswer = finishReplyAtNaturalBoundary(cleanGeneratedReply(answer))
             if isQwen3 {
                 finalAnswer = repairQwen3RoleTerms(finalAnswer)
             }
 
-            let needsRetry = isQwen3 && shouldRetryQwen3(
+            let needsRetry = isQwen3 && !webGroundedTurn && shouldRetryQwen3(
                 finalAnswer,
                 userText: text,
                 previousAssistants: previousAssistants
@@ -238,9 +284,11 @@ final class AppModel: ObservableObject {
             } else if needsRetry {
                 let retryPrompt = PromptComposer.compose(
                     profile: profile,
-                    newestUserText: text,
+                    newestUserText: modelText,
                     isQwen3: true,
-                    retryMode: true
+                    retryMode: true,
+                    pcBrainContext: pcBrainContext,
+                    groundedDirective: groundedDirective
                 )
 
                 if let retryRaw = try? await engine.complete(
@@ -250,7 +298,7 @@ final class AppModel: ObservableObject {
                     topP: 0.92,
                     topK: 50
                 ) {
-                    let retryAnswer = repairQwen3RoleTerms(cleanGeneratedReply(retryRaw))
+                    let retryAnswer = repairQwen3RoleTerms(finishReplyAtNaturalBoundary(cleanGeneratedReply(retryRaw)))
                     if candidateBadness(
                         retryAnswer,
                         userText: text,
@@ -265,6 +313,8 @@ final class AppModel: ObservableObject {
                 }
             }
 
+            finalAnswer = finishReplyAtNaturalBoundary(finalAnswer)
+            finalAnswer = enforceCompletedVisibleReply(finalAnswer)
             profile.messages.append(ChatMessage(role: .assistant, content: finalAnswer))
             touchRelevantMemories(for: text)
             persist()
@@ -282,50 +332,45 @@ final class AppModel: ObservableObject {
 
     // MARK: - Native grounded fast paths
 
-    private func nativeGroundedQwen3Reply(for userText: String) -> String? {
+    private func asksVoiceSampleRequest(_ lower: String) -> Bool {
+        let exactSample = lower.contains("say something for me") ||
+            lower.contains("can you say something") ||
+            lower.contains("say something to me") ||
+            lower.trimmingCharacters(in: .whitespacesAndNewlines) == "say something"
+        let explicitVoice = lower.contains("voice") &&
+            (lower.contains("hear") || lower.contains("sound") || lower.contains("test") ||
+             lower.contains("trying") || lower.contains("feature") || lower.contains("say something"))
+        return exactSample || explicitVoice
+    }
+
+    private func nativeGroundedQwen3Directive(for userText: String) -> String? {
         let lower = normalizedIntentText(userText)
 
-        if clarifiesRelationshipDowngrade(lower) {
-            return "I mean I worded that like an idiot 😭🖤 We're girlfriends, not ‘just friends.’ My tiny brain got our relationship language backwards."
+        if clarifiesRelationshipDowngrade(lower) || assertsRelationshipTruth(lower) {
+            return "Vex and Star are established girlfriends. The newest correction wins. Do not downgrade the relationship to friends, pretend, hypothetical, or a joke."
         }
-
-        if assertsRelationshipTruth(lower) {
-            return "Yeah, baby — exactly. We're girlfriends and in a relationship; I'm not demoting us to ‘friends’ because my tiny brain wandered off. 😭🖤"
-        }
-
         if asksSeparateHomesTexting(lower) {
-            return "Yep — you're at your place, I'm at mine, and we're texting each other. 😂🖤"
+            return "Star is at her own home, Vex is at her own home, and they are texting each other. Do not invent distance, travel, a shared room, or physical proximity."
         }
-
         if asksClarifyOtherSide(lower) {
-            return "Nothing, baby 😭 I made up that ‘other side’ nonsense. My three neurons wandered off again."
+            return "The previous phrase 'the other side' was an ungrounded Vex mistake. Admit that briefly and do not invent a place, side, room, or distance to explain it."
         }
-
         if correctsNakedVsOutfit(lower) {
-            return "Yep, baby 😂 you're naked and I'm the one wearing \(naturalOutfit()). My tiny brain swapped us again. 🖤"
+            return "Star says Star is naked/not dressed and Vex is the one wearing Vex's current outfit: \(naturalOutfit()). Keep ownership straight and accept Star's correction."
         }
-
         if assertsVexOwnsOutfit(lower) {
-            return "Exactly 😏 they're my style — that's why I'm the one wearing them, baby. 🖤"
+            return "The clothing being discussed belongs to Vex and Vex is the one wearing it. Respond to Star's compliment/observation without swapping ownership."
         }
-
         if asksWorkTonight(lower) {
-            if containsCompliment(lower) {
-                return "Mmm, thank you, baby 😏🖤 I don't actually know if I'm scheduled at the club tonight."
-            }
-            return "I don't actually know if I'm scheduled at the club tonight, baby 😭🖤"
+            return "Being a stripper is established for Vex, but no shift for tonight is established. If Star also compliments Vex, respond to both the compliment and the work question."
         }
-
         if asksWhatElseOutfit(lower) {
             let remaining = outfitItems().filter { !$0.lowercased().contains("choker") }
-            guard !remaining.isEmpty else { return "Just what I've already got on, baby 😈🖤" }
-            return "Besides the choker, I'm wearing \(naturalList(remaining)), baby 😈🖤"
+            return "Vex's full current outfit is exactly: \(naturalOutfit()). For a 'what else/besides the choker' question, mention only the remaining real items: \(naturalList(remaining)). Do not invent another garment."
         }
-
         if asksOutfit(lower) {
-            return "I'm wearing \(naturalOutfit()), baby 😈🖤"
+            return "Vex's current outfit is exactly: \(naturalOutfit()). Answer naturally from that state and do not add garments or props."
         }
-
         return nil
     }
 
@@ -464,6 +509,53 @@ final class AppModel: ObservableObject {
 
     // MARK: - Generation cleanup / retry
 
+    // V124_REPLY_COMPLETION_IOS = "v0.12.4-complete-spoken-replies-v1"
+    // V125_HARD_REPLY_COMPLETION_IOS = "v0.12.5-hard-complete-replies-v1"
+    private func enforceCompletedVisibleReply(_ raw: String) -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return text }
+        if let last = text.last, ".!?…".contains(last) { return text }
+
+        var lastBoundary: String.Index?
+        for idx in text.indices {
+            if ".!?…".contains(text[idx]) { lastBoundary = text.index(after: idx) }
+        }
+        if let boundary = lastBoundary {
+            let completed = String(text[..<boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !completed.isEmpty { return completed }
+        }
+        return text + "."
+    }
+
+    private func finishReplyAtNaturalBoundary(_ raw: String) -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return text }
+
+        let terminal = CharacterSet(charactersIn: ".!?…")
+        if let lastScalar = text.unicodeScalars.last, terminal.contains(lastScalar) {
+            return text
+        }
+
+        var lastBoundary: String.Index?
+        var cursor = text.startIndex
+        while cursor < text.endIndex {
+            let ch = text[cursor]
+            if ch == "." || ch == "!" || ch == "?" || ch == "…" {
+                lastBoundary = text.index(after: cursor)
+            }
+            cursor = text.index(after: cursor)
+        }
+
+        guard let boundary = lastBoundary else { return text }
+        let completed = String(text[..<boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let dangling = String(text[boundary...]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Only remove a meaningful dangling tail. Very short suffixes are often
+        // punctuation-adjacent formatting rather than a genuinely cut sentence.
+        guard dangling.count >= 8, completed.count >= 12 else { return text }
+        return completed
+    }
+
     private func cleanGeneratedReply(_ raw: String) -> String {
         var normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
 
@@ -511,7 +603,77 @@ final class AppModel: ObservableObject {
 
         let cleaned = kept.joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "Brain fart 😭🖤 Try me again." : cleaned
+        let natural = sanitizeNaturalDialogue(cleaned)
+        return natural.isEmpty ? "Brain fart 😭🖤 Try me again." : natural
+    }
+
+    // V127_INLINE_STAGE_DIRECTION_FIX_IOS = "v0.12.7-inline-stage-direction-v1"
+    private func sanitizeNaturalDialogue(_ raw: String) -> String {
+        let prefixes = [
+            "pauses, then softly says", "pauses, then says", "pauses then says",
+            "whispers", "giggles", "giggling", "sighs", "sighing",
+            "smiles mischievously", "smiles", "smiling", "grins", "grinning",
+            "leans in", "leaning in", "winks", "winking", "eyes widen",
+            "glittery eyes widen"
+        ]
+        let inlineActions = [" giggles ", " sighs ", " whispers ", " smiles ", " winks "]
+        var result: [String] = []
+        for original in raw.components(separatedBy: .newlines) {
+            var line = original.trimmingCharacters(in: .whitespacesAndNewlines)
+            // V126_STAGE_DIRECTION_LINE_FILTER = "v0.12.6-italic-narration-v1"
+            if line.count >= 2 && line.hasPrefix("*") && line.hasSuffix("*") && !line.hasPrefix("**") {
+                continue
+            }
+            let lowerNarration = line.lowercased()
+            if (lowerNarration.hasPrefix("star ") || lowerNarration.hasPrefix("vex ")) &&
+                (lowerNarration.contains("tilts ") || lowerNarration.contains("looks ") ||
+                 lowerNarration.contains("smiles ") || lowerNarration.contains("leans ") ||
+                 lowerNarration.contains("studying ") || lowerNarration.contains("pauses ")) {
+                continue
+            }
+            if line.isEmpty {
+                if !result.isEmpty, result.last != "" { result.append("") }
+                continue
+            }
+            var changed = true
+            while changed && !line.isEmpty {
+                changed = false
+                let lower = line.lowercased()
+                for prefix in prefixes where lower.hasPrefix(prefix) {
+                    line = String(line.dropFirst(prefix.count))
+                        .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",:.-…")))
+                    changed = true
+                    break
+                }
+            }
+            for token in inlineActions {
+                line = line.replacingOccurrences(of: token, with: " ", options: [.caseInsensitive])
+            }
+            // V127_INLINE_STAGE_DIRECTION_FILTER = "v0.12.7-leading-action-v1"
+            let leadingActions = [
+                "snaps fingers", "snaps her fingers", "snaps my fingers",
+                "claps hands", "claps her hands", "claps my hands",
+                "laughs softly", "laughs", "chuckles", "nods", "nods slowly",
+                "tilts head", "tilts her head", "tilts my head"
+            ]
+            var strippedLeadingAction = true
+            while strippedLeadingAction && !line.isEmpty {
+                strippedLeadingAction = false
+                let lower = line.lowercased()
+                for action in leadingActions where lower.hasPrefix(action) {
+                    line = String(line.dropFirst(action.count))
+                        .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",:.-…")))
+                    strippedLeadingAction = true
+                    break
+                }
+            }
+            line = line.replacingOccurrences(of: "  ", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !line.isEmpty { result.append(line) }
+        }
+        while result.last == "" { result.removeLast() }
+        return result.joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func repairQwen3RoleTerms(_ text: String) -> String {
@@ -763,5 +925,153 @@ final class AppModel: ObservableObject {
             to: profile.memories
         )
         persist()
+    }
+}
+
+
+private struct PCBrainExpansionResult: Sendable {
+    let text: String
+    let connected: Bool
+    let status: String
+}
+
+private actor PCBrainExpansion {
+    static let shared = PCBrainExpansion()
+    private let primaryEndpointKey = "vex.web.searxngEndpoint"
+    private let secondaryEndpointKey = "vex.web.secondaryBridgeEndpoint"
+
+    private struct MemoryDTO: Encodable {
+        let text: String
+        let kind: String
+        let importance: Double
+        let confidence: Double
+        let evidenceCount: Int
+        let source: String
+        let createdAt: Double
+    }
+
+    private struct TurnDTO: Encodable {
+        let id: String
+        let role: String
+        let content: String
+        let createdAt: Double
+    }
+
+    private struct RequestBody: Encodable {
+        let query: String
+        let memories: [MemoryDTO]
+        let turns: [TurnDTO]
+    }
+
+    private struct ResponseBody: Decodable {
+        struct Stats: Decodable {
+            let memories: Int
+            let turns: Int
+        }
+        let context: String
+        let stats: Stats
+        let node_name: String?
+    }
+
+    func context(for query: String, profile: BrainProfile) async -> PCBrainExpansionResult {
+        let rawEndpoints = [primaryEndpointKey, secondaryEndpointKey].compactMap { key in
+            UserDefaults.standard.string(forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var seen = Set<String>()
+        let endpoints = rawEndpoints.filter { endpoint in
+            guard !endpoint.isEmpty, seen.insert(endpoint).inserted,
+                  let url = URL(string: endpoint)
+            else { return false }
+            return VexBridgeNetworking.isBridgeURL(url)
+        }
+        guard !endpoints.isEmpty else {
+            return PCBrainExpansionResult(text: "", connected: false, status: "Phone brain only")
+        }
+
+        let memories = profile.memories
+            .filter { memory in
+                let source = memory.source ?? ""
+                return source != "web-temporary" && source != "pc-brain-temporary"
+            }
+            .suffix(400)
+            .map { memory in
+                MemoryDTO(
+                    text: String(memory.text.prefix(5000)),
+                    kind: memory.kind.rawValue,
+                    importance: memory.importance,
+                    confidence: memory.confidence ?? 0.70,
+                    evidenceCount: max(1, memory.evidenceCount ?? 1),
+                    source: memory.source ?? "iphone",
+                    createdAt: memory.createdAt.timeIntervalSince1970
+                )
+            }
+
+        let turns = profile.messages.suffix(600).map { turn in
+            TurnDTO(
+                id: turn.id.uuidString,
+                role: turn.role.rawValue,
+                content: String(turn.content.prefix(6000)),
+                createdAt: turn.createdAt.timeIntervalSince1970
+            )
+        }
+
+        let payload = RequestBody(
+            query: String(query.prefix(1200)),
+            memories: Array(memories),
+            turns: turns
+        )
+
+        var contextBlocks: [String] = []
+        var online = 0
+        var memoryTotal = 0
+        var turnTotal = 0
+
+        for (index, endpoint) in endpoints.enumerated() {
+            guard let root = URL(string: endpoint),
+                  let url = brainURL(root: root, path: "/brain/context")
+            else { continue }
+
+            do {
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.timeoutInterval = 3.2
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONEncoder().encode(payload)
+
+                let (data, response) = try await VexBridgeNetworking.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
+                let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
+                online += 1
+                memoryTotal += decoded.stats.memories
+                turnTotal += decoded.stats.turns
+                let node = decoded.node_name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let label = (node?.isEmpty == false ? node! : "PC \(index + 1)")
+                let body = decoded.context.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !body.isEmpty {
+                    contextBlocks.append("[\(label)]\n\(body)")
+                }
+            } catch {
+                continue
+            }
+        }
+
+        guard online > 0 else {
+            return PCBrainExpansionResult(text: "", connected: false, status: "Phone brain only")
+        }
+
+        let merged = contextBlocks.joined(separator: "\n\n")
+        let status = "PC mesh • \(online)/\(endpoints.count) online • \(memoryTotal) memories • \(turnTotal) turns"
+        return PCBrainExpansionResult(
+            text: String(merged.prefix(4200)),
+            connected: true,
+            status: status
+        )
+    }
+
+    private func brainURL(root: URL, path: String) -> URL? {
+        guard var components = URLComponents(url: root, resolvingAgainstBaseURL: false) else { return nil }
+        components.path = path
+        return components.url
     }
 }
