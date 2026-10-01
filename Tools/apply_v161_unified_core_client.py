@@ -133,11 +133,11 @@ if panel_anchor not in text:
     raise SystemExit("v0.16.1 panel shared-client anchor missing")
 text = text.replace(panel_anchor, panel_new, 1)
 
-content_state = '''struct ContentView: View {
+content_state = '''struct VexChatView: View {
     @EnvironmentObject private var app: AppModel
     @StateObject private var web = WebBrain.shared
 '''
-content_state_new = '''struct ContentView: View {
+content_state_new = '''struct VexChatView: View {
     @EnvironmentObject private var app: AppModel
     @StateObject private var web = WebBrain.shared
     @StateObject private var core = VexNativeA2AClient.shared
@@ -147,13 +147,13 @@ if content_state not in text:
 text = text.replace(content_state, content_state_new, 1)
 
 task_anchor = '''        .task {
-            await app.loadSavedModelIfPresent()
-        }
+            // v0.9.4.1 startup-safe mode: onboard GGUF is manual-only.
+            voice.onCommand = { command in
 '''
 task_new = '''        .task {
-            await app.loadSavedModelIfPresent()
             await core.refresh()
-        }
+            // v0.9.4.1 startup-safe mode: onboard GGUF is manual-only.
+            voice.onCommand = { command in
 '''
 if task_anchor not in text:
     raise SystemExit("v0.16.1 startup task anchor missing")
@@ -184,23 +184,10 @@ if status_anchor not in text:
     raise SystemExit("v0.16.1 top status anchor missing")
 text = text.replace(status_anchor, status_new, 1)
 
-metric_anchor = '''            HStack(spacing: 12) {
-                VexMetricCard(
-                    title: "A2A",
-                    value: client.online ? "Online" : "Offline",
-                    detail: client.online ? "\(client.agentCount) agents" : "Refresh to reconnect",
-                    active: client.online
-                )
-                VexMetricCard(
-                    title: "Autonomy",
-                    value: client.autonomyEnabled ? (client.autonomyRunning ? "Running" : "Enabled") : "Paused",
-                    detail: "Goals \(client.goalSummary)\nWork \(client.workSummary)",
-                    active: client.autonomyEnabled
-                )
-            }
+metric_anchor = '''            VStack(alignment: .leading, spacing: 5) {
+                Text("Latest goal")
 '''
-metric_new = metric_anchor + '''
-            HStack(spacing: 12) {
+metric_new = '''            HStack(spacing: 12) {
                 VexMetricCard(
                     title: "Core",
                     value: client.brainMode,
@@ -214,25 +201,26 @@ metric_new = metric_anchor + '''
                     active: client.rendererSummary == "Ready"
                 )
             }
-'''
+
+''' + metric_anchor
 if metric_anchor not in text:
     raise SystemExit("v0.16.1 metrics anchor missing")
 text = text.replace(metric_anchor, metric_new, 1)
-chat_anchor = '''    func sendWithWeb() async {
-        let original = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !original.isEmpty, !isGenerating else { return }
+chat_anchor = '''        if await PhoneToolRouter.tryHandle(original, app: self) {
+            return
+        }
 
-        let web = WebBrain.shared
+        if await PCArtRouter.tryHandle(original, app: self) {
 '''
-chat_new = '''    func sendWithWeb() async {
-        let original = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !original.isEmpty, !isGenerating else { return }
+chat_new = '''        if await PhoneToolRouter.tryHandle(original, app: self) {
+            return
+        }
 
         let core = VexNativeA2AClient.shared
         if !core.online {
             await core.refresh()
         }
-        if core.online {
+        if core.online, pendingPhotoData == nil {
             isGenerating = true
             if let answer = await core.answer(original, quiet: true) {
                 draft = ""
@@ -249,7 +237,7 @@ chat_new = '''    func sendWithWeb() async {
             isGenerating = false
         }
 
-        let web = WebBrain.shared
+        if await PCArtRouter.tryHandle(original, app: self) {
 '''
 if chat_anchor not in text:
     raise SystemExit("v0.16.1 main-chat anchor missing")
