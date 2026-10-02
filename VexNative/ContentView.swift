@@ -5435,7 +5435,7 @@ private final class VexNativeA2AClient: ObservableObject {
         }.first
 
         var ordered: [String] = []
-        for raw in [discovered, secondary, primary, cognition] {
+        for raw in [primary, cognition, discovered, secondary] {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty && !ordered.contains(trimmed) {
                 ordered.append(trimmed)
