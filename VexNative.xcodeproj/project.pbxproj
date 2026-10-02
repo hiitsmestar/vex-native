@@ -20,6 +20,7 @@
 		A000000000000000000004A /* BrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000002A /* BrainView.swift */; };
 		A000000000000000000004B /* VexVoiceIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000002B /* VexVoiceIntents.swift */; };
 		A000000000000000000004C /* VexBackgroundAgent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000002C /* VexBackgroundAgent.swift */; };
+		A000000000000000000004D /* AP71Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A000000000000000000002D /* AP71Controller.swift */; };
 		A00000000000000000000011 /* LlamaKit in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000010 /* LlamaKit */; };
 /* End PBXBuildFile section */
 
@@ -37,6 +38,7 @@
 		A000000000000000000002A /* BrainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainView.swift; sourceTree = "<group>"; };
 		A000000000000000000002B /* VexVoiceIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VexVoiceIntents.swift; sourceTree = "<group>"; };
 		A000000000000000000002C /* VexBackgroundAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VexBackgroundAgent.swift; sourceTree = "<group>"; };
+		A000000000000000000002D /* AP71Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AP71Controller.swift; sourceTree = "<group>"; };
 		A00000000000000000000005 /* VexNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VexNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -77,6 +79,7 @@
 				A0000000000000000000023 /* ContentView.swift */,
 				A000000000000000000002B /* VexVoiceIntents.swift */,
 				A000000000000000000002C /* VexBackgroundAgent.swift */,
+				A000000000000000000002D /* AP71Controller.swift */,
 				A00000000000000000000013 /* Core */,
 				A00000000000000000000014 /* Storage */,
 				A00000000000000000000015 /* Views */,
@@ -199,6 +202,7 @@
 				A000000000000000000004A /* BrainView.swift in Sources */,
 				A000000000000000000004B /* VexVoiceIntents.swift in Sources */,
 				A000000000000000000004C /* VexBackgroundAgent.swift in Sources */,
+				A000000000000000000004D /* AP71Controller.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -243,12 +247,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 161;
+				CURRENT_PROJECT_VERSION = 162;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vex;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -257,7 +264,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.16.1;
+				MARKETING_VERSION = 0.16.2;
 				PRODUCT_BUNDLE_IDENTIFIER = local.star.vexnative;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -272,10 +279,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 161;
+				CURRENT_PROJECT_VERSION = 162;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vex;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -284,7 +294,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.16.1;
+				MARKETING_VERSION = 0.16.2;
 				PRODUCT_BUNDLE_IDENTIFIER = local.star.vexnative;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
