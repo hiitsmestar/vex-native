@@ -10,6 +10,7 @@ struct VexChatView: View {
     @EnvironmentObject private var app: AppModel
     @StateObject private var web = WebBrain.shared
     @StateObject private var core = VexNativeA2AClient.shared
+    @StateObject private var ap71 = AP71Controller.shared
     @StateObject private var voice = VoiceConversationController()
     @State private var showVoiceSettings = false
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -125,6 +126,23 @@ struct VexChatView: View {
             }
 
             Spacer(minLength: 8)
+
+            Menu {
+                Text("AP71 • \(ap71.deviceState)")
+                Button("Connect AP71") { ap71.connect() }
+                Button("Low") { ap71.setIntensity(2) }
+                Button("Medium") { ap71.setIntensity(5) }
+                Button("High") { ap71.setIntensity(9) }
+                Button("STOP", role: .destructive) { ap71.stop() }
+            } label: {
+                Image(systemName: ap71.deviceState == "Connected" ? "wave.3.right.circle.fill" : "wave.3.right.circle")
+                    .font(.title3)
+                    .foregroundStyle(ap71.deviceState == "Connected" ? Color.green : VexTheme.hotPink)
+                    .frame(width: 40, height: 40)
+                    .background(.white.opacity(0.07))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("AP71 control")
 
             Button {
                 app.showBrain = true
