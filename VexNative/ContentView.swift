@@ -147,13 +147,11 @@ struct VexChatView: View {
     private var statusStrip: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(app.modelStatus.hasPrefix("Loaded") ? Color.green : VexTheme.hotPink)
+                .fill(core.online ? Color.green : Color.orange)
                 .frame(width: 8, height: 8)
 
-            Text(app.modelStatus)
+            Text(core.online ? "Online" : "Offline")
                 .font(.caption)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
                 .foregroundStyle(VexTheme.muted)
 
             if web.isWorking {
