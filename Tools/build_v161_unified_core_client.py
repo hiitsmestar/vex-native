@@ -1,3 +1,4 @@
+# UI_HEADER_RESTORE_2026_10_02_CURRENT_BUILD
 # FINAL_REBUILD_LOCAL_FIRST_2026_10_02
 # UTF8_UI_REPAIR_2026_10_02
 # Rebuild trigger 2026-10-02: package corrected v0.16.1 source after relay/UI recovery.
