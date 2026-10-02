@@ -1,0 +1,52 @@
+name: Build VexNative v0.16.1 Fast Clean Repair
+
+on:
+  push:
+    branches: [ "repair/v161-fast-clean-20261002" ]
+    paths:
+      - "VexNative/**"
+      - "VexNative.xcodeproj/**"
+      - "Tools/build_v161_unified_core_client.py"
+      - ".github/workflows/build-v161-fast-clean.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-fast-clean:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+      - name: Assemble v0.16.1
+        run: python3 Tools/build_v161_unified_core_client.py
+      - name: Resolve packages
+        run: xcodebuild -project VexNative.xcodeproj -scheme VexNative -resolvePackageDependencies
+      - name: Build
+        run: |
+          set -o pipefail
+          rm -rf "$RUNNER_TEMP/VexDerivedData"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=161 MARKETING_VERSION=0.16.1 build | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Package
+        run: |
+          APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
+          test -n "$APP_PATH"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.16.1-fast-clean.ipa" Payload
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.16.1-Fast-Clean
+          path: VexNative-v0.16.1-fast-clean.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: VexNative-v0.16.1-fast-clean-build-log
+          path: $RUNNER_TEMP/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
