@@ -390,12 +390,6 @@ enum VexPhoneBackgroundWorker {
         let lower = command.lowercased()
         let wantsOpen = ["open ", "open up ", "launch ", "go to ", "bring up ", "show me "]
             .contains(where: { lower.contains($0) })
-        if lower.contains("vexrecall60") {
-            var components = URLComponents(string: "https://chatgpt.com/")!
-            components.queryItems = [URLQueryItem(name: "prompt", value: command)]
-            return components.url
-        }
-
         guard wantsOpen else { return nil }
 
         let known: [(String, String)] = [
@@ -502,6 +496,9 @@ enum VexPhoneBackgroundWorker {
             else { return }
 
             UserDefaults.standard.set(raw, forKey: "vex.web.secondaryBridgeEndpoint")
+            UserDefaults.standard.set(raw, forKey: "vex.phone.remoteRelay.discoveredEndpoint")
+            UserDefaults.standard.set(Date(), forKey: "vex.phone.remoteRelay.discoverySuccessAt")
+            UserDefaults.standard.removeObject(forKey: "vex.phone.remoteRelay.discoveryLastError")
             UserDefaults.standard.set(Date(), forKey: "vex.phone.roamingBootstrap.lastUpdate")
             UserDefaults.standard.removeObject(forKey: "vex.phone.roamingBootstrap.lastError")
         } catch {
