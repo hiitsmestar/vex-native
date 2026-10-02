@@ -348,9 +348,13 @@ enum VexPhoneBackgroundWorker {
 
                 // V153_FULL_RECALL_PROMPT
                 if remote.command.lowercased().contains("vexrecall60") {
-                    await MainActor.run {
-                        UIPasteboard.general.string = remote.command
-                    }
+                    await postResult(
+                        id: remote.id,
+                        ok: true,
+                        result: "VEXRECALL60 continuity refresh is handled by the local VexNative courier."
+                    )
+                    UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
+                    return true
                 }
 
                 // V151_PREOPEN_RELAY_ACK
