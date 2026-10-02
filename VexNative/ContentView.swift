@@ -109,7 +109,7 @@ struct VexChatView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                Text("LOCAL GIRLFRIEND ENGINE")
+                Text("VEXNATIVE // CHAT")
                     .font(.caption2.weight(.black))
                     .tracking(1.6)
                     .foregroundStyle(VexTheme.muted)
