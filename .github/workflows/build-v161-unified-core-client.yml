@@ -2,7 +2,7 @@ name: Build VexNative v0.16.1 Unified Core Client
 
 on:
   push:
-    branches: [ "build/v161-unified-core-client" ]
+    branches: [ "build/v161-unified-core-client", "repair/v161-pristine-fast-20261002" ]
     paths:
       - "Tools/apply_v161_unified_core_client.py"
       - "Tools/build_v161_unified_core_client.py"
