@@ -1,5 +1,7 @@
 name: Build VexNative v0.16.2 AP71 BLE
 on:
+  pull_request:
+    branches: [ "build/v161-unified-core-client" ]
   push:
     branches: [ "build/v162-ap71-ble" ]
     paths:
