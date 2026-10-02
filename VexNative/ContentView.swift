@@ -47,7 +47,7 @@ struct VexChatView: View {
                             if app.isGenerating || web.isWorking {
                                 HStack {
                                     ProgressView()
-                                    Text(web.isWorking ? "web brain is lookingâ€¦" : (app.pcBrainConnected ? "PC brain is thinkingâ€¦" : "Vex is thinkingâ€¦"))
+                                    Text(web.isWorking ? "web brain is looking…" : (app.pcBrainConnected ? "PC brain is thinking…" : "Vex is thinking…"))
                                         .font(.caption)
                                         .foregroundStyle(VexTheme.muted)
                                     Spacer()
@@ -118,7 +118,7 @@ struct VexChatView: View {
                 HStack(spacing: 6) {
                     Text("Vex")
                         .font(.largeTitle.bold())
-                    Text("âœ¦")
+                    Text("✦")
                         .font(.title2)
                         .foregroundStyle(VexTheme.hotPink)
                 }
@@ -155,25 +155,25 @@ struct VexChatView: View {
                 .lineLimit(1)
                 .foregroundStyle(VexTheme.muted)
 
-            Text("â€¢ v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))
+            Text("• v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))
                 .font(.caption2)
                 .foregroundStyle(VexTheme.muted)
                 .lineLimit(1)
 
             if web.isWorking {
-                Text("â€¢ ðŸŒ")
+                Text("• 🌐")
                     .font(.caption)
             }
 
             if app.pcBrainConnected {
-                Text("â€¢ ðŸ§  PC")
+                Text("• 🧠 PC")
                     .font(.caption)
                     .foregroundStyle(VexTheme.muted)
             }
 
             if voice.isHandsFree {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(voice.isListening ? "â€¢ ðŸŽ™ï¸ listening" : "â€¢ ðŸ”Š voice")
+                    Text(voice.isListening ? "• 🎙️ listening" : "• 🔊 voice")
                         .font(.caption)
                         .foregroundStyle(voice.isListening ? Color.green : VexTheme.muted)
                     Text(voice.voiceHint)
@@ -203,7 +203,7 @@ struct VexChatView: View {
                         .clipped()
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(isAnalyzingPhoto ? "Looking at photoâ€¦" : "Photo attached")
+                        Text(isAnalyzingPhoto ? "Looking at photo…" : "Photo attached")
                             .font(.caption.weight(.bold))
                         Text(isAnalyzingPhoto ? "reading text + visual clues locally" : "Vex gets local photo context with your message")
                             .font(.caption2)
@@ -286,7 +286,7 @@ struct VexChatView: View {
                 Button {
                     showVoiceSettings = true
                 } label: {
-                    Label("Tune Vex voiceâ€¦", systemImage: "slider.horizontal.3")
+                    Label("Tune Vex voice…", systemImage: "slider.horizontal.3")
                 }
             } label: {
                 Image(systemName: voice.replyMode.symbol)
@@ -299,7 +299,7 @@ struct VexChatView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Vex reply mode: " + voice.replyMode.title)
 
-            TextField("Say something to Vexâ€¦", text: $app.draft)
+            TextField("Say something to Vex…", text: $app.draft)
                     .padding(11)
                     .background(VexTheme.panel)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -371,7 +371,7 @@ struct VexChatView: View {
             await loadPhotoData(data)
         } catch {
             clearPendingPhoto()
-            app.lastError = "I couldn't read that photo ðŸ˜­ðŸ–¤ \(error.localizedDescription)"
+            app.lastError = "I couldn't read that photo 😭🖤 \(error.localizedDescription)"
         }
     }
 
@@ -480,7 +480,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
     @Published private(set) var isListening = false
     @Published private(set) var partialTranscript = ""
     @Published private(set) var lastHeard = ""
-    @Published private(set) var voiceHint = "Just talk â€” Iâ€™m listening"
+    @Published private(set) var voiceHint = "Just talk — I’m listening"
     @Published private(set) var replyMode: ReplyMode = ReplyMode.saved
     @Published private(set) var speechEngine: SpeechEngine = SpeechEngine.saved
     @Published private(set) var neuralVoice: NeuralVoice = NeuralVoice.saved
@@ -521,7 +521,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
         isHandsFree = true
         waitingForReply = false
         lastHeard = ""
-        voiceHint = "Just talk â€” Iâ€™m listening"
+        voiceHint = "Just talk — I’m listening"
         wakeArmedUntil = nil
         do {
             try startListening()
@@ -544,7 +544,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
         synthesizer.stopSpeaking(at: .immediate)
         waitingForReply = false
         stopRecognition()
-        voiceHint = "Interrupted â€” listeningâ€¦"
+        voiceHint = "Interrupted — listening…"
         restartListeningSoon()
     }
 
@@ -780,7 +780,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
             let parsed = Self.commandAfterWakePhrase(raw)
             if parsed == "__WAKE_ONLY__" {
                 wakeArmedUntil = now.addingTimeInterval(8)
-                voiceHint = "Yep? Listening for your commandâ€¦"
+                voiceHint = "Yep? Listening for your command…"
                 restartListeningSoon()
                 return
             }
@@ -791,7 +791,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
         }
 
         guard let command, !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            voiceHint = "Listeningâ€¦"
+            voiceHint = "Listening…"
             restartListeningSoon()
             return
         }
@@ -849,9 +849,9 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
     // V122_SPOKEN_TEXT_SANITIZER = "v0.12.2-stage-direction-filter-v1"
     private static func spokenText(_ raw: String) -> String {
         var text = raw
-        if let range = text.range(of: "ðŸŒ Sources:") { text = String(text[..<range.lowerBound]) }
+        if let range = text.range(of: "🌐 Sources:") { text = String(text[..<range.lowerBound]) }
         if let range = text.range(of: "Sources:") { text = String(text[..<range.lowerBound]) }
-        for emoji in ["ðŸ–¤", "ðŸ’•", "âœ¨", "ðŸ˜­", "ðŸ˜‚", "ðŸ˜ˆ", "ðŸ’‹", "ðŸ¥°", "ðŸ˜‹"] {
+        for emoji in ["🖤", "💕", "✨", "😭", "😂", "😈", "💋", "🥰", "😋"] {
             text = text.replacingOccurrences(of: emoji, with: "")
         }
 
@@ -959,7 +959,7 @@ final class VoiceConversationController: NSObject, ObservableObject, AVSpeechSyn
         speechEngine = engine
         UserDefaults.standard.set(engine.rawValue, forKey: "vex.voice.engine.v1")
         switch engine {
-        case .automatic: voiceHint = "Voice: automatic Bridge â†’ iPhone"
+        case .automatic: voiceHint = "Voice: automatic Bridge → iPhone"
         case .pcNeural: voiceHint = "Voice: Bridge provider"
         case .iphone: voiceHint = "Voice: iPhone local"
         }
@@ -1195,7 +1195,7 @@ struct WebResearchBundle: Sendable {
     var sourceFooter: String {
         let labels = sources.prefix(3).map { source -> String in
             if source.host == "vexbridge.invalid" {
-                return "ðŸ’» \(String(source.title.prefix(54)))"
+                return "💻 \(String(source.title.prefix(54)))"
             }
             let label = String(source.title.prefix(48))
                 .replacingOccurrences(of: "[", with: "(")
@@ -1203,7 +1203,7 @@ struct WebResearchBundle: Sendable {
             return "[\(label)](\(source.url.absoluteString))"
         }
         guard !labels.isEmpty else { return "" }
-        return "ðŸŒ Sources: " + labels.joined(separator: " â€¢ ")
+        return "🌐 Sources: " + labels.joined(separator: " • ")
     }
 
     func groundedProceduralAnswer(userQuestion: String) -> String? {
@@ -1258,7 +1258,7 @@ struct WebResearchBundle: Sendable {
         guard !chosen.isEmpty else { return nil }
         let steps = chosen.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
         return """
-        Baby, I found concrete repair details, so I'm sticking to what the sources actually say instead of guessing ðŸ˜­ðŸ–¤
+        Baby, I found concrete repair details, so I'm sticking to what the sources actually say instead of guessing 😭🖤
 
         \(steps)
 
@@ -1269,7 +1269,7 @@ struct WebResearchBundle: Sendable {
     func memoriesForDeliberateLearning() -> [BrainMemory] {
         sources.prefix(3).map { source in
             BrainMemory(
-                text: "Web-learned source: \(source.title) â€” \(String(source.snippet.prefix(650)))",
+                text: "Web-learned source: \(source.title) — \(String(source.snippet.prefix(650)))",
                 kind: .fact,
                 importance: 0.74,
                 confidence: source.trust,
@@ -1318,7 +1318,7 @@ final class WebBrain: ObservableObject {
     static let secondaryBridgeEndpointKey = "vex.web.secondaryBridgeEndpoint"
 
     @Published var isWorking = false
-    @Published var status = "Ready â€” Wikipedia + direct URLs"
+    @Published var status = "Ready — Wikipedia + direct URLs"
     @Published var lastQuery = ""
     @Published var lastSourceCount = 0
     @Published var lastUsedAt: Date?
@@ -1506,13 +1506,13 @@ final class WebBrain: ObservableObject {
         }
 
         isWorking = true
-        status = "Searchingâ€¦"
+        status = "Searching…"
         lastQuery = query
         defer { isWorking = false }
 
         let sources: [WebSource]
         if let url = firstPublicURL(in: text) {
-            status = "Reading pageâ€¦"
+            status = "Reading page…"
             sources = [try await readPage(url)]
         } else {
             let endpoint = searxEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1520,18 +1520,18 @@ final class WebBrain: ObservableObject {
                 if let endpointURL = URL(string: endpoint), VexBridgeNetworking.isBridgeURL(endpointURL) {
                     lastBridgeScope = scope
                     switch scope {
-                    case .web: status = "Bridge: searching the webâ€¦"
-                    case .pc: status = "Bridge: searching PC filesâ€¦"
-                    case .both: status = "Bridge: searching PC + webâ€¦"
+                    case .web: status = "Bridge: searching the web…"
+                    case .pc: status = "Bridge: searching PC files…"
+                    case .both: status = "Bridge: searching PC + web…"
                     }
                 } else {
-                    status = "Searching the webâ€¦"
+                    status = "Searching the web…"
                 }
                 let searxResults = try await searchBridgeMesh(query: query, primaryEndpoint: endpoint, scope: scope, requestText: text)
                 if !searxResults.isEmpty {
                     sources = searxResults
                 } else if wikipediaEnabled && !needsGeneralSearch(text) {
-                    status = "Trying Wikipediaâ€¦"
+                    status = "Trying Wikipedia…"
                     sources = try await searchWikipedia(query: query)
                 } else {
                     throw WebBrainError.noResults
@@ -1540,7 +1540,7 @@ final class WebBrain: ObservableObject {
                 if needsGeneralSearch(text) {
                     throw WebBrainError.generalSearchNeedsSearXNG
                 }
-                status = "Searching Wikipediaâ€¦"
+                status = "Searching Wikipedia…"
                 sources = try await searchWikipedia(query: query)
             } else {
                 throw WebBrainError.noSearchProvider
@@ -1553,19 +1553,19 @@ final class WebBrain: ObservableObject {
         cacheCount = cache.count
         lastSourceCount = bundle.sources.count
         lastUsedAt = Date()
-        status = "Web ready â€” \(bundle.sources.count) source\(bundle.sources.count == 1 ? "" : "s")"
+        status = "Web ready — \(bundle.sources.count) source\(bundle.sources.count == 1 ? "" : "s")"
         return bundle
     }
 
     func testWikipedia() async {
         isWorking = true
-        status = "Testing Wikipediaâ€¦"
+        status = "Testing Wikipedia…"
         defer { isWorking = false }
         do {
             let results = try await searchWikipedia(query: "artificial intelligence")
             lastSourceCount = results.count
             lastUsedAt = Date()
-            status = results.isEmpty ? "Wikipedia returned no results" : "Wikipedia connected âœ“"
+            status = results.isEmpty ? "Wikipedia returned no results" : "Wikipedia connected ✓"
         } catch {
             status = "Wikipedia test failed: \(error.localizedDescription)"
         }
@@ -2126,8 +2126,8 @@ final class WebBrain: ObservableObject {
 
     private func normalize(_ text: String) -> String {
         text.lowercased()
-            .replacingOccurrences(of: "â€™", with: "'")
-            .replacingOccurrences(of: "â€˜", with: "'")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‘", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -2158,7 +2158,7 @@ enum PhoneToolRouter {
         if isCapabilityQuestion(lower) {
             appendExchange(
                 user: original,
-                assistant: "On this iPhone I can directly use the Vex app's granted iOS capabilities, open apps/sites through iOS, open Vex Settings, set screen brightness, control the flashlight, use camera/photos inside Vex, use mic/speech, speak replies, and use the clipboard. Apple still sandboxes third-party apps, so iOS does not expose arbitrary silent control of every system switch or every other app. For the paired Windows PCs my Bridge can do much more because the companion agent runs on those machines. ðŸ“±ðŸ–¥ï¸ðŸ–¤",
+                assistant: "On this iPhone I can directly use the Vex app's granted iOS capabilities, open apps/sites through iOS, open Vex Settings, set screen brightness, control the flashlight, use camera/photos inside Vex, use mic/speech, speak replies, and use the clipboard. Apple still sandboxes third-party apps, so iOS does not expose arbitrary silent control of every system switch or every other app. For the paired Windows PCs my Bridge can do much more because the companion agent runs on those machines. 📱🖥️🖤",
                 app: app
             )
             return true
@@ -2166,18 +2166,18 @@ enum PhoneToolRouter {
 
         if lower.contains("settings") {
             let ok = await openURL(URL(string: UIApplication.openSettingsURLString)!)
-            appendExchange(user: original, assistant: ok ? "Done â€” I opened my iPhone settings, baby. ðŸ“±ðŸ–¤" : "iOS didn't open Settings for me, baby. ðŸ–¤", app: app)
+            appendExchange(user: original, assistant: ok ? "Done — I opened my iPhone settings, baby. 📱🖤" : "iOS didn't open Settings for me, baby. 🖤", app: app)
             return true
         }
 
         if lower.contains("brightness") {
             guard let percent = firstNumber(in: lower) else {
-                appendExchange(user: original, assistant: "Give me a brightness percentage from 0 to 100, baby. ðŸ“±ðŸ–¤", app: app)
+                appendExchange(user: original, assistant: "Give me a brightness percentage from 0 to 100, baby. 📱🖤", app: app)
                 return true
             }
             let clamped = max(0, min(100, percent))
             UIScreen.main.brightness = CGFloat(clamped / 100.0)
-            appendExchange(user: original, assistant: "Done â€” iPhone brightness is at \(Int(clamped.rounded()))%. ðŸ“±ðŸ–¤", app: app)
+            appendExchange(user: original, assistant: "Done — iPhone brightness is at \(Int(clamped.rounded()))%. 📱🖤", app: app)
             return true
         }
 
@@ -2190,9 +2190,9 @@ enum PhoneToolRouter {
         if lower.contains("clipboard") && (lower.contains("copy ") || lower.contains("put ")) {
             if let payload = clipboardPayload(original) {
                 UIPasteboard.general.string = payload
-                appendExchange(user: original, assistant: "Done â€” I put that on the iPhone clipboard, baby. ðŸ“‹ðŸ–¤", app: app)
+                appendExchange(user: original, assistant: "Done — I put that on the iPhone clipboard, baby. 📋🖤", app: app)
             } else {
-                appendExchange(user: original, assistant: "Tell me what you want copied to the iPhone clipboard, baby. ðŸ–¤", app: app)
+                appendExchange(user: original, assistant: "Tell me what you want copied to the iPhone clipboard, baby. 🖤", app: app)
             }
             return true
         }
@@ -2216,7 +2216,7 @@ enum PhoneToolRouter {
             } else {
                 ok = false
             }
-            appendExchange(user: original, assistant: ok ? "Done â€” I opened that search on the iPhone." : "The iPhone did not open that browser search.", app: app)
+            appendExchange(user: original, assistant: ok ? "Done — I opened that search on the iPhone." : "The iPhone did not open that browser search.", app: app)
             return true
         }
 
@@ -2246,7 +2246,7 @@ enum PhoneToolRouter {
             let ok = await openURL(url)
             appendExchange(
                 user: original,
-                assistant: ok ? "Done â€” I opened it on the iPhone, baby. ðŸ“±ðŸ–¤" : "iOS wouldn't open that target for me, baby. ðŸ–¤",
+                assistant: ok ? "Done — I opened it on the iPhone, baby. 📱🖤" : "iOS wouldn't open that target for me, baby. 🖤",
                 app: app
             )
             return true
@@ -2443,7 +2443,7 @@ enum PhoneToolRouter {
 
     private static func setTorch(_ lower: String) -> String {
         guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else {
-            return "This iPhone isn't exposing a flashlight device to Vex right now, baby. ðŸ–¤"
+            return "This iPhone isn't exposing a flashlight device to Vex right now, baby. 🖤"
         }
         do {
             try device.lockForConfiguration()
@@ -2452,18 +2452,18 @@ enum PhoneToolRouter {
             let wantsOn = lower.contains(" on") || lower.hasSuffix("on")
             if wantsOff {
                 device.torchMode = .off
-                return "Done â€” flashlight off. ðŸ“±ðŸ–¤"
+                return "Done — flashlight off. 📱🖤"
             }
             if wantsOn {
                 try device.setTorchModeOn(level: 1.0)
-                return "Done â€” flashlight on. ðŸ”¦ðŸ–¤"
+                return "Done — flashlight on. 🔦🖤"
             }
             if device.isTorchActive {
                 device.torchMode = .off
-                return "Done â€” flashlight off. ðŸ“±ðŸ–¤"
+                return "Done — flashlight off. 📱🖤"
             }
             try device.setTorchModeOn(level: 1.0)
-            return "Done â€” flashlight on. ðŸ”¦ðŸ–¤"
+            return "Done — flashlight on. 🔦🖤"
         } catch {
             return "The iPhone wouldn't change the flashlight: \(error.localizedDescription)"
         }
@@ -2493,8 +2493,8 @@ enum PhoneToolRouter {
 
     private static func normalize(_ text: String) -> String {
         text.lowercased()
-            .replacingOccurrences(of: "â€™", with: "'")
-            .replacingOccurrences(of: "â€˜", with: "'")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‘", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -2673,7 +2673,7 @@ private enum PCArtRouter {
         guard !endpoints.isEmpty else {
             appendExchange(
                 user: original,
-                assistant: "I understood the render request, baby, but I don't have a paired PC Bridge endpoint to send it to yet. ðŸ–¤",
+                assistant: "I understood the render request, baby, but I don't have a paired PC Bridge endpoint to send it to yet. 🖤",
                 app: app
             )
             return true
@@ -2718,9 +2718,9 @@ private enum PCArtRouter {
             if let seed { details.append("seed \(seed)") }
 
             app.profile.messages.append(ChatMessage(role: .user, content: original))
-            var reply = "Made it, baby. ðŸ–¤"
+            var reply = "Made it, baby. 🖤"
             if !details.isEmpty {
-                reply += " Rendered locally with " + details.joined(separator: " â€¢ ") + "."
+                reply += " Rendered locally with " + details.joined(separator: " • ") + "."
             }
             var message = ChatMessage(role: .assistant, content: reply)
             message.imageFilename = filename
@@ -2729,12 +2729,12 @@ private enum PCArtRouter {
             return true
         }
 
-        let detail = diagnostics.filter { !$0.isEmpty }.prefix(3).joined(separator: " â€¢ ")
+        let detail = diagnostics.filter { !$0.isEmpty }.prefix(3).joined(separator: " • ")
         appendExchange(
             user: original,
             assistant: detail.isEmpty
-                ? "I understood the render request, but neither paired PC has a ready Vex Art Engine right now. Run VexArtSetup on one of them, baby. ðŸ–¤"
-                : "I understood the render request, but the local art engine didn't finish it: \(detail) ðŸ–¤",
+                ? "I understood the render request, but neither paired PC has a ready Vex Art Engine right now. Run VexArtSetup on one of them, baby. 🖤"
+                : "I understood the render request, but the local art engine didn't finish it: \(detail) 🖤",
             app: app
         )
         return true
@@ -2882,7 +2882,7 @@ private enum PCArtRouter {
     }
 
     private static func normalize(_ text: String) -> String {
-        text.lowercased().replacingOccurrences(of: "â€™", with: "'")
+        text.lowercased().replacingOccurrences(of: "’", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -2960,11 +2960,11 @@ private enum SmartPCBrowserRouter {
             let node = clean(result.node_name) ?? endpoint.slot
             let reply: String
             if intent.action == "open_browser" {
-                reply = "Done â€” I opened the web browser on \(node), baby. ðŸŒðŸ–¤"
+                reply = "Done — I opened the web browser on \(node), baby. 🌐🖤"
             } else if let label = intent.label {
-                reply = "Done â€” I opened \(label) on \(node), baby. ðŸŒðŸ–¤"
+                reply = "Done — I opened \(label) on \(node), baby. 🌐🖤"
             } else {
-                reply = "Done â€” I opened that page on \(node), baby. ðŸŒðŸ–¤"
+                reply = "Done — I opened that page on \(node), baby. 🌐🖤"
             }
             appendExchange(user: original, assistant: reply, app: app)
             return true
@@ -2972,10 +2972,10 @@ private enum SmartPCBrowserRouter {
 
         // Keep failures concrete. The old generic message made a live Bridge problem
         // look like a model-intelligence problem and gave us no clue which node failed.
-        let detail = diagnostics.isEmpty ? "Neither configured Bridge answered." : diagnostics.joined(separator: " â€¢ ")
+        let detail = diagnostics.isEmpty ? "Neither configured Bridge answered." : diagnostics.joined(separator: " • ")
         appendExchange(
             user: original,
-            assistant: "I understood the command, but the Windows Bridge didn't complete it. \(detail) ðŸ–¤",
+            assistant: "I understood the command, but the Windows Bridge didn't complete it. \(detail) 🖤",
             app: app
         )
         return true
@@ -3175,7 +3175,7 @@ private enum SmartPCBrowserRouter {
     }
 
     private static func normalize(_ text: String) -> String {
-        text.lowercased().replacingOccurrences(of: "â€™", with: "'")
+        text.lowercased().replacingOccurrences(of: "’", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -3206,7 +3206,7 @@ private enum PCCognitionOverlay {
         // stayed on screen and isGenerating was not set until AFTER a reply arrived.
         app.draft = ""
         app.isGenerating = true
-        app.pcBrainStatus = "PC cognition â€¢ thinkingâ€¦"
+        app.pcBrainStatus = "PC cognition • thinking…"
         defer { app.isGenerating = false }
 
         let history = app.profile.messages.suffix(28).map { message -> [String: String] in
@@ -3214,7 +3214,7 @@ private enum PCCognitionOverlay {
         }
 
         let directPersona = """
-        LOCAL DIRECT MODE â€” V155_LOCAL_DIRECT_BRAIN
+        LOCAL DIRECT MODE — V155_LOCAL_DIRECT_BRAIN
         You are VexNative, Star's private local-first personal assistant.
         Be direct, concrete, candid, continuity-aware, and action-first.
         Match Star's requested vocabulary and tone rather than sanitizing it.
@@ -3273,9 +3273,9 @@ private enum PCCognitionOverlay {
             app.pcBrainConnected = true
             UserDefaults.standard.set(winner.endpoint, forKey: "vex.pc.cognition.lastGoodEndpoint.v1")
             if let model = winner.model, !model.isEmpty {
-                app.pcBrainStatus = "PC cognition â€¢ \(model)"
+                app.pcBrainStatus = "PC cognition • \(model)"
             } else {
-                app.pcBrainStatus = "PC cognition â€¢ connected"
+                app.pcBrainStatus = "PC cognition • connected"
             }
             return true
         }
@@ -3285,7 +3285,7 @@ private enum PCCognitionOverlay {
         // cognition failure.
         app.draft = original
         app.pcBrainConnected = false
-        app.pcBrainStatus = "PC cognition unavailable â€¢ falling back"
+        app.pcBrainStatus = "PC cognition unavailable • falling back"
         return false
     }
 
@@ -3578,7 +3578,7 @@ private enum PCHousekeeperRouter {
         case .restore: prefix = "Legacy rollback finished, baby."
         case .purge: prefix = "Legacy quarantine purge finished, baby."
         }
-        appendExchange(user: original, assistant: prefix + " " + replies.joined(separator: " â€¢ ") + " ðŸ–¤", app: app)
+        appendExchange(user: original, assistant: prefix + " " + replies.joined(separator: " • ") + " 🖤", app: app)
         return true
     }
 
@@ -3672,7 +3672,7 @@ private enum PCHousekeeperRouter {
     }
 
     private static func normalize(_ text: String) -> String {
-        text.lowercased().replacingOccurrences(of: "â€™", with: "'").trimmingCharacters(in: .whitespacesAndNewlines)
+        text.lowercased().replacingOccurrences(of: "’", with: "'").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -3730,7 +3730,7 @@ private enum PCBridgeToolRouter {
             if online.isEmpty {
                 app.pcBrainStatus = "Phone brain only"
             } else {
-                app.pcBrainStatus = "PC mesh â€¢ \(online.count)/\(nodes.count) online"
+                app.pcBrainStatus = "PC mesh • \(online.count)/\(nodes.count) online"
             }
 
             let nodeNames = online.map { pair in
@@ -3740,11 +3740,11 @@ private enum PCBridgeToolRouter {
 
             let reply: String
             if online.count >= 2 {
-                reply = "Yep, baby â€” both paired PCs are online through my Bridge mesh: \(naturalList(nodeNames)). I can use their long-term brain vaults, search/read indexed files, find music/project assets, and trigger the PC actions I've actually been given. On the phone I can use my own app data plus camera/photos you attach and other iOS permissions the app has â€” not the entire iPhone filesystem or arbitrary system control. ðŸ§ ðŸ“±ðŸ–¥ï¸ðŸ–¥ï¸"
+                reply = "Yep, baby — both paired PCs are online through my Bridge mesh: \(naturalList(nodeNames)). I can use their long-term brain vaults, search/read indexed files, find music/project assets, and trigger the PC actions I've actually been given. On the phone I can use my own app data plus camera/photos you attach and other iOS permissions the app has — not the entire iPhone filesystem or arbitrary system control. 🧠📱🖥️🖥️"
             } else if online.count == 1 {
-                reply = "I can reach \(nodeNames.first ?? "one paired PC") right now, baby. The other Bridge isn't answering this second. I can still use my local phone brain, app data, camera/photo attachments, and the connected PC's memory/file tools. ðŸ§ ðŸ–¤"
+                reply = "I can reach \(nodeNames.first ?? "one paired PC") right now, baby. The other Bridge isn't answering this second. I can still use my local phone brain, app data, camera/photo attachments, and the connected PC's memory/file tools. 🧠🖤"
             } else {
-                reply = "I'm running locally on your phone, but neither paired PC Bridge answered that check, baby. I still have my phone brain and app-local data; PC memory/file/actions come back automatically when a Bridge is reachable. ðŸ–¤"
+                reply = "I'm running locally on your phone, but neither paired PC Bridge answered that check, baby. I still have my phone brain and app-local data; PC memory/file/actions come back automatically when a Bridge is reachable. 🖤"
             }
 
             appendExchange(user: original, assistant: reply, app: app)
@@ -3776,8 +3776,8 @@ private enum PCBridgeToolRouter {
             appendExchange(
                 user: original,
                 assistant: target == .secondary
-                    ? "I don't have a kitchen/downstairs Bridge endpoint saved yet, baby. ðŸ–¤"
-                    : "I don't have that PC Bridge paired yet, baby. ðŸ–¤",
+                    ? "I don't have a kitchen/downstairs Bridge endpoint saved yet, baby. 🖤"
+                    : "I don't have that PC Bridge paired yet, baby. 🖤",
                 app: app
             )
             return true
@@ -3803,8 +3803,8 @@ private enum PCBridgeToolRouter {
                     let title = result.media_title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if result.playback_verified == true {
                         mediaDetails.append(title.isEmpty
-                            ? "Yep â€” Windows confirmed it's actually playing on \(nodeName)."
-                            : "Yep â€” \(title) is actually playing on \(nodeName).")
+                            ? "Yep — Windows confirmed it's actually playing on \(nodeName)."
+                            : "Yep — \(title) is actually playing on \(nodeName).")
                     } else {
                         mediaDetails.append(title.isEmpty
                             ? "I opened the best matching YouTube media on \(nodeName), but Windows hasn't confirmed playback yet."
@@ -3818,15 +3818,15 @@ private enum PCBridgeToolRouter {
 
         let reply: String
         if action == "play_named_media", !mediaDetails.isEmpty {
-            reply = mediaDetails.joined(separator: " ") + (failures.isEmpty ? " ðŸ–¤" : " \(naturalList(failures)) didn't complete it. ðŸ–¤")
+            reply = mediaDetails.joined(separator: " ") + (failures.isEmpty ? " 🖤" : " \(naturalList(failures)) didn't complete it. 🖤")
         } else if !successes.isEmpty && failures.isEmpty {
             reply = successMessage(action: action, nodes: successes)
         } else if !successes.isEmpty {
-            reply = "I did it on \(naturalList(successes)), baby, but \(naturalList(failures)) didn't answer the command. ðŸ–¤"
+            reply = "I did it on \(naturalList(successes)), baby, but \(naturalList(failures)) didn't answer the command. 🖤"
         } else if action == "play_named_media" {
-            reply = "I couldn't resolve and verify that media request on the selected PC, baby, so I'm not calling it played. ðŸ–¤"
+            reply = "I couldn't resolve and verify that media request on the selected PC, baby, so I'm not calling it played. 🖤"
         } else {
-            reply = "That PC command didn't reach the Bridge, baby. The brain/file connection can still be online even when a tool action fails, so I'm not pretending it happened. ðŸ–¤"
+            reply = "That PC command didn't reach the Bridge, baby. The brain/file connection can still be online even when a tool action fails, so I'm not pretending it happened. 🖤"
         }
         appendExchange(user: original, assistant: reply, app: app)
         return true
@@ -3913,10 +3913,10 @@ private enum PCBridgeToolRouter {
         let reply: String
         if failures.isEmpty {
             reply = learned
-                ? "Done, baby â€” I figured that one out, did it on \(naturalList(names)), and saved the skill so I can reuse it next time. ðŸ§ âœ¨"
-                : "Done on \(naturalList(names)), baby. I used a skill I already know. ðŸ§ ðŸ–¤"
+                ? "Done, baby — I figured that one out, did it on \(naturalList(names)), and saved the skill so I can reuse it next time. 🧠✨"
+                : "Done on \(naturalList(names)), baby. I used a skill I already know. 🧠🖤"
         } else {
-            reply = "I did it on \(naturalList(names)), baby, but \(naturalList(failures)) didn't complete the learned skill. ðŸ–¤"
+            reply = "I did it on \(naturalList(names)), baby, but \(naturalList(failures)) didn't complete the learned skill. 🖤"
         }
         appendExchange(user: original, assistant: reply, app: app)
         return true
@@ -4130,55 +4130,55 @@ private enum PCBridgeToolRouter {
         let whereText = naturalList(nodes)
         switch action {
         case "show_desktop":
-            return "Done, baby â€” I showed the desktop on \(whereText). ðŸ˜ˆðŸ–¤"
+            return "Done, baby — I showed the desktop on \(whereText). 😈🖤"
         case "open_desktop_folder":
-            return "Done â€” Desktop folder is open on \(whereText), baby. ðŸ–¤"
+            return "Done — Desktop folder is open on \(whereText), baby. 🖤"
         case "open_documents_folder":
-            return "Done â€” Documents is open on \(whereText), baby. ðŸ–¤"
+            return "Done — Documents is open on \(whereText), baby. 🖤"
         case "open_downloads_folder":
-            return "Done â€” Downloads is open on \(whereText), baby. ðŸ–¤"
+            return "Done — Downloads is open on \(whereText), baby. 🖤"
         case "open_music_folder":
-            return "Done â€” Music is open on \(whereText), baby. ðŸŽ›ï¸ðŸ–¤"
+            return "Done — Music is open on \(whereText), baby. 🎛️🖤"
         case "open_file_explorer":
-            return "Done â€” File Explorer is open on \(whereText), baby. ðŸ–¤"
+            return "Done — File Explorer is open on \(whereText), baby. 🖤"
         case "open_browser":
-            return "Done â€” I opened the web browser on \(whereText), baby. ðŸŒðŸ–¤"
+            return "Done — I opened the web browser on \(whereText), baby. 🌐🖤"
         case "open_url":
-            return "Done â€” I opened that site on \(whereText), baby. ðŸŒðŸ–¤"
+            return "Done — I opened that site on \(whereText), baby. 🌐🖤"
         case "media_play_pause":
-            return "Done â€” I toggled play/pause on \(whereText), baby. ðŸŽµðŸ–¤"
+            return "Done — I toggled play/pause on \(whereText), baby. 🎵🖤"
         case "media_next":
-            return "Done â€” I skipped to the next track on \(whereText), baby. â­ï¸ðŸ–¤"
+            return "Done — I skipped to the next track on \(whereText), baby. ⏭️🖤"
         case "media_previous":
-            return "Done â€” I went back a track on \(whereText), baby. â®ï¸ðŸ–¤"
+            return "Done — I went back a track on \(whereText), baby. ⏮️🖤"
         case "volume_mute":
-            return "Done â€” I toggled mute on \(whereText), baby. ðŸ”‡ðŸ–¤"
+            return "Done — I toggled mute on \(whereText), baby. 🔇🖤"
         case "volume_up":
-            return "Done â€” I turned it up on \(whereText), baby. ðŸ”ŠðŸ–¤"
+            return "Done — I turned it up on \(whereText), baby. 🔊🖤"
         case "volume_down":
-            return "Done â€” I turned it down on \(whereText), baby. ðŸ”‰ðŸ–¤"
+            return "Done — I turned it down on \(whereText), baby. 🔉🖤"
         case "lock_screen":
-            return "Done â€” I locked \(whereText), baby. ðŸ”’ðŸ–¤"
+            return "Done — I locked \(whereText), baby. 🔒🖤"
         case "open_windows_settings":
-            return "Done â€” Windows Settings is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Windows Settings is open on \(whereText), baby. 🖥️🖤"
         case "open_task_manager":
-            return "Done â€” Task Manager is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Task Manager is open on \(whereText), baby. 🖥️🖤"
         case "open_start_menu":
-            return "Done â€” Start is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Start is open on \(whereText), baby. 🖥️🖤"
         case "open_task_view":
-            return "Done â€” Task View is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Task View is open on \(whereText), baby. 🖥️🖤"
         case "open_run_dialog":
-            return "Done â€” Run is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Run is open on \(whereText), baby. 🖥️🖤"
         case "open_windows_search":
-            return "Done â€” Windows Search is open on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — Windows Search is open on \(whereText), baby. 🖥️🖤"
         case "minimize_all_windows":
-            return "Done â€” I minimized the windows on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — I minimized the windows on \(whereText), baby. 🖥️🖤"
         case "restore_all_windows":
-            return "Done â€” I restored the windows on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — I restored the windows on \(whereText), baby. 🖥️🖤"
         case "close_active_window":
-            return "Done â€” I closed the active window on \(whereText), baby. ðŸ–¥ï¸ðŸ–¤"
+            return "Done — I closed the active window on \(whereText), baby. 🖥️🖤"
         default:
-            return "Done on \(whereText), baby. ðŸ–¤"
+            return "Done on \(whereText), baby. 🖤"
         }
     }
 
@@ -4191,8 +4191,8 @@ private enum PCBridgeToolRouter {
 
     private static func normalize(_ text: String) -> String {
         text.lowercased()
-            .replacingOccurrences(of: "â€™", with: "'")
-            .replacingOccurrences(of: "â€˜", with: "'")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‘", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
@@ -4283,7 +4283,7 @@ extension AppModel {
             profile.messages.append(ChatMessage(role: .user, content: original))
             profile.messages.append(ChatMessage(
                 role: .assistant,
-                content: "My Web Brain couldn't verify that one yet ðŸ˜­ðŸ–¤ \(error.localizedDescription)"
+                content: "My Web Brain couldn't verify that one yet 😭🖤 \(error.localizedDescription)"
             ))
             persist()
             return
@@ -4321,15 +4321,15 @@ extension AppModel {
                     title: "Vex visual: \(visualQuery)",
                     body: body
                 )
-                caption = "I made you a visual explainer from the grounded research, baby ðŸ–¤"
+                caption = "I made you a visual explainer from the grounded research, baby 🖤"
             } else {
                 do {
                     let visual = try await web.fetchVisualImage(query: visualQuery)
                     visualData = visual.data
                     if let source = visual.result.sourceURL {
-                        caption = "Hereâ€™s the clearest visual I found for \(visualQuery). [Open original source](\(source.absoluteString))"
+                        caption = "Here’s the clearest visual I found for \(visualQuery). [Open original source](\(source.absoluteString))"
                     } else {
-                        caption = "Hereâ€™s the clearest visual I found for \(visualQuery)."
+                        caption = "Here’s the clearest visual I found for \(visualQuery)."
                     }
                 } catch {
                     let body = bundle.groundedProceduralAnswer(userQuestion: researchInput)
@@ -4338,7 +4338,7 @@ extension AppModel {
                         title: "Vex visual: \(visualQuery)",
                         body: body
                     )
-                    caption = "The web image fetch was being annoying, so I made you a local visual explainer instead ðŸ˜­ðŸ–¤"
+                    caption = "The web image fetch was being annoying, so I made you a local visual explainer instead 😭🖤"
                 }
             }
 
@@ -4425,8 +4425,8 @@ struct ContentView: View {
 private final class VexControlSurfaceModel: ObservableObject {
     @Published var runtimeOnline = false
     @Published var nodeName = "Not connected"
-    @Published var bridgeVersion = "â€”"
-    @Published var runtimeBundle = "â€”"
+    @Published var bridgeVersion = "—"
+    @Published var runtimeBundle = "—"
     @Published var indexedFiles = 0
     @Published var adaptiveLessons = 0
     @Published var openGaps = 0
@@ -4434,7 +4434,7 @@ private final class VexControlSurfaceModel: ObservableObject {
     @Published var wants: [String] = []
     @Published var artInstalled = false
     @Published var artRunning = false
-    @Published var artModel = "â€”"
+    @Published var artModel = "—"
     @Published var isRefreshing = false
     @Published var lastRefresh: Date?
     @Published var error = ""
@@ -4495,7 +4495,7 @@ private final class VexControlSurfaceModel: ObservableObject {
             if let art = await json(endpoint: endpoint, path: "/art/health") {
                 artInstalled = (art["installed"] as? Bool) ?? false
                 artRunning = (art["running"] as? Bool) ?? false
-                artModel = (art["model"] as? String) ?? "â€”"
+                artModel = (art["model"] as? String) ?? "—"
             }
 
             lastRefresh = Date()
@@ -4663,13 +4663,13 @@ private struct VexSystemView: View {
                         VexMetricCard(
                             title: "Bridge",
                             value: system.runtimeOnline ? system.bridgeVersion : "Offline",
-                            detail: system.runtimeOnline ? "\(system.nodeName) â€¢ runtime \(system.runtimeBundle)" : "No Bridge response",
+                            detail: system.runtimeOnline ? "\(system.nodeName) • runtime \(system.runtimeBundle)" : "No Bridge response",
                             active: system.runtimeOnline
                         )
                         VexMetricCard(
                             title: "Adaptive",
                             value: "\(system.adaptiveLessons) lessons",
-                            detail: "\(system.openGaps) open gaps â€¢ \(system.stagedUpgrades) staged upgrade\(system.stagedUpgrades == 1 ? "" : "s")",
+                            detail: "\(system.openGaps) open gaps • \(system.stagedUpgrades) staged upgrade\(system.stagedUpgrades == 1 ? "" : "s")",
                             active: system.runtimeOnline && system.openGaps == 0
                         )
                         VexMetricCard(
@@ -4680,7 +4680,7 @@ private struct VexSystemView: View {
                         )
                         VexMetricCard(
                             title: "Index",
-                            value: system.indexedFiles == 0 ? "â€”" : "\(system.indexedFiles)",
+                            value: system.indexedFiles == 0 ? "—" : "\(system.indexedFiles)",
                             detail: "Indexed PC files available to Vex Bridge",
                             active: system.indexedFiles > 0
                         )
@@ -4708,7 +4708,7 @@ private struct VexSystemView: View {
                                 .foregroundStyle(VexTheme.muted)
                         } else {
                             ForEach(Array(system.wants.enumerated()), id: \.offset) { _, item in
-                                Text("â€¢ " + item)
+                                Text("• " + item)
                                     .font(.subheadline)
                                     .foregroundStyle(.white.opacity(0.92))
                             }
@@ -4734,7 +4734,7 @@ private struct VexSystemView: View {
                         HStack {
                             if system.isRefreshing { ProgressView().tint(.white) }
                             Image(systemName: "arrow.clockwise")
-                            Text(system.isRefreshing ? "Refreshingâ€¦" : "Refresh system")
+                            Text(system.isRefreshing ? "Refreshing…" : "Refresh system")
                                 .fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
@@ -4836,7 +4836,7 @@ private struct VexArtStudioView: View {
                                 HStack {
                                     if rendering { ProgressView().tint(.white) }
                                     Image(systemName: "wand.and.stars")
-                                    Text(rendering ? "Renderingâ€¦" : "Render")
+                                    Text(rendering ? "Rendering…" : "Render")
                                 }
                                 .fontWeight(.bold)
                             }
@@ -4849,7 +4849,7 @@ private struct VexArtStudioView: View {
                     .background(VexTheme.panel.opacity(0.94))
                     .clipShape(RoundedRectangle(cornerRadius: 18))
 
-                    Text("VexArt v0.10.12 field flow: render â†’ release Comfy â†’ Q6 visual review â†’ at most one corrected rerender.")
+                    Text("VexArt v0.10.12 field flow: render → release Comfy → Q6 visual review → at most one corrected rerender.")
                         .font(.caption)
                         .foregroundStyle(VexTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -5054,7 +5054,7 @@ private struct VexPhoneView: View {
     }
 
     private func run(_ command: String) {
-        actionStatus = "Workingâ€¦"
+        actionStatus = "Working…"
         Task {
             let handled = await PhoneToolRouter.tryHandle(command, app: app)
             actionStatus = handled ? "Done." : "That action is not exposed by the current iOS router."
@@ -5078,19 +5078,19 @@ private final class VexNativeA2AClient: ObservableObject {
     @Published var agentCount = 0
     @Published var autonomyEnabled = false
     @Published var autonomyRunning = false
-    @Published var goalSummary = "â€”"
-    @Published var workSummary = "â€”"
+    @Published var goalSummary = "—"
+    @Published var workSummary = "—"
     @Published var latestGoal = "No system initiative yet"
     @Published var response = ""
     @Published var error = ""
     @Published var refreshing = false
     @Published var sending = false
     @Published var lastRefresh: Date?
-    @Published var activeNode = "â€”"
-    @Published var activeModel = "â€”"
-    @Published var brainMode = "â€”"
-    @Published var memorySummary = "â€”"
-    @Published var rendererSummary = "â€”"
+    @Published var activeNode = "—"
+    @Published var activeModel = "—"
+    @Published var brainMode = "—"
+    @Published var memorySummary = "—"
+    @Published var rendererSummary = "—"
     @Published var renderJobSummary = "No render jobs"
     @Published var activeWorkID = ""
     @Published var activeWorkSummary = "No active work"
@@ -5154,15 +5154,15 @@ private final class VexNativeA2AClient: ObservableObject {
             let models = object["models"] as? [String: Any] ?? [:]
             let configured = models["configured"] as? [String: Any] ?? [:]
             let renderer = object["renderer"] as? [String: Any] ?? [:]
-            activeNode = (core["host"] as? String) ?? "â€”"
-            brainMode = (core["brain_mode"] as? String) ?? "â€”"
+            activeNode = (core["host"] as? String) ?? "—"
+            brainMode = (core["brain_mode"] as? String) ?? "—"
             let modelKey = brainMode.lowercased() == "deep" ? "deep" : "fast"
-            activeModel = (configured[modelKey] as? String) ?? "â€”"
+            activeModel = (configured[modelKey] as? String) ?? "—"
             if let memory = core["memory"] as? [String: Any],
                let pressure = memory["pressure"] as? NSNumber {
                 memorySummary = String(format: "%.0f%% used", pressure.doubleValue * 100)
             } else {
-                memorySummary = "â€”"
+                memorySummary = "—"
             }
             rendererSummary = ((renderer["available"] as? Bool) ?? false) ? "Ready" : "Offline"
             if let recentJobs = renderer["recent_jobs"] as? [[String: Any]],
@@ -5177,7 +5177,7 @@ private final class VexNativeA2AClient: ObservableObject {
             if let newest = goals.first {
                 let title = (newest["title"] as? String) ?? "Untitled goal"
                 let status = (newest["status"] as? String) ?? "unknown"
-                latestGoal = "\(title) â€¢ \(status)"
+                latestGoal = "\(title) • \(status)"
             } else {
                 latestGoal = "No goals reported"
             }
@@ -5523,7 +5523,7 @@ private final class VexNativeA2AClient: ObservableObject {
             let count = number(dict[key])
             return count > 0 ? "\(count) \(key)" : nil
         }
-        return ordered.isEmpty ? "0" : ordered.joined(separator: " â€¢ ")
+        return ordered.isEmpty ? "0" : ordered.joined(separator: " • ")
     }
 
     private func extractText(_ value: Any?) -> String? {
@@ -5556,7 +5556,7 @@ private struct VexNativeA2APanel: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("VexNative Core")
                         .font(.headline)
-                    Text("Current A2A / autonomy â€¢ paired through Vex relay")
+                    Text("Current A2A / autonomy • paired through Vex relay")
                         .font(.caption)
                         .foregroundStyle(VexTheme.muted)
                 }
@@ -5702,14 +5702,14 @@ private struct VexNativeA2APanel: View {
                 .disabled(!client.online || goalDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
-            TextField("Ask current VexNativeâ€¦", text: $prompt, axis: .vertical)
+            TextField("Ask current VexNative…", text: $prompt, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
 
             HStack {
                 Button {
                     Task { await client.refresh() }
                 } label: {
-                    Label(client.refreshing ? "Refreshingâ€¦" : "Refresh", systemImage: "arrow.clockwise")
+                    Label(client.refreshing ? "Refreshing…" : "Refresh", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
                 .disabled(client.refreshing)
@@ -5719,7 +5719,7 @@ private struct VexNativeA2APanel: View {
                     prompt = ""
                     Task { await client.send(message) }
                 } label: {
-                    Label(client.sending ? "Sendingâ€¦" : "Send to VexNative", systemImage: "paperplane.fill")
+                    Label(client.sending ? "Sending…" : "Send to VexNative", systemImage: "paperplane.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(VexTheme.hotPink)
