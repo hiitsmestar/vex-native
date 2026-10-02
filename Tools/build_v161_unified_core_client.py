@@ -1,3 +1,4 @@
+# FINAL_REBUILD_LOCAL_FIRST_2026_10_02
 # Rebuild trigger 2026-10-02: package corrected v0.16.1 source after relay/UI recovery.
 #!/usr/bin/env python3
 from __future__ import annotations
