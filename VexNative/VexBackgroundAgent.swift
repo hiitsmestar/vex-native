@@ -518,7 +518,7 @@ enum VexPhoneBackgroundWorker {
         let ordered = endpoints.sorted { lhs, rhs in
             let l = URL(string: lhs).map(VexBridgeNetworking.isRemoteRelayURL) ?? false
             let r = URL(string: rhs).map(VexBridgeNetworking.isRemoteRelayURL) ?? false
-            return l && !r
+            return !l && r
         }
 
         var urls: [URL] = []
