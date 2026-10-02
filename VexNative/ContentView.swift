@@ -47,7 +47,7 @@ struct VexChatView: View {
                             if app.isGenerating || web.isWorking {
                                 HStack {
                                     ProgressView()
-                                    Text(web.isWorking ? "web brain is lookingâ€¦" : (app.pcBrainConnected ? "PC brain is thinkingâ€¦" : "Vex is thinkingâ€¦"))
+                                    Text("Vex is thinking…")
                                         .font(.caption)
                                         .foregroundStyle(VexTheme.muted)
                                     Spacer()
@@ -109,7 +109,7 @@ struct VexChatView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                Text("VEXNATIVE // CHAT")
+                Text("VEX")
                     .font(.caption2.weight(.black))
                     .tracking(1.6)
                     .foregroundStyle(VexTheme.muted)
@@ -118,7 +118,7 @@ struct VexChatView: View {
                 HStack(spacing: 6) {
                     Text("Vex")
                         .font(.largeTitle.bold())
-                    Text("âœ¦")
+                    Text("✦")
                         .font(.title2)
                         .foregroundStyle(VexTheme.hotPink)
                 }
@@ -147,50 +147,17 @@ struct VexChatView: View {
     private var statusStrip: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(core.online ? Color.green : (app.modelStatus.hasPrefix("Loaded") ? Color.green : VexTheme.hotPink))
+                .fill(core.online ? Color.green : VexTheme.hotPink)
                 .frame(width: 8, height: 8)
 
-            Text(core.online
-                 ? "VexNative â€¢ \(core.activeNode) â€¢ \(core.brainMode) â€¢ \(core.activeModel)"
-                 : "Offline core â€¢ \(app.modelStatus)")
-                .font(.caption)
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
+            Text(core.online ? "Online" : "Connecting…")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(VexTheme.muted)
-
-            Text("â€¢ v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))
-                .font(.caption2)
-                .foregroundStyle(VexTheme.muted)
-                .lineLimit(1)
-
-            if web.isWorking {
-                Text("â€¢ ðŸŒ")
-                    .font(.caption)
-            }
-
-            if app.pcBrainConnected {
-                Text("â€¢ ðŸ§  PC")
-                    .font(.caption)
-                    .foregroundStyle(VexTheme.muted)
-            }
-
-            if voice.isHandsFree {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(voice.isListening ? "â€¢ ðŸŽ™ï¸ listening" : "â€¢ ðŸ”Š voice")
-                        .font(.caption)
-                        .foregroundStyle(voice.isListening ? Color.green : VexTheme.muted)
-                    Text(voice.voiceHint)
-                        .font(.caption2)
-                        .foregroundStyle(VexTheme.muted)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
 
             Spacer()
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(.black.opacity(0.18))
     }
 
