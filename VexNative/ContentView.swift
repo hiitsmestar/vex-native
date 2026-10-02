@@ -150,12 +150,9 @@ struct VexChatView: View {
                 .fill(core.online ? Color.green : (app.modelStatus.hasPrefix("Loaded") ? Color.green : VexTheme.hotPink))
                 .frame(width: 8, height: 8)
 
-            Text(core.online
-                 ? "VexNative â€¢ \(core.activeNode) â€¢ \(core.brainMode) â€¢ \(core.activeModel)"
-                 : "Offline core â€¢ \(app.modelStatus)")
-                .font(.caption)
+            Text(core.online ? "Online" : "Offline")
+                .font(.caption.weight(.semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.62)
                 .foregroundStyle(VexTheme.muted)
 
             Text("â€¢ v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))
