@@ -1,0 +1,24 @@
+name: VexControl
+options:
+  bundleIdPrefix: local.star
+targets:
+  VexControl:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: VexControl
+        excludes:
+          - README.md
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.star.vexcontrol
+        PRODUCT_NAME: VexControl
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGNING_ALLOWED: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Vex Control
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Vex Control uses Bluetooth to connect to your paired device.
+        INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription: Vex Control uses Bluetooth to connect to your paired device.
+        TARGETED_DEVICE_FAMILY: "1"
