@@ -16,7 +16,7 @@ jobs:
       - name: Generate project
         run: xcodegen generate --spec VexControl/project.yml
       - name: Build unsigned app
-        run: xcodebuild -project VexControl.xcodeproj -scheme VexControl -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -project VexControl/VexControl.xcodeproj -scheme VexControl -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
       - name: Package IPA
         run: |
           mkdir -p Payload
