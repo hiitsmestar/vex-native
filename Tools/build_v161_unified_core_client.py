@@ -66,3 +66,5 @@ for rel, markers in support_checks.items():
         if marker not in source:
             raise SystemExit(f"missing v0.16.1 support marker {marker} in {rel}")
 print("PASS v0.16.1 support-source coherence")
+
+# HOTFIX_REBUILD_2026_10_02
