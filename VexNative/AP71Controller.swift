@@ -35,7 +35,9 @@ final class AP71Controller: NSObject, ObservableObject {
 
     func disconnect() {
         reconnect = false
-        stop()
+        if let peripheral, let characteristic = writeCharacteristic {
+            write(level: 0, peripheral: peripheral, characteristic: characteristic)
+        }
         if let peripheral { central.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         writeCharacteristic = nil
@@ -50,10 +52,7 @@ final class AP71Controller: NSObject, ObservableObject {
             connect()
             return
         }
-        // AP71/Love Spouse command frame. The exact writable characteristic is
-        // discovered dynamically because firmware variants expose different UUIDs.
-        let command: [UInt8] = [0x6D,0xB6,0x43,0xCE,0x97,0xFE,0x42,0x7C] + channel(level)
-        peripheral.writeValue(Data(command), for: characteristic, type: characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse)
+        write(level: level, peripheral: peripheral, characteristic: characteristic)
     }
 
     func pulse(level: Int, seconds: Double) {
@@ -64,7 +63,17 @@ final class AP71Controller: NSObject, ObservableObject {
         }
     }
 
-    func stop() { setIntensity(0) }
+    func stop() {
+        intensity = 0
+        guard let peripheral, let characteristic = writeCharacteristic else { return }
+        write(level: 0, peripheral: peripheral, characteristic: characteristic)
+    }
+
+    private func write(level: Int, peripheral: CBPeripheral, characteristic: CBCharacteristic) {
+        let command: [UInt8] = [0x6D,0xB6,0x43,0xCE,0x97,0xFE,0x42,0x7C] + channel(level)
+        let type: CBCharacteristicWriteType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        peripheral.writeValue(Data(command), for: characteristic, type: type)
+    }
 
     private func channel(_ level: Int) -> [UInt8] {
         let channels: [[UInt8]] = [
