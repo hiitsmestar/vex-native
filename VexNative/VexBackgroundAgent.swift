@@ -390,12 +390,6 @@ enum VexPhoneBackgroundWorker {
         let lower = command.lowercased()
         let wantsOpen = ["open ", "open up ", "launch ", "go to ", "bring up ", "show me "]
             .contains(where: { lower.contains($0) })
-        if lower.contains("vexrecall60") {
-            var components = URLComponents(string: "https://chatgpt.com/")!
-            components.queryItems = [URLQueryItem(name: "prompt", value: command)]
-            return components.url
-        }
-
         guard wantsOpen else { return nil }
 
         let known: [(String, String)] = [
