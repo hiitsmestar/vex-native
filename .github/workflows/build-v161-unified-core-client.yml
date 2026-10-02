@@ -1,8 +1,8 @@
-name: Build VexNative v0.16.1 Unified Core Client
+name: Build VexNative v0.16.2 Pristine Repair
 
 on:
   push:
-    branches: [ "build/v161-unified-core-client" ]
+    branches: [ "repair/v162-vex-pristine" ]
     paths:
       - "Tools/apply_v161_unified_core_client.py"
       - "Tools/build_v161_unified_core_client.py"
@@ -34,7 +34,7 @@ jobs:
         run: |
           set -o pipefail
           rm -rf "$RUNNER_TEMP/VexDerivedData"
-          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=161 MARKETING_VERSION=0.16.1 build | tee "$RUNNER_TEMP/xcodebuild.log"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=162 MARKETING_VERSION=0.16.2 build | tee "$RUNNER_TEMP/xcodebuild.log"
       - name: Package
         run: |
           APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
@@ -42,18 +42,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/VexNative.app"
           cd "$RUNNER_TEMP/ipa"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.16.1-unified-core-client.ipa" Payload
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.16.2-pristine-repair.ipa" Payload
       - uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.16.1-Unified-Core-Client
-          path: VexNative-v0.16.1-unified-core-client.ipa
+          name: VexNative-v0.16.2-Pristine-Repair
+          path: VexNative-v0.16.2-pristine-repair.ipa
           if-no-files-found: error
           retention-days: 14
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.16.1-build-log
+          name: VexNative-v0.16.2-build-log
           path: $RUNNER_TEMP/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
