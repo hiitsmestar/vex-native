@@ -255,7 +255,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Vex;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
-				INFOPLIST_KEY_UIBackgroundModes = bluetooth;
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -285,7 +285,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Vex;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Vex uses Bluetooth to control Star's paired AP71 accessory.";
-				INFOPLIST_KEY_UIBackgroundModes = bluetooth;
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
