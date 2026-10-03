@@ -322,6 +322,7 @@ enum VexPhoneBackgroundWorker {
         guard !urls.isEmpty else { return false }
 
         var lastError = "no relay succeeded"
+        var sawIdleTimeout = false
         for url in urls {
             guard !Task.isCancelled else { return false }
             var request = URLRequest(url: url)
@@ -341,6 +342,7 @@ enum VexPhoneBackgroundWorker {
                     lastError = "relay returned ok=false"
                     continue
                 }
+                UserDefaults.standard.removeObject(forKey: "vex.phone.background.lastError")
                 guard let remote = envelope.command else {
                     UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
                     return true
@@ -381,11 +383,20 @@ enum VexPhoneBackgroundWorker {
                 UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
                 return outcome.ok
             } catch {
+                if let urlError = error as? URLError, urlError.code == .timedOut {
+                    sawIdleTimeout = true
+                    UserDefaults.standard.set(Date(), forKey: "vex.phone.background.lastRun")
+                    continue
+                }
                 lastError = String(describing: error)
                 continue
             }
         }
 
+        if sawIdleTimeout {
+            UserDefaults.standard.removeObject(forKey: "vex.phone.background.lastError")
+            return true
+        }
         UserDefaults.standard.set(lastError, forKey: "vex.phone.background.lastError")
         return false
     }
