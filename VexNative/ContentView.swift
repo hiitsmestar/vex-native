@@ -129,7 +129,7 @@ struct VexChatView: View {
             Button {
                 app.showBrain = true
             } label: {
-                Label("Brain", systemImage: "brain.head.profile")
+                Label("Status", systemImage: "brain.head.profile")
                     .labelStyle(.titleAndIcon)
                     .font(.subheadline.weight(.bold))
                     .padding(.horizontal, 12)
@@ -150,7 +150,7 @@ struct VexChatView: View {
                 .fill(core.online ? Color.green : (app.modelStatus.hasPrefix("Loaded") ? Color.green : VexTheme.hotPink))
                 .frame(width: 8, height: 8)
 
-            Text(core.online ? "Online" : "Offline")
+            Text(core.online ? "Vex • Online" : "Vex • Reconnecting")
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
                 .foregroundStyle(VexTheme.muted)
@@ -4204,10 +4204,6 @@ extension AppModel {
         let original = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (!original.isEmpty || pendingPhotoData != nil), !isGenerating else { return }
 
-        if await PhoneToolRouter.tryHandle(original, app: self) {
-            return
-        }
-
         let core = VexNativeA2AClient.shared
         if !core.online {
             await core.refresh()
@@ -4227,6 +4223,13 @@ extension AppModel {
                 return
             }
             isGenerating = false
+        }
+
+        // One Vex entry point: the unified core gets every normal request first.
+        // Local phone/browser/render routers are continuity fallbacks only when
+        // the core is genuinely unavailable or could not complete the request.
+        if await PhoneToolRouter.tryHandle(original, app: self) {
+            return
         }
 
         if await PCArtRouter.tryHandle(original, app: self) {
@@ -5598,9 +5601,9 @@ private struct VexNativeA2APanel: View {
 
             HStack(spacing: 12) {
                 VexMetricCard(
-                    title: "Core",
-                    value: client.brainMode,
-                    detail: client.activeNode + " / " + client.activeModel,
+                    title: "Vex",
+                    value: client.online ? "Unified" : "Reconnecting",
+                    detail: client.online ? "Automatic reasoning + tools" : "Restoring core connection",
                     active: client.online
                 )
                 VexMetricCard(
