@@ -99,9 +99,9 @@ enum VexBridgeNetworking {
         // overrode the 90 second URLRequest timeout used by PCCognitionOverlay,
         // causing VexNative to abandon a healthy PC before Ollama returned.
         let path = bridgeRequest.url?.path.lowercased() ?? ""
-        if path == "/llm/chat" {
-            configuration.timeoutIntervalForRequest = 95
-            configuration.timeoutIntervalForResource = 100
+        if path == "/llm/chat" || path == "/vexnative/send" {
+            configuration.timeoutIntervalForRequest = 180
+            configuration.timeoutIntervalForResource = 240
         } else if path.hasPrefix("/art/") {
             configuration.timeoutIntervalForRequest = 180
             configuration.timeoutIntervalForResource = 240
@@ -153,8 +153,8 @@ enum VexBridgeNetworking {
         var bridgeRequest = request
         bridgeRequest.url = strippingPin(from: url)
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 95
-        configuration.timeoutIntervalForResource = 120
+        configuration.timeoutIntervalForRequest = 180
+        configuration.timeoutIntervalForResource = 240
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.protocolClasses = []
 
