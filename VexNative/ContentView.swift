@@ -5259,6 +5259,16 @@ private final class VexNativeA2AClient: ObservableObject {
                         let intent = (route["intent"] as? String) ?? "request"
                         let mode = (route["mode"] as? String) ?? "auto"
                         response = "\(intent.capitalized) • \(mode)"
+                    } else if event == "job" {
+                        let state = (object["state"] as? String) ?? "queued"
+                        response = "Deep reasoning • \(state)"
+                    } else if event == "progress" {
+                        let state = (object["state"] as? String) ?? "working"
+                        if let elapsed = object["elapsed_s"] as? NSNumber {
+                            response = "Vex \(state) • \(Int(elapsed.doubleValue))s"
+                        } else {
+                            response = "Vex \(state)…"
+                        }
                     } else if event == "result",
                               let text = extractText(object["result"]) ?? compactJSON(object["result"]) {
                         finalText = text
