@@ -5098,6 +5098,7 @@ private final class VexNativeA2AClient: ObservableObject {
     @Published var failedWorkSummary = ""
     @Published var phoneAgentSummary = "Unknown"
     @Published var recentResultSummary = "No completed work yet"
+    private var consecutiveStatusFailures = 0
 
     func refresh() async {
         guard !refreshing else { return }
@@ -5181,10 +5182,14 @@ private final class VexNativeA2AClient: ObservableObject {
             } else {
                 latestGoal = "No goals reported"
             }
+            consecutiveStatusFailures = 0
             error = ""
             lastRefresh = Date()
         } catch {
-            online = false
+            consecutiveStatusFailures += 1
+            if consecutiveStatusFailures >= 2 {
+                online = false
+            }
             self.error = "VexNative status: \(error.localizedDescription)"
         }
     }
@@ -5197,7 +5202,7 @@ private final class VexNativeA2AClient: ObservableObject {
                 path: "/vexnative/send",
                 method: "POST",
                 body: ["agent": "coordinator", "message": clean],
-                timeout: 75
+                timeout: 18
             )
             guard (object["ok"] as? Bool) == true else { throw ClientError.badResponse }
             let text = extractText(object["result"]) ?? compactJSON(object["result"]) ?? "VexNative completed the request."
@@ -5206,10 +5211,10 @@ private final class VexNativeA2AClient: ObservableObject {
             online = true
             return text
         } catch {
-            online = false
             if !quiet {
                 self.error = "VexNative request: \(error.localizedDescription)"
             }
+            Task { await self.refresh() }
             return nil
         }
     }
@@ -5222,7 +5227,7 @@ private final class VexNativeA2AClient: ObservableObject {
         for url in relayURLs(path: "/vexnative/send/stream") {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
-            request.timeoutInterval = 90
+            request.timeoutInterval = 30
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
             request.httpBody = try? JSONSerialization.data(withJSONObject: [
