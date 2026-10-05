@@ -5202,7 +5202,7 @@ private final class VexNativeA2AClient: ObservableObject {
                 path: "/vexnative/send",
                 method: "POST",
                 body: ["agent": "coordinator", "message": clean],
-                timeout: 18
+                timeout: 180
             )
             guard (object["ok"] as? Bool) == true else { throw ClientError.badResponse }
             let text = extractText(object["result"]) ?? compactJSON(object["result"]) ?? "VexNative completed the request."
@@ -5227,7 +5227,7 @@ private final class VexNativeA2AClient: ObservableObject {
         for url in relayURLs(path: "/vexnative/send/stream") {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
-            request.timeoutInterval = 30
+            request.timeoutInterval = 180
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
             request.httpBody = try? JSONSerialization.data(withJSONObject: [
