@@ -153,8 +153,12 @@ enum VexBridgeNetworking {
         var bridgeRequest = request
         bridgeRequest.url = strippingPin(from: url)
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 180
-        configuration.timeoutIntervalForResource = 240
+        // Deep/tool streams emit progress heartbeats and may legitimately outlive
+        // a few minutes while a cold local model starts or durable work continues.
+        // Keep the connection alive long enough for the existing 30-minute deep-job
+        // budget instead of declaring a healthy Vex core offline at four minutes.
+        configuration.timeoutIntervalForRequest = 300
+        configuration.timeoutIntervalForResource = 1900
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.protocolClasses = []
 
