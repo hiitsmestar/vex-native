@@ -89,6 +89,13 @@ final class BLEController: NSObject, ObservableObject, CBPeripheralManagerDelega
         advertise(command: vibrate[level], label: level == 0 ? "Vibration stop" : "Vibration \(level)")
     }
 
+    func oneSecondThrustTest() {
+        thrustPattern(1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.thrustPattern(0)
+        }
+    }
+
     func stopAll() {
         generation += 1
         let token = generation
