@@ -25,6 +25,11 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
+                    Button("TEST THRUST 1s") {
+                        ble.oneSecondThrustTest()
+                    }
+                    .buttonStyle(.borderedProminent)
+
                     GroupBox("Thrust") {
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(1...9, id: \.self) { level in
