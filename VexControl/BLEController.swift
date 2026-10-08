@@ -25,6 +25,7 @@ final class BLEController: NSObject, ObservableObject, CBPeripheralManagerDelega
     private var scanGeneration = 0
 
     private let prefix = ["08F9", "2349", "CBAE", "D1C1"]
+    private let tail = ["0D0C", "0F0E", "1110", "1312", "1514", "1716", "1918"]
     private let thrust = [
         ["1F5E", "0B0C"], ["965F", "0B1D"], ["0D5C", "0B2F"],
         ["845D", "0B3E"], ["3B5A", "0B4A"], ["B25B", "0B5B"],
@@ -246,19 +247,16 @@ final class BLEController: NSObject, ObservableObject, CBPeripheralManagerDelega
             return
         }
         advertiser.stopAdvertising()
-        let uuids = (prefix + command).map(CBUUID.init(string:))
-        let hex = (prefix + command).joined(separator: " ")
+        let list = prefix + command + tail
+        let uuids = list.map(CBUUID.init(string:))
+        let hex = list.joined(separator: " ")
         status = label
         diagnostics.append("\(label): \(hex)")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self, self.generation == token else { return }
             self.advertiser.startAdvertising([CBAdvertisementDataServiceUUIDsKey: uuids])
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
-                guard let self, self.generation == token else { return }
-                self.advertiser.stopAdvertising()
-                self.diagnostics.append("TX OFF")
-                completion?()
-            }
+            self.diagnostics.append("TX ON exact-13")
+            completion?()
         }
     }
 }
