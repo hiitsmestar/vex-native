@@ -488,7 +488,7 @@ enum VexPhoneBackgroundWorker {
         let updated_at: String?
     }
 
-    private static func refreshRoamingBootstrap() async {
+    static func refreshRoamingBootstrap() async {
         guard let url = URL(string: "https://raw.githubusercontent.com/hiitsmestar/vex-native/main/remote-relay.json") else {
             return
         }
