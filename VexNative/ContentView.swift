@@ -4200,6 +4200,17 @@ private enum PCBridgeToolRouter {
 // MARK: - App integration
 
 extension AppModel {
+    // No autonomous local chat fallback: the phone is Vex's interface, not a second brain.
+    private func reportPCUnavailable(_ original: String) {
+        draft = ""
+        profile.messages.append(ChatMessage(role: .user, content: original))
+        profile.messages.append(ChatMessage(
+            role: .assistant,
+            content: "Monte is unavailable. This message was not answered, and no local chatbot was used."
+        ))
+        persist()
+    }
+
     func sendWithWeb() async {
         let original = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (!original.isEmpty || pendingPhotoData != nil), !isGenerating else { return }
@@ -4212,14 +4223,35 @@ extension AppModel {
         if !core.online {
             await core.refresh()
         }
-        if core.online, pendingPhotoData == nil {
+        // Photo text recognition is phone-side input, not a phone-side AI reply.
+        // The PC must own the conversational answer for every chat turn.
+        let photoToSend = pendingPhotoData
+        let recognizedPhotoContext = pendingPhotoContext?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let messageForPC: String
+        if photoToSend != nil {
+            let photoQuestion = original.isEmpty ? "What can you tell me about the attached photo?" : original
+            messageForPC = photoQuestion + "\n\nIPHONE PHOTO EVIDENCE: " +
+                (recognizedPhotoContext.isEmpty
+                    ? "Image attached; pixel content has not been transmitted to the PC."
+                    : recognizedPhotoContext) +
+                "\nThis evidence is extracted by Apple Vision, not direct pixel analysis. Do not invent unseen details."
+        } else {
+            messageForPC = original
+        }
+        if core.online {
             isGenerating = true
             core.sending = true
             core.error = ""
             core.response = "Connecting to PC brain…"
-            if let answer = await core.streamAnswer(original) {
+            if let answer = await core.streamAnswer(messageForPC) {
                 draft = ""
-                profile.messages.append(ChatMessage(role: .user, content: original))
+                let savedPhoto = photoToSend.flatMap { try? LocalStore.shared.saveAttachment($0) }
+                profile.messages.append(ChatMessage(
+                    role: .user, content: original, imageFilename: savedPhoto
+                ))
+                pendingPhotoData = nil
+                pendingPhotoContext = nil
                 if let learned = MemoryEngine.learnCandidate(from: original) {
                     profile.memories = MemoryEngine.deduplicatedAppend(learned, to: profile.memories)
                 }
@@ -4263,6 +4295,12 @@ extension AppModel {
             return
         }
 
+        // Preserve action routers above, but never fall back to generated phone chat.
+        if !core.online {
+            reportPCUnavailable(original)
+            return
+        }
+
         let web = WebBrain.shared
         let previousUser = profile.messages
             .reversed()
@@ -4276,7 +4314,7 @@ extension AppModel {
             ? visualQuery
             : web.resolvedResearchInput(current: original, previousUser: previousUser)
         guard visualRequest || web.shouldUseWeb(for: resolvedVisibleInput) else {
-            await send()
+            reportPCUnavailable(original)
             return
         }
         let photoSearchContext = pendingPhotoContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -4314,7 +4352,8 @@ extension AppModel {
         )
         profile.memories.append(transient)
 
-        await send()
+        reportPCUnavailable(original)
+        return
 
         if web.isProceduralResearchRequest(researchInput),
            let grounded = bundle.groundedProceduralAnswer(userQuestion: researchInput),
