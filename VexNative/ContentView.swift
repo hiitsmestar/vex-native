@@ -4352,8 +4352,18 @@ extension AppModel {
         )
         profile.memories.append(transient)
 
-        reportPCUnavailable(original)
-        return
+        // Any researched answer still comes from Monte. Never generate it on-phone.
+        let researchedPrompt = original + "\n\nVERIFIED WEB EVIDENCE:\n" +
+            bundle.compactEvidence(maxCharacters: 2600)
+        if let answer = await core.answer(researchedPrompt, quiet: true) {
+            draft = ""
+            profile.messages.append(ChatMessage(role: .user, content: original))
+            profile.messages.append(ChatMessage(role: .assistant, content: answer))
+        } else {
+            profile.memories.removeAll { $0.id == transient.id || $0.source == "web-temporary" }
+            reportPCUnavailable(original)
+            return
+        }
 
         if web.isProceduralResearchRequest(researchInput),
            let grounded = bundle.groundedProceduralAnswer(userQuestion: researchInput),
