@@ -28,39 +28,65 @@ enum VexBridgeNetworkingError: LocalizedError {
     }
 }
 
-final class VexBridgeTrustDelegate: NSObject, URLSessionDelegate {
+final class VexBridgeTrustDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate {
     private let expectedFingerprint: Data
+    private let expectedHost: String
+    private let expectedPort: Int
     private(set) var sawPinMismatch = false
 
-    init(expectedFingerprint: Data) {
+    init(expectedFingerprint: Data, expectedHost: String, expectedPort: Int) {
         self.expectedFingerprint = expectedFingerprint
+        self.expectedHost = expectedHost.lowercased()
+        self.expectedPort = expectedPort
     }
 
+    // Streamed requests can deliver TLS challenges on the task delegate rather
+    // than the session delegate. Handle both with identical, strict leaf pinning.
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              (challenge.protectionSpace.port == 8765 || challenge.protectionSpace.port == 8771),
-              let trust = challenge.protectionSpace.serverTrust,
-              VexBridgeNetworking.isPrivateLANHost(challenge.protectionSpace.host.lowercased()),
-              let certificate = SecTrustGetCertificateAtIndex(trust, 0)
-        else {
+        validate(challenge, completionHandler: completionHandler)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        validate(challenge, completionHandler: completionHandler)
+    }
+
+    private func validate(
+        _ challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust else {
             completionHandler(.performDefaultHandling, nil)
             return
         }
+        guard challenge.protectionSpace.host.lowercased() == expectedHost,
+              challenge.protectionSpace.port == expectedPort,
+              VexBridgeNetworking.isPrivateLANHost(expectedHost),
+              let trust = challenge.protectionSpace.serverTrust,
+              let certificate = SecTrustGetCertificateAtIndex(trust, 0)
+        else {
+            sawPinMismatch = true
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
 
-        let certificateData = SecCertificateCopyData(certificate) as Data
-        let actualFingerprint = Data(SHA256.hash(data: certificateData))
+        let actualFingerprint = Data(SHA256.hash(data: SecCertificateCopyData(certificate) as Data))
         guard actualFingerprint == expectedFingerprint else {
             sawPinMismatch = true
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
 
-        // We deliberately accept this otherwise-untrusted self-signed certificate
-        // only after its exact leaf fingerprint matches the out-of-band pairing pin.
+        // No relaxed trust for arbitrary hosts: the peer leaf must match
+        // the exact out-of-band fingerprint and the paired LAN host/port.
         completionHandler(.useCredential, URLCredential(trust: trust))
     }
 }
@@ -112,7 +138,7 @@ enum VexBridgeNetworking {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.protocolClasses = []
 
-        let delegate = VexBridgeTrustDelegate(expectedFingerprint: fingerprint)
+        let delegate = VexBridgeTrustDelegate(expectedFingerprint: fingerprint, expectedHost: url.host ?? "", expectedPort: url.port ?? 8771)
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
 
@@ -158,7 +184,7 @@ enum VexBridgeNetworking {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.protocolClasses = []
 
-        let delegate = VexBridgeTrustDelegate(expectedFingerprint: fingerprint)
+        let delegate = VexBridgeTrustDelegate(expectedFingerprint: fingerprint, expectedHost: url.host ?? "", expectedPort: url.port ?? 8771)
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
 
