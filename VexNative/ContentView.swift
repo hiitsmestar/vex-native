@@ -47,7 +47,7 @@ struct VexChatView: View {
                             if app.isGenerating || web.isWorking {
                                 HStack {
                                     ProgressView()
-                                    Text(web.isWorking ? "web brain is looking…" : (app.pcBrainConnected ? "PC brain is thinking…" : "Vex is thinking…"))
+                                    Text(web.isWorking ? "web brain is looking…" : (core.sending ? (core.response.isEmpty ? "Contacting PC brain…" : core.response) : (app.pcBrainConnected ? "PC brain is thinking…" : "Vex is thinking…")))
                                         .font(.caption)
                                         .foregroundStyle(VexTheme.muted)
                                     Spacer()
@@ -4214,7 +4214,10 @@ extension AppModel {
         }
         if core.online, pendingPhotoData == nil {
             isGenerating = true
-            if let answer = await core.answer(original, quiet: true) {
+            core.sending = true
+            core.error = ""
+            core.response = "Connecting to PC brain…"
+            if let answer = await core.streamAnswer(original) {
                 draft = ""
                 profile.messages.append(ChatMessage(role: .user, content: original))
                 if let learned = MemoryEngine.learnCandidate(from: original) {
@@ -4223,10 +4226,21 @@ extension AppModel {
                 profile.messages.append(ChatMessage(role: .assistant, content: answer))
                 persist()
                 isGenerating = false
+                core.sending = false
                 Task { await core.refresh() }
                 return
             }
             isGenerating = false
+            core.sending = false
+            // The stream may already have executed the request. Never retry it.
+            draft = ""
+            profile.messages.append(ChatMessage(role: .user, content: original))
+            profile.messages.append(ChatMessage(
+                role: .assistant,
+                content: core.error.isEmpty ? "My PC reply stopped before completion. Your request was not retried." : "PC reply interrupted: \(core.error). Your request was not retried."
+            ))
+            persist()
+            return
         }
 
         if await PCArtRouter.tryHandle(original, app: self) {
@@ -5222,6 +5236,8 @@ private final class VexNativeA2AClient: ObservableObject {
     func streamAnswer(_ message: String) async -> String? {
         let clean = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
+        response = "Connecting to PC brain…"
+        error = ""
 
         var lastError: Error = ClientError.badResponse
         for url in relayURLs(path: "/vexnative/send/stream") {
