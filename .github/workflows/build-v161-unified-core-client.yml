@@ -1,10 +1,12 @@
-name: Build VexNative v0.16.1 Chat Streaming Repair
+name: Build VexNative v0.16.1 iOS TLS and Roaming Repair
 
 on:
   push:
     branches: [ "build/v161-unified-core-client" ]
     paths:
       - "VexNative/ContentView.swift"
+      - "VexNative/VexNativeApp.swift"
+      - "VexNative/VexBackgroundAgent.swift"
       - "Tools/apply_v161_unified_core_client.py"
       - "Tools/build_v161_unified_core_client.py"
       - ".github/workflows/build-v161-unified-core-client.yml"
@@ -35,7 +37,7 @@ jobs:
         run: |
           set -o pipefail
           rm -rf "$RUNNER_TEMP/VexDerivedData"
-          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=162 MARKETING_VERSION=0.16.1 build | tee "$RUNNER_TEMP/xcodebuild.log"
+          xcodebuild -project VexNative.xcodeproj -scheme VexNative -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/VexDerivedData" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" CURRENT_PROJECT_VERSION=163 MARKETING_VERSION=0.16.1 build | tee "$RUNNER_TEMP/xcodebuild.log"
       - name: Package
         run: |
           APP_PATH="$(find "$RUNNER_TEMP/VexDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'VexNative.app' -print -quit)"
@@ -46,7 +48,7 @@ jobs:
           /usr/bin/zip -qry "$GITHUB_WORKSPACE/VexNative-v0.16.1-unified-core-client.ipa" Payload
       - uses: actions/upload-artifact@v7
         with:
-          name: VexNative-v0.16.1-Chat-Streaming-Repair
+          name: VexNative-v0.16.1-TLS-Roaming-Repair
           path: VexNative-v0.16.1-unified-core-client.ipa
           if-no-files-found: error
           retention-days: 14
