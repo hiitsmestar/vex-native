@@ -5239,8 +5239,16 @@ private final class VexNativeA2AClient: ObservableObject {
         response = "Connecting to PC brain…"
         error = ""
 
-        var lastError: Error = ClientError.badResponse
+        // The phone may have cached an expired Quick Tunnel. Refresh the public
+        // bootstrap before chat when it is stale; keep LAN as the first choice.
+        let bootstrapDate = UserDefaults.standard.object(forKey: "vex.phone.roamingBootstrap.lastUpdate") as? Date
+        if bootstrapDate == nil || Date().timeIntervalSince(bootstrapDate!) > 300 {
+            await VexPhoneBackgroundWorker.refreshRoamingBootstrap()
+        }
+
+        var diagnostics: [String] = []
         for url in relayURLs(path: "/vexnative/send/stream") {
+            let lane = VexBridgeNetworking.isPrivateBridgeURL(url) ? "LAN" : "roaming"
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.timeoutInterval = 180
@@ -5253,13 +5261,15 @@ private final class VexNativeA2AClient: ObservableObject {
 
             var event = ""
             var finalText: String?
+            var accepted = false
             do {
                 let responseObject = try await VexBridgeNetworking.streamLines(for: request) { line in
                     if line.hasPrefix("event:") {
                         event = line.replacingOccurrences(of: "event:", with: "")
                             .trimmingCharacters(in: .whitespaces)
                         if event == "accepted" {
-                            response = "Routing…"
+                            accepted = true
+                            response = "Routing through \(lane)…"
                         }
                         return
                     }
@@ -5297,7 +5307,8 @@ private final class VexNativeA2AClient: ObservableObject {
                 guard let http = responseObject as? HTTPURLResponse,
                       (200...299).contains(http.statusCode)
                 else {
-                    lastError = ClientError.badResponse
+                    diagnostics.append("\(lane): HTTP response invalid")
+                    if accepted { break }
                     continue
                 }
                 if let finalText {
@@ -5305,12 +5316,18 @@ private final class VexNativeA2AClient: ObservableObject {
                     online = true
                     return finalText
                 }
+                diagnostics.append("\(lane): \(self.error.isEmpty ? "stream ended without a result" : self.error)")
+                if accepted { break }
             } catch {
-                lastError = error
+                diagnostics.append("\(lane): \(error.localizedDescription)")
+                // After an accepted event the request may have already
+                // executed. Do not automatically duplicate it on another lane.
+                if accepted { break }
             }
         }
 
-        self.error = "VexNative stream: \(lastError.localizedDescription)"
+        online = false
+        self.error = "VexNative stream: " + (diagnostics.isEmpty ? "No paired endpoint responded" : diagnostics.joined(separator: " | "))
         return nil
     }
 
